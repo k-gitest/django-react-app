@@ -1,0 +1,61 @@
+{
+  // devcontainerからcomposeを起動する場合はこの設定を使用する
+  "name": "Django + React Monorepo Dev",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "backend",
+  "workspaceFolder": "/workspace",
+  "runServices": [
+    "backend",
+    "frontend"
+  ],
+  // postCreateCommandでルートとfrontendのnpm iを実行
+  // devcontainerでcomposeによる複数コンテナではメインコンテナの方しかコマンドが効かないため
+  "postCreateCommand": "npm install && cd frontend && npm install",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.black-formatter",
+        "ms-python.isort",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-azuretools.vscode-docker",
+        "eamodio.gitlens"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "[python]": {
+          "editor.formatOnSave": true
+        },
+        "[javascript]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[javascriptreact]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        }
+      }
+    }
+  },
+  "forwardPorts": [
+    8000,
+    3000
+  ],
+  "portsAttributes": {
+    "8000": {
+      "label": "Django Backend",
+      "onAutoForward": "notify"
+    },
+    "5173": {
+      "label": "React Frontend (Vite)",
+      "onAutoForward": "notify"
+    }
+  },
+  "remoteUser": "root"
+}
