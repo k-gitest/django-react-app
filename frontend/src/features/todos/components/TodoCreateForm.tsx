@@ -3,23 +3,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { todoSchema, type TodoFormValues } from '../schemas';
 import { useTodos } from '../hooks/useTodos';
 import { Button } from '@/components/ui/button';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-//import { Slider } from '@/components/ui/progress'; // 進捗用（Sliderがない場合はInput numberでも可）
+import { FormWrapper, FormInput, FormSelect } from '@/components/form/form-parts';
+import { FormField, FormItem, FormLabel, FormControl } from '@/components/ui/form';
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Plus } from 'lucide-react';
@@ -41,7 +26,7 @@ export const TodoCreateForm = () => {
     try {
       await createTodo(values);
       form.reset();
-      setOpen(false); // 成功したらモーダルを閉じる
+      setOpen(false);
     } catch (error) {
       console.error('Failed to create todo:', error);
     }
@@ -58,65 +43,52 @@ export const TodoCreateForm = () => {
         <DialogHeader>
           <DialogTitle>新しいタスクを作成</DialogTitle>
         </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="todo_title"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>タイトル</FormLabel>
-                  <FormControl>
-                    <Input placeholder="例: レポートを作成する" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="priority"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>優先度</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="優先度を選択" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="LOW">低</SelectItem>
-                      <SelectItem value="MEDIUM">中</SelectItem>
-                      <SelectItem value="HIGH">高</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="progress"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>進捗 ({field.value}%)</FormLabel>
-                  <FormControl>
-                    <Input 
-                      type="number" 
-                      {...field} 
-                      onChange={e => field.onChange(parseInt(e.target.value))} 
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
-              {form.formState.isSubmitting ? '保存中...' : 'タスクを保存'}
-            </Button>
-          </form>
-        </Form>
+        {/* FormWrapperを使用（元はForm） */}
+        <FormWrapper onSubmit={onSubmit} form={form}>
+          {/* FormInputを使用（元はFormField + Input） */}
+          <FormInput
+            label="タイトル"
+            name="todo_title"
+            placeholder="例: レポートを作成する"
+          />
+          
+          {/* FormSelectを使用（元はFormField + Select） */}
+          <FormSelect
+            label="優先度"
+            name="priority"
+            options={[
+              { value: 'LOW', label: '低' },
+              { value: 'MEDIUM', label: '中' },
+              { value: 'HIGH', label: '高' },
+            ]}
+            placeholder="優先度を選択"
+          />
+
+          {/* Input type="number" は特殊なのでFormFieldのまま */}
+          <FormField
+            control={form.control}
+            name="progress"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>進捗 ({field.value}%)</FormLabel>
+                <FormControl>
+                  <input 
+                    type="number" 
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    min={0}
+                    max={100}
+                    value={field.value}
+                    onChange={e => field.onChange(parseInt(e.target.value) || 0)} 
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+
+          <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
+            {form.formState.isSubmitting ? '保存中...' : 'タスクを保存'}
+          </Button>
+        </FormWrapper>
       </DialogContent>
     </Dialog>
   );

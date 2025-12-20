@@ -25,9 +25,17 @@ class TodoViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         # Service層を介して削除
         TodoService.delete_todo(instance.id, self.request.user)
+    
     @action(detail=False, methods=['get'])
-    def stats(self):
+    def stats(self, request):  # ← request引数を追加
         """統計データの取得: /api/v1/todos/stats/"""
-        user = self.request.user
+        user = request.user
         stats = TodoService.get_priority_stats(user)
+        return Response(stats)
+    
+    @action(detail=False, methods=['get'], url_path='progress-stats')  # ← 新規追加
+    def progress_stats(self, request):
+        """進捗率別統計データの取得: /api/v1/todos/progress-stats/"""
+        user = request.user
+        stats = TodoService.get_progress_stats(user)
         return Response(stats)

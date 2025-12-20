@@ -37,3 +37,12 @@ class TodoService:
             range_61_80=Count(Case(When(progress__gt=60, progress__lte=80, then=1))),
             range_81_100=Count(Case(When(progress__gt=80, then=1))),
         )
+    @staticmethod
+    def get_priority_stats(user):
+        """優先度別の統計を取得"""
+        return list(
+            Todo.objects.filter(user=user)
+            .values('priority')
+            .annotate(count=Count('id'))
+            .order_by('priority')
+        )

@@ -61,7 +61,7 @@ export const useTodos = () => {
     return createMutation.mutateAsync({ data });
   };
 
-  const updateTodo = async (id: number, data: UpdateTodoInput) => {
+  const updateTodo = async ({ id, data }: { id: number; data: UpdateTodoInput }) => {
     return updateMutation.mutateAsync({ id, data });
   };
 

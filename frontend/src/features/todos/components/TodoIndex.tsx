@@ -3,7 +3,7 @@ import { TodoCreateForm } from '@/features/todos/components/TodoCreateForm';
 import { TodoStatsChart } from '@/features/todos/components/TodoStatsChart';
 import { TodoProgressChart } from '@/features/todos/components/TodoProgressChart';
 
-export const Dashboard = () => {
+export const TodoIndex = () => {
   return (
     <div className="container mx-auto py-8 px-4 space-y-8">
       {/* ヘッダーエリア */}
