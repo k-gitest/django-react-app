@@ -64,3 +64,6 @@ export async function authFetch<T>(
 
 // 特殊な用途向けに authKyClient も export
 export { authKyClient as authenticatedClient };
+
+// サービス層で使うためのエイリアス
+export { authKyClient as apiClient };
