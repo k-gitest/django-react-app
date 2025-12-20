@@ -1,6 +1,11 @@
+import { TodoIndex } from "@/features/todos/components/TodoIndex"
+
 const Dashboard = () => {
     return (
-        <div>ダッシュボード</div>
+        <>
+            <div>ダッシュボード</div>
+            <TodoIndex />
+        </>
     )
 }
 

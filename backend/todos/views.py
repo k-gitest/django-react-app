@@ -3,6 +3,8 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from .serializers import TodoSerializer
 from .service import TodoService
+from rest_framework.decorators import action
+from django.db.models import Count
 
 class TodoViewSet(viewsets.ModelViewSet):
     serializer_class = TodoSerializer
@@ -23,3 +25,9 @@ class TodoViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         # Service層を介して削除
         TodoService.delete_todo(instance.id, self.request.user)
+    @action(detail=False, methods=['get'])
+    def stats(self):
+        """統計データの取得: /api/v1/todos/stats/"""
+        user = self.request.user
+        stats = TodoService.get_priority_stats(user)
+        return Response(stats)
