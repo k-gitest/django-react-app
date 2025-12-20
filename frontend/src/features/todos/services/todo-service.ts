@@ -1,5 +1,5 @@
-import { apiClient } from '@/lib/auth-client';
-import type { Todo, CreateTodoInput, UpdateTodoInput } from '../types';
+import { apiClient } from '@/lib/api-client';
+import type { CreateTodoInput, Todo, UpdateTodoInput } from '../types';
 
 export const todoService = {
   getTodos: async (): Promise<Todo[]> => {

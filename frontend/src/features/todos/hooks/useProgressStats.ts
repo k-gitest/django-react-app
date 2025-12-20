@@ -1,5 +1,5 @@
 import { useApiQuery } from "@/hooks/use-tanstack-query";
-import { apiClient } from "@/lib/auth-client";
+import { apiClient } from "@/lib/api-client";
 
 type ProgressStatsResponse = Record<string, number>;
 
