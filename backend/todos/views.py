@@ -16,11 +16,15 @@ class TodoViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         # Service層を介して作成
-        TodoService.create_todo(self.request.user, serializer.validated_data)
+        todo = TodoService.create_todo(self.request.user, serializer.validated_data)
+        # serializerのinstanceを設定（レスポンスに含めるため）
+        serializer.instance = todo
 
     def perform_update(self, serializer):
         # Service層を介して更新
-        TodoService.update_todo(self.get_object().id, self.request.user, serializer.validated_data)
+        todo = TodoService.update_todo(self.get_object().id, self.request.user, serializer.validated_data)
+        # serializerのinstanceを設定（レスポンスに含めるため）
+        serializer.instance = todo
 
     def perform_destroy(self, instance):
         # Service層を介して削除
