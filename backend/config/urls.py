@@ -18,4 +18,11 @@ urlpatterns = [
     # dj-rest-auth標準の include では、登録成功時に JWT Cookie が Set-Cookie されないため、
     # 登録と同時にログイン状態を確立できるよう CustomRegisterView を使用する。
     path('api/v1/auth/registration/', CustomRegisterView.as_view(), name='rest_register'),
+
+    # TODOアプリエンドポイント
+    # GET /api/v1/todos/: 一覧取得
+    # POST /api/v1/todos/: 新規作成
+    # PUT/PATCH /api/v1/todos/{id}/: 更新
+    # DELETE /api/v1/todos/{id}/: 削除
+    path('api/v1/todos/', include('todos.urls')),
 ]
