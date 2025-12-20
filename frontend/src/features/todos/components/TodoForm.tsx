@@ -7,26 +7,80 @@ import { FormField, FormItem, FormLabel, FormControl } from '@/components/ui/for
 import { Slider } from '@/components/ui/slider';
 
 interface TodoFormProps {
-  defaultValues: TodoFormValues;
+  /**
+   * フォーム送信時のハンドラー
+   */
   onSubmit: (values: TodoFormValues) => Promise<void>;
-  submitLabel: string;
+  
+  /**
+   * 初期値（編集時に使用）
+   */
+  defaultValues?: Partial<TodoFormValues>;
+  
+  /**
+   * 送信ボタンのラベル
+   */
+  submitLabel?: string;
+  
+  /**
+   * キャンセルボタンのハンドラー（オプション）
+   */
+  onCancel?: () => void;
 }
 
-export const TodoForm = ({ defaultValues, onSubmit, submitLabel }: TodoFormProps) => {
+/**
+ * Todo作成・編集用の共通フォームコンポーネント
+ * 
+ * @example
+ * // 作成時
+ * <TodoForm 
+ *   onSubmit={handleCreate}
+ *   submitLabel="作成"
+ * />
+ * 
+ * @example
+ * // 編集時
+ * <TodoForm 
+ *   onSubmit={handleUpdate}
+ *   defaultValues={todo}
+ *   submitLabel="更新"
+ *   onCancel={handleCancel}
+ * />
+ */
+export const TodoForm = ({ 
+  onSubmit, 
+  defaultValues,
+  submitLabel = '保存',
+  onCancel 
+}: TodoFormProps) => {
   const form = useForm<TodoFormValues>({
     resolver: zodResolver(todoSchema),
-    defaultValues,
+    defaultValues: {
+      todo_title: defaultValues?.todo_title ?? '',
+      priority: defaultValues?.priority ?? 'MEDIUM',
+      progress: defaultValues?.progress ?? 0,
+    },
   });
 
+  const handleSubmit = async (values: TodoFormValues) => {
+    try {
+      await onSubmit(values);
+      form.reset();
+    } catch (error) {
+      console.error('Failed to submit todo:', error);
+    }
+  };
+
   return (
-    <FormWrapper onSubmit={onSubmit} form={form}>
-      {/* FormInputを使用（元はFormField + Input） */}
-      <FormInput 
-        label="タイトル" 
+    <FormWrapper onSubmit={handleSubmit} form={form}>
+      {/* タイトル */}
+      <FormInput
+        label="タイトル"
         name="todo_title"
+        placeholder="例: レポートを作成する"
       />
       
-      {/* FormSelectを使用（元はFormField + Select） */}
+      {/* 優先度 */}
       <FormSelect
         label="優先度"
         name="priority"
@@ -35,29 +89,74 @@ export const TodoForm = ({ defaultValues, onSubmit, submitLabel }: TodoFormProps
           { value: 'MEDIUM', label: '中' },
           { value: 'HIGH', label: '高' },
         ]}
+        placeholder="優先度を選択"
       />
 
-      {/* Sliderは特殊なのでFormFieldのまま */}
+      {/* 進捗率（Slider + 数値入力の組み合わせ） */}
       <FormField
         control={form.control}
         name="progress"
         render={({ field }) => (
           <FormItem>
-            <FormLabel>進捗: {field.value}%</FormLabel>
+            <FormLabel>進捗 ({field.value}%)</FormLabel>
             <FormControl>
-              <Slider
-                min={0} max={100} step={5}
-                value={[field.value]}
-                onValueChange={(vals) => field.onChange(vals[0])}
-              />
+              <div className="space-y-4">
+                {/* Slider */}
+                <Slider
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={[field.value]}
+                  onValueChange={(value) => field.onChange(value[0])}
+                  className="w-full"
+                />
+                {/* 数値入力（微調整用） */}
+                <input 
+                  type="number" 
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  min={0}
+                  max={100}
+                  value={field.value}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value);
+                    // 空欄の場合は0、範囲外の場合は制限
+                    if (isNaN(val)) {
+                      field.onChange(0);
+                    } else if (val < 0) {
+                      field.onChange(0);
+                    } else if (val > 100) {
+                      field.onChange(100);
+                    } else {
+                      field.onChange(val);
+                    }
+                  }}
+                />
+              </div>
             </FormControl>
           </FormItem>
         )}
       />
 
-      <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
-        {form.formState.isSubmitting ? '処理中...' : submitLabel}
-      </Button>
+      {/* ボタンエリア */}
+      <div className="flex gap-2">
+        {onCancel && (
+          <Button 
+            type="button" 
+            variant="outline" 
+            onClick={onCancel}
+            className="flex-1"
+          >
+            キャンセル
+          </Button>
+        )}
+        <Button 
+          type="submit" 
+          className={onCancel ? 'flex-1' : 'w-full'}
+          disabled={form.formState.isSubmitting}
+        >
+          {form.formState.isSubmitting ? '保存中...' : submitLabel}
+        </Button>
+      </div>
     </FormWrapper>
   );
 };
