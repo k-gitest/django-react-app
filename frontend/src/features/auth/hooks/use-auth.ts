@@ -1,4 +1,3 @@
-// hooks/use-auth.ts
 import { ApiError } from '@/errors/api-error';
 import {
   loginService,

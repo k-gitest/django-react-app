@@ -1,11 +1,22 @@
-import { useQuery } from "@tanstack/react-query";
+import { useApiQuery } from "@/hooks/use-tanstack-query";
 import { apiClient } from "@/lib/auth-client";
 
+type TodoStatsResponse = {
+  priority: string;
+  count: number;
+}[];
+
+type TodoStatsData = {
+  priority: string;
+  count: number;
+  fill: string;
+}[];
+
 export const useTodoStats = () => {
-  return useQuery({
+  return useApiQuery<TodoStatsData>({
     queryKey: ['todos', 'stats'],
     queryFn: async () => {
-      const response = await apiClient.get('todos/stats/').json<{priority: string, count: number}[]>();
+      const response = await apiClient.get('todos/stats/').json<TodoStatsResponse>();
       // shadcn/ui Charts が期待する形式に変換
       return response.map(item => ({
         priority: item.priority,

@@ -1,11 +1,18 @@
-import { useQuery } from "@tanstack/react-query";
+import { useApiQuery } from "@/hooks/use-tanstack-query";
 import { apiClient } from "@/lib/auth-client";
 
+type ProgressStatsResponse = Record<string, number>;
+
+type ProgressStatsData = {
+  range: string;
+  count: number;
+}[];
+
 export const useProgressStats = () => {
-  return useQuery({
+  return useApiQuery<ProgressStatsData>({
     queryKey: ['todos', 'progress-stats'],
     queryFn: async () => {
-      const res = await apiClient.get('todos/progress-stats/').json<Record<string, number>>();
+      const res = await apiClient.get('todos/progress-stats/').json<ProgressStatsResponse>();
       // グラフ表示用のラベルと値のペアに変換
       return [
         { range: "0-20%", count: res.range_0_20 },
