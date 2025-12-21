@@ -1,10 +1,10 @@
+import { memo } from 'react';
 import type { Todo, Priority } from '../types';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-//import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
@@ -15,22 +15,19 @@ interface TodoItemProps {
   onDelete: (id: number) => void;
 }
 
-// 優先度によってバッジの色を変えるヘルパー関数
-const getPriorityVariant = (priority: Priority) => {
-  switch (priority) {
-    case 'HIGH':
-      return 'destructive'; // 赤系
-    case 'MEDIUM':
-      return 'default';    // 青系
-    case 'LOW':
-      return 'secondary';  // 灰色系
-    default:
-      return 'outline';
-  }
+// 優先度設定
+const PRIORITY_CONFIG: Record<Priority, {
+  variant: 'destructive' | 'default' | 'secondary' | 'outline';
+  label: string;
+}> = {
+  HIGH: { variant: 'destructive', label: '高' },
+  MEDIUM: { variant: 'default', label: '中' },
+  LOW: { variant: 'secondary', label: '低' },
 };
 
-export const TodoItem = ({ todo, onToggleComplete, onEdit, onDelete }: TodoItemProps) => {
+export const TodoItem = memo(({ todo, onToggleComplete, onEdit, onDelete }: TodoItemProps) => {
   const isCompleted = todo.progress === 100;
+  const priorityConfig = PRIORITY_CONFIG[todo.priority];
 
   return (
     <Card className="w-full">
@@ -65,7 +62,7 @@ export const TodoItem = ({ todo, onToggleComplete, onEdit, onDelete }: TodoItemP
         </DropdownMenu>
       </CardHeader>
       <CardContent className="space-y-2">
-        <Badge variant={getPriorityVariant(todo.priority)}>
+        <Badge variant={priorityConfig.variant}>
           {todo.priority === 'LOW' ? '低' : todo.priority === 'MEDIUM' ? '中' : '高'}
         </Badge>
         <Progress value={todo.progress} className="h-2" />
@@ -76,4 +73,7 @@ export const TodoItem = ({ todo, onToggleComplete, onEdit, onDelete }: TodoItemP
       </CardFooter>
     </Card>
   );
-};
+});
+
+// React DevToolsでの表示名
+TodoItem.displayName = 'TodoItem';

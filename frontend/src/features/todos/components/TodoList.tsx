@@ -3,7 +3,7 @@ import { TodoItem } from './TodoItem';
 import { Spinner } from '@/components/ui/spinner';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Terminal } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { TodoEditModal } from './TodoEditModal';
 import type { Todo } from '../types';
 
@@ -11,24 +11,26 @@ export const TodoList = () => {
   const { todos, isLoading, isError, updateTodo, deleteTodo } = useTodos();
 	const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
 
-  const handleToggleComplete = async (todo: typeof todos[number]) => {
+  const handleToggleComplete = useCallback(async (todo: Todo) => {
     const newProgress = todo.progress === 100 ? 0 : 100;
     await updateTodo({ id: todo.id, data: { progress: newProgress } });
-  };
+  }, [updateTodo]);
 
-	/*
-  const handleEdit = (todo: typeof todos[number]) => {
-    // 編集モーダルなどを開くロジックをここに実装
-    console.log('Edit todo:', todo);
-    alert(`TODO: ${todo.todo_title} を編集`);
-  };
-	*/
+	const handleEdit = useCallback((todo: Todo) => {
+    setEditingTodo(todo);
+  }, []);
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = useCallback(async (id: number) => {
     if (window.confirm('本当にこのタスクを削除しますか？')) {
       await deleteTodo(id);
     }
-  };
+  }, [deleteTodo]);
+
+  const handleModalClose = useCallback((open: boolean) => {
+    if (!open) {
+      setEditingTodo(null);
+    }
+  }, []);
 
   if (isLoading) {
     return (
@@ -60,7 +62,7 @@ export const TodoList = () => {
 						key={todo.id}
 						todo={todo}
 						onToggleComplete={handleToggleComplete}
-						onEdit={(t) => setEditingTodo(t)} // 編集対象をセット
+						onEdit={handleEdit}
 						onDelete={handleDelete}
 					/>
 				))}
@@ -68,7 +70,7 @@ export const TodoList = () => {
 			<TodoEditModal 
 					todo={editingTodo} 
 					open={!!editingTodo} 
-					onOpenChange={(open) => !open && setEditingTodo(null)} 
+					onOpenChange={handleModalClose} 
 				/>
 		</>
   );
