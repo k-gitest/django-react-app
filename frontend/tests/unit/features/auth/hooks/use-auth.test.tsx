@@ -23,19 +23,43 @@ import {
   signupService,
   loginService,
   logoutService,
-  fetchMe,
 } from '@/features/auth/services/auth-service';
 
 // router
 import { useNavigate } from 'react-router-dom';
 
+// queryClient
+import { queryClient } from '@/lib/queryClient';
+
 /* =========================
    vi.mock（※すべてトップレベル）
 ========================= */
 
-vi.mock('@/hooks/use-session-store', () => ({
-  useAuthStore: vi.fn(),
-}));
+vi.mock('@/hooks/use-session-store', () => {
+  const mockSetUser = vi.fn();
+  const mockLogout = vi.fn();
+  const mockSetInitialized = vi.fn();
+
+  const mockStore = {
+    user: null,
+    isInitialized: false,
+    setUser: mockSetUser,
+    logout: mockLogout,
+    setInitialized: mockSetInitialized,
+  };
+
+  return {
+    useAuthStore: Object.assign(
+      vi.fn(() => mockStore),
+      {
+        getState: vi.fn(() => mockStore),
+        setState: vi.fn(),
+        subscribe: vi.fn(),
+        destroy: vi.fn(),
+      }
+    ),
+  };
+});
 
 vi.mock('@/hooks/use-tanstack-query', () => ({
   useApiMutation: vi.fn(),
@@ -45,7 +69,6 @@ vi.mock('@/features/auth/services/auth-service', () => ({
   signupService: vi.fn(),
   loginService: vi.fn(),
   logoutService: vi.fn(),
-  fetchMe: vi.fn(),
 }));
 
 vi.mock('react-router-dom', async () => {
@@ -58,17 +81,23 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
+vi.mock('@/lib/queryClient', () => ({
+  queryClient: {
+    invalidateQueries: vi.fn(),
+    setQueryData: vi.fn(),
+    clear: vi.fn(),
+  },
+}));
+
 /* =========================
    モック参照
 ========================= */
 
-const useAuthStoreMock = useAuthStore as unknown as Mock;
 const useApiMutationMock = useApiMutation as unknown as Mock;
 
 const mockSignupService = signupService as Mock;
 const mockLoginService = loginService as Mock;
 const mockLogoutService = logoutService as Mock;
-const mockFetchMe = fetchMe as Mock;
 
 const mockNavigate = vi.fn();
 
@@ -82,19 +111,18 @@ const mockAccount = {
 };
 
 const mockUser = {
-  id: 'user-001',
+  id: 1,
   email: 'test@example.com',
   first_name: 'Test',
   last_name: 'User',
   is_staff: false,
 };
 
-/* =========================
-   Zustand の action モック
-========================= */
-
-const mockSetUser = vi.fn();
-const mockLogout = vi.fn();
+const mockTokenResponse = {
+  access: 'access-token',
+  refresh: 'refresh-token',
+  user: mockUser,
+};
 
 /* =========================
    wrapper
@@ -117,42 +145,30 @@ describe('useAuth', () => {
     // router
     (useNavigate as Mock).mockReturnValue(mockNavigate);
 
-    // Zustand store
-    useAuthStoreMock.mockReturnValue({
-      user: null,
-      isInitialized: true,
-      setUser: mockSetUser,
-      logout: mockLogout,
-    });
-
     // useApiMutation（デフォルト：成功系）
     useApiMutationMock.mockImplementation(({ mutationFn, onSuccess, onError }) => {
-    	type GenericMutationFn = (variables: unknown) => Promise<unknown>;
+      type GenericMutationFn = (variables: unknown) => Promise<unknown>;
       return {
         mutateAsync: async (variables: unknown) => {
-					try {
-						// mutationFn を GenericMutationFn 型としてアサートし、呼び出す
-						const result = await (mutationFn as GenericMutationFn)(variables);
-						
-						// onSuccess/onError の引数も unknown に合わせて型アサーションを適用
-						await onSuccess?.(result, variables, undefined);
-						return result;
-					} catch (e) {
-						await onError?.(e);
-						throw e;
-					}
-				},
+          try {
+            const result = await (mutationFn as GenericMutationFn)(variables);
+            await onSuccess?.(result, variables, undefined);
+            return result;
+          } catch (e) {
+            await onError?.(e);
+            throw e;
+          }
+        },
       };
     });
   });
 
   /* =========================
-     signUp / signIn 成功
+     signUp 成功
   ========================= */
 
-  it('signUp が成功したとき fetchMe → setUser → navigate(/dashboard)', async () => {
-    mockSignupService.mockResolvedValue(undefined);
-    mockFetchMe.mockResolvedValue(mockUser);
+  it('signUp が成功したとき invalidateQueries → navigate(/dashboard)', async () => {
+    mockSignupService.mockResolvedValue(mockTokenResponse);
 
     const { result } = renderHook(() => useAuth(), {
       wrapper: createWrapper(),
@@ -163,14 +179,31 @@ describe('useAuth', () => {
     });
 
     expect(mockSignupService).toHaveBeenCalledWith(mockAccount);
-    expect(mockFetchMe).toHaveBeenCalledTimes(1);
-    expect(mockSetUser).toHaveBeenCalledWith(mockUser);
+    // 楽観的更新: invalidateQueriesで再フェッチ
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['auth', 'me'],
+    });
     expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
   });
 
-  it('signIn が成功したとき fetchMe → setUser → navigate(/dashboard)', async () => {
-    mockLoginService.mockResolvedValue(undefined);
-    mockFetchMe.mockResolvedValue(mockUser);
+  /* =========================
+     signIn 成功
+  ========================= */
+
+  it('signIn が成功したとき レスポンスから直接setUser → navigate(/dashboard)', async () => {
+    mockLoginService.mockResolvedValue(mockTokenResponse);
+
+    const mockSetUser = vi.fn();
+    const mockSetInitialized = vi.fn();
+
+    // useAuthStore.getState()の返り値を更新
+    (useAuthStore.getState as Mock).mockReturnValue({
+      user: null,
+      isInitialized: false,
+      setUser: mockSetUser,
+      logout: vi.fn(),
+      setInitialized: mockSetInitialized,
+    });
 
     const { result } = renderHook(() => useAuth(), {
       wrapper: createWrapper(),
@@ -181,18 +214,30 @@ describe('useAuth', () => {
     });
 
     expect(mockLoginService).toHaveBeenCalledWith(mockAccount);
-    expect(mockFetchMe).toHaveBeenCalledTimes(1);
+    
+    // 楽観的更新: レスポンスから直接setUser
     expect(mockSetUser).toHaveBeenCalledWith(mockUser);
+    
+    // キャッシュも手動で更新
+    expect(queryClient.setQueryData).toHaveBeenCalledWith(['auth', 'me'], mockUser);
+    
+    // 初期化フラグを立てる
+    expect(mockSetInitialized).toHaveBeenCalledWith(true);
+    
+    // 裏側でinvalidateQueries
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['auth', 'me'],
+    });
+    
     expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
   });
 
   /* =========================
-     fetchMe 失敗でも遷移
+     signUp 成功後にinvalidateQueriesで遷移
   ========================= */
 
-  it('signUp 成功後 fetchMe が失敗しても navigate(/dashboard) は呼ばれる', async () => {
-    mockSignupService.mockResolvedValue(undefined);
-    mockFetchMe.mockRejectedValue(new Error('fetch failed'));
+  it('signUp 成功後 invalidateQueries が呼ばれて navigate(/dashboard)', async () => {
+    mockSignupService.mockResolvedValue(mockTokenResponse);
 
     const { result } = renderHook(() => useAuth(), {
       wrapper: createWrapper(),
@@ -203,7 +248,9 @@ describe('useAuth', () => {
     });
 
     expect(mockSignupService).toHaveBeenCalledTimes(1);
-    expect(mockFetchMe).toHaveBeenCalledTimes(1);
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['auth', 'me'],
+    });
     expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
   });
 
@@ -211,8 +258,15 @@ describe('useAuth', () => {
      signOut
   ========================= */
 
-  it('signOut が成功したとき logoutService → logout → navigate(/login)', async () => {
+  it('signOut が成功したとき queryClient.clear → logout → navigate(/login)', async () => {
     mockLogoutService.mockResolvedValue(undefined);
+
+    const mockLogout = vi.fn();
+
+    // useAuthStoreの返り値をモック（型エラー回避）
+    (useAuthStore as unknown as Mock).mockReturnValue({
+      logout: mockLogout,
+    });
 
     const { result } = renderHook(() => useAuth(), {
       wrapper: createWrapper(),
@@ -223,6 +277,7 @@ describe('useAuth', () => {
     });
 
     expect(mockLogoutService).toHaveBeenCalledTimes(1);
+    expect(queryClient.clear).toHaveBeenCalledTimes(1);
     expect(mockLogout).toHaveBeenCalledTimes(1);
     expect(mockNavigate).toHaveBeenCalledWith('/login');
   });
@@ -233,6 +288,17 @@ describe('useAuth', () => {
 
   it('signIn が API エラーで失敗した場合、状態変更も遷移も発生しない', async () => {
     mockLoginService.mockRejectedValue(new Error('Invalid credentials'));
+
+    const mockSetUser = vi.fn();
+    
+    // useAuthStore.getState()の返り値を更新
+    (useAuthStore.getState as Mock).mockReturnValue({
+      user: null,
+      isInitialized: false,
+      setUser: mockSetUser,
+      logout: vi.fn(),
+      setInitialized: vi.fn(),
+    });
 
     const { result } = renderHook(() => useAuth(), {
       wrapper: createWrapper(),
