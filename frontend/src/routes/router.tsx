@@ -5,8 +5,8 @@ import Home from '@/pages/HomePage';
 import About from '@/pages/AboutPage';
 import Register from '@/pages/RegisterPage';
 import Login from '@/pages/LoginPage';
-import Auth from '@/pages/Auth';
 import Dashboard from '@/pages/Dashboard';
+import Todo from '@/pages/TodoPage';
 import NotFound from '@/pages/Not-Found';
 import { AuthGuard } from '@/routes/auth-guard';
 import { GuestGuard } from '@/routes/guest-guard';
@@ -47,9 +47,6 @@ const router = createBrowserRouter(
         <Route path="/" element={<Home />} />
         <Route path="/about" element={<About />} />
 
-        {/* new password redirect routes */}
-        <Route path="/pass" element={<Auth />} />
-
         {/* Guest routes with GuestGuard */}
         <Route element={<GuestGuard />}>
           <Route path="/login" element={<Login />} />
@@ -63,6 +60,7 @@ const router = createBrowserRouter(
         {/* Protected routes */}
         <Route element={<AuthGuard />}>
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/todo" element={<Todo />} />
         </Route>
       </Route>
     </>,

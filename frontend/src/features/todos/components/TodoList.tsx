@@ -7,7 +7,7 @@ import { useState, useCallback } from 'react';
 import { TodoEditModal } from './TodoEditModal';
 import type { Todo } from '../types';
 
-export const TodoList = () => {
+export const TodoList = ({ showActions = true, limit }: { showActions?: boolean; limit?: number; }) => {
   const { todos, isLoading, isError, updateTodo, deleteTodo } = useTodos();
 	const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
 
@@ -31,6 +31,8 @@ export const TodoList = () => {
       setEditingTodo(null);
     }
   }, []);
+
+  const displayTodos = limit ? todos.slice(0, limit) : todos;
 
   if (isLoading) {
     return (
@@ -57,21 +59,25 @@ export const TodoList = () => {
   return (
     <>
 			<div className="space-y-4">
-				{todos.map((todo) => (
+				{displayTodos.map((todo) => (
 					<TodoItem
 						key={todo.id}
 						todo={todo}
+            showActions={showActions}
 						onToggleComplete={handleToggleComplete}
 						onEdit={handleEdit}
 						onDelete={handleDelete}
 					/>
 				))}
 			</div>
-			<TodoEditModal 
-					todo={editingTodo} 
-					open={!!editingTodo} 
-					onOpenChange={handleModalClose} 
-				/>
+			{/* ✅ 編集モードの時だけモーダルをレンダリング（微塵の無駄も省く） */}
+      {showActions && (
+        <TodoEditModal 
+          todo={editingTodo} 
+          open={!!editingTodo} 
+          onOpenChange={handleModalClose} 
+        />
+      )}
 		</>
   );
 };

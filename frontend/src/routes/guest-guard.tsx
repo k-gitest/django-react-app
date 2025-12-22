@@ -8,13 +8,13 @@ export const GuestGuard = () => {
   const isInitialized = useAuthStore((state) => state.isInitialized);
 
   // 1. まだ認証チェックが終わっていない場合はローディングを表示
-  // これがないと、一瞬ログイン画面が見えた後にリダイレクトされる「ちらつき」が起きます
+  // これがないと、一瞬ログイン画面が見えた後にリダイレクトされるちらつきが起きます
   if (isLoading && !isInitialized) {
     return <div className="h-screen flex items-center justify-center">Loading...</div>;
   }
 
-  // 2. ログイン済みのユーザーがログイン関連ページに来たら、ダッシュボードへ戻す
-  if (user) {
+  // ロードが終わり、ユーザーがいることが確定した時のみリダイレクト
+  if (!isLoading && isInitialized && user) {
     return <Navigate to="/dashboard" replace />;
   }
 

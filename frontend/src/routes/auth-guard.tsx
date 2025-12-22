@@ -12,14 +12,14 @@ export const AuthGuard = () => {
   const isInitialized = useAuthStore((state) => state.isInitialized);
   const location = useLocation();
 
-  // 1. 初回のデータ取得中（初期化中）はローディング
-  if ( isLoading && !isInitialized) {
+  // 「ロード中」かつ「一度も初期化されていない」間は、絶対に Navigate させない
+  if (isLoading && !isInitialized) {
     return <div className="h-screen flex items-center justify-center">Loading...</div>;
   }
 
-  // 2. 取得が終わった結果、ユーザーがいなければログインへ
-  if (!user) {
-    return <Navigate drop-shadow to="/login" state={{ from: location }} replace />;
+  // 「ロードが終わり」、かつ「ユーザーがいない」ことが確定してから初めてログインへ飛ばす
+  if (!isLoading && isInitialized && !user) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   // 認証済みの場合、子要素をレンダリング
