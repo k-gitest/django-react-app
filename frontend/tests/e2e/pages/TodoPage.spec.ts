@@ -116,6 +116,7 @@ test.describe('Todo CRUD Operations', () => {
       })
     );
 
+    // リトライ無効の設定
     await page.addInitScript(() => {
       window.__IS_E2E_TESTING__ = true;
     });

@@ -3,13 +3,21 @@
  * Zodなどのスキーマバリデーションで使用
  */
 export class ValidationError extends Error {
-  public readonly name = 'ValidationError';
+  public override readonly name = 'ValidationError';
   
+  // プロパティを明示的に宣言
+  public readonly fields?: Record<string, string[]>;
+
   constructor(
     message: string = '入力内容に誤りがあります',
-    public readonly fields?: Record<string, string[]>,
+    fields?: Record<string, string[]>,
   ) {
     super(message);
+    
+    // 手動で値を代入
+    this.fields = fields;
+    
+    // TypeScriptのビルトインErrorとの互換性を保つ
     Object.setPrototypeOf(this, ValidationError.prototype);
   }
 

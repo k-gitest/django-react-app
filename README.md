@@ -8,12 +8,12 @@ Django/React モノレポベースのSPAアプリケーション
 
 ## 主な特徴
 
-- 🏗️ **モノレポ構成**: フロントエンドとバックエンドを一元管理
-- 🎯 **レイヤードアーキテクチャ**: View/Service/Modelの明確な責務分離
+- 🏗️ **スケール可能なモノレポ構成**: フロントエンドとバックエンドを一元管理し、チーム全体での仕様変更への迅速な対応を可能にします。
+- 🎯 **チーム開発に適したレイヤードアーキテクチャ**: 複数人での並行開発を想定し、View/Service/Modelの責務を分離。コードの衝突（コンフリクト）を最小限に抑え、テスタビリティを向上させています。
 - 🔐 **JWT認証**: dj-rest-auth + simplejwtによる堅牢な認証システム
-- 🐳 **Docker対応**: 複数の開発環境をサポート
+- 🐳 **フロントエンド独立開発 (MSW)**: APIの実装を待たずに開発・テストが可能なMSWを活用。バックエンドへの依存を減らし、開発スピードを最大化します。
 - 🧪 **テスト充実**: Playwright(E2E)、Vitest(Unit)、Django TestCase
-- ☁️ **Codespaces対応**: クラウドベースの開発環境
+- ☁️ **オンボーディングの高速化**: DockerおよびGitHub Codespacesに完全対応。環境構築の手間を省き、新メンバーが即日コードを書ける環境を提供します。
 
 ## 技術スタック
 
@@ -324,6 +324,8 @@ npm run dev
 
 本プロジェクトは**個人開発でありながら将来的なチーム開発を視野に入れた構成**を採用しています。責務の分離（Separation of Concerns）を徹底し、長期的な保守性を優先します。
 
+**チーム開発を支える「コントラクト（契約）優先」開発**: 本プロジェクトでは、フロントエンドとバックエンドの境界を明確にするためにMSWを採用しています。これにより、API仕様を「契約」として先に定義し、両チームが並行して実装を進めるワークフローを可能にしています。
+
 ### レイヤードアーキテクチャ
 
 現在採用している**レイヤードアーキテクチャ**は、DjangoとReactのエコシステムを最大限活用しながら、ビジネスロジックとインフラストラクチャを適切に分離した実用的な設計です。
@@ -607,6 +609,188 @@ Cookie認証への移行により、フロントエンド側のトークン管�
 
 **不要なネットワークリクエストの削減**: サーバー状態（認証情報）をキャッシュ管理することで、コンポーネントの再レンダリングに伴う重複した API 呼び出しを最小限に抑えています。
 
+## Todo管理機能
+
+### 概要
+
+CRUD操作を含むタスク管理機能を実装。優先度設定、進捗管理、統計表示など、実用的なタスク管理に必要な機能を備えています。
+
+### 主な機能
+
+| 機能 | 説明 |
+|---|---|
+| **タスク作成** | タイトル、優先度、進捗を設定して新規タスクを作成 |
+| **タスク一覧** | 優先度別、進捗別にタスクを表示 |
+| **タスク編集** | タイトル、優先度、進捗をモーダルで編集 |
+| **タスク削除** | 確認ダイアログ付きの安全な削除 |
+| **進捗管理** | スライダーで0-100%の進捗を設定、チェックボックスで即座に完了切替 |
+| **統計表示** | 優先度別の件数と進捗分布をグラフで可視化 |
+
+### 技術的特徴
+
+#### バックエンド（Django）
+
+**実装構成**:
+```
+backend/todos/
+├── models.py          # Todoモデル定義
+├── serializers.py     # DRFシリアライザ
+├── views.py          # ViewSet（CRUD API）
+├── service.py        # ビジネスロジック層
+├── urls.py           # APIエンドポイント
+└── tests/            # テストコード
+```
+
+**データモデル**:
+```python
+class Todo(models.Model):
+    user = ForeignKey(User)           # ユーザー紐付け
+    todo_title = CharField(max_length=255)  # タスク名
+    priority = CharField(choices=['HIGH', 'MEDIUM', 'LOW'])  # 優先度
+    progress = IntegerField(0-100)    # 進捗率
+    created_at = DateTimeField(auto_now_add=True)
+    updated_at = DateTimeField(auto_now=True)
+```
+
+**APIエンドポイント**:
+
+| エンドポイント | Method | 説明 | 認証 |
+|--------------|--------|-----|------|
+| `/api/v1/todos/` | GET | タスク一覧取得 | 必須 |
+| `/api/v1/todos/` | POST | タスク作成 | 必須 |
+| `/api/v1/todos/{id}/` | GET | タスク詳細取得 | 必須 |
+| `/api/v1/todos/{id}/` | PATCH | タスク更新 | 必須 |
+| `/api/v1/todos/{id}/` | DELETE | タスク削除 | 必須 |
+| `/api/v1/todos/stats/` | GET | 優先度別統計 | 必須 |
+| `/api/v1/todos/progress-stats/` | GET | 進捗分布統計 | 必須 |
+
+#### フロントエンド（React + TypeScript）
+
+**実装構成**:
+```
+frontend/src/features/todo/
+├── components/
+│   ├── TodoList.tsx              # タスク一覧表示
+│   ├── TodoItem.tsx              # 個別タスクカード
+│   ├── TodoCreateForm.tsx        # 作成フォーム
+│   ├── TodoEditModal.tsx         # 編集モーダル
+│   ├── TodoForm.tsx              # 共通フォームロジック
+│   ├── TodoStatsChart.tsx        # 優先度別統計グラフ
+│   └── TodoProgressChart.tsx     # 進捗分布グラフ
+│
+├── hooks/
+│   ├── useTodos.ts               # CRUD操作フック
+│   ├── useTodoStats.ts           # 優先度統計フック
+│   └── useProgressStats.ts       # 進捗統計フック
+│
+├── services/
+│   └── todo-service.ts           # API呼び出しロジック
+│
+└── types/
+    └── index.ts                  # 型定義
+```
+
+**状態管理とデータフェッチ**:
+
+```typescript
+// TanStack Query による楽観的更新
+const { todos, createTodo, updateTodo, deleteTodo } = useTodos();
+
+// 楽観的更新の実装例
+const createMutation = useApiMutation({
+  mutationFn: todoService.createTodo,
+  onMutate: async (newTodo) => {
+    // 1. 進行中のクエリをキャンセル
+    await queryClient.cancelQueries({ queryKey: ['todos'] });
+    
+    // 2. 現在のキャッシュを保存（ロールバック用）
+    const previousTodos = queryClient.getQueryData(['todos']);
+    
+    // 3. 楽観的更新: 仮IDで即座にUIに反映
+    queryClient.setQueryData(['todos'], (old) => [...old, optimisticTodo]);
+    
+    return { previousTodos };
+  },
+  onError: (err, variables, context) => {
+    // 4. エラー時: ロールバック
+    queryClient.setQueryData(['todos'], context.previousTodos);
+  },
+  onSettled: () => {
+    // 5. 最後に: サーバーと同期
+    queryClient.invalidateQueries({ queryKey: ['todos'] });
+  },
+});
+```
+
+**UIコンポーネント**:
+- **shadcn/ui**: Button, Card, Dialog, Select, Slider, Alert等
+- **Radix UI**: アクセシブルなプリミティブコンポーネント
+- **Recharts**: 統計グラフの描画
+
+### 技術的な実装のポイント
+
+#### 楽観的更新（Optimistic Update）
+
+TanStack Queryの機能を活用し、サーバーの応答を待たずにUIを即座に更新します：
+
+```typescript
+const createMutation = useApiMutation({
+  mutationFn: todoService.createTodo,
+  onMutate: async (newTodo) => {
+    // 1. 進行中のクエリをキャンセル
+    await queryClient.cancelQueries({ queryKey: ['todos'] });
+    
+    // 2. 現在のキャッシュを保存（ロールバック用）
+    const previousTodos = queryClient.getQueryData(['todos']);
+    
+    // 3. 楽観的更新: 仮IDで即座にUIに反映
+    queryClient.setQueryData(['todos'], (old) => [...old, optimisticTodo]);
+    
+    return { previousTodos };
+  },
+  onError: (err, variables, context) => {
+    // エラー時: ロールバック
+    queryClient.setQueryData(['todos'], context.previousTodos);
+  },
+  onSettled: () => {
+    // 最後に: サーバーと同期
+    queryClient.invalidateQueries({ queryKey: ['todos'] });
+  },
+});
+```
+
+**効果**: タスクの追加・編集時に通信待機がなく、即座にUIに反映されるためUXが向上
+
+#### データ集計の効率化
+
+Django ORMの`aggregate`と`annotate`を使用し、データベース側で集計を実行：
+
+```python
+# 進捗率の分布を20%刻みで集計
+Todo.objects.filter(user=user).aggregate(
+    range_0_20=Count(Case(When(progress__lte=20, then=1))),
+    range_21_40=Count(Case(When(progress__gt=20, progress__lte=40, then=1))),
+    # ...
+)
+```
+
+**効果**: Python側でループ処理せず、DBで一括計算することでパフォーマンスを最適化
+
+#### 認可の徹底
+
+Service層で必ず`filter(user=user)`を適用し、他人のデータへのアクセスを防止：
+
+```python
+@staticmethod
+def get_user_todos(user):
+    """ユーザー自身のタスクのみを取得（認可の担保）"""
+    return Todo.objects.filter(user=user)
+```
+
+**効果**: View層に認可ロジックを書かず、Service層で一元管理することで保守性向上
+
+---
+
 ## データベース戦略
 
 ### 採用：Neon PostgreSQL
@@ -770,6 +954,55 @@ Playwrightでは、認証状態を保存・再利用することで、テスト�
 - ログイン処理を一度だけ実行
 - 認証状態を `.auth/user.json` に保存
 - 認証済みテストはこのファイルを読み込んで開始
+
+#### E2Eテストにおけるリトライ制御
+
+E2Eテスト環境では、React Queryのリトライ機能が無限ループを引き起こす可能性があるため、**windowオブジェクトを使った環境判定**でリトライを制御しています。
+
+**実装方法**:
+
+1. **queryClient.ts でE2E環境を検出**
+```typescript
+// frontend/src/lib/queryClient.ts
+const isE2ETest = typeof window !== 'undefined' && window.__IS_E2E_TESTING__;
+
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: isE2ETest ? false : 3,  // E2E環境ではリトライ無効
+      refetchOnWindowFocus: false,
+      staleTime: 5 * 60 * 1000,
+    },
+  },
+});
+```
+
+2. **Playwright test-utils でフラグを設定**
+```typescript
+// tests/test-utils/playwright-msw.ts
+import { test as base, expect } from '@playwright/test';
+import { createWorkerFixture } from 'playwright-msw';
+import { handlers } from '@tests/mocks';
+
+const test = base.extend({
+  worker: createWorkerFixture(handlers),
+  http,
+});
+
+// すべてのE2Eテストで自動的にフラグを設定
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as any).__IS_E2E_TESTING__ = true;
+  });
+});
+
+export { expect, test };
+```
+
+**メリット**:
+- ✅ ビルド済みアーティファクトに対してもテスト可能（`import.meta.env.MODE`に依存しない）
+- ✅ リトライによる無限ループを防止し、テストが高速化
+- ✅ エラーハンドリングのテストが確実に動作
 
 ---
 

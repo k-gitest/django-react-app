@@ -139,16 +139,16 @@ const logErrorToService = (error: Error): void => {
  * エラーハンドラのユーティリティ型
  * Promise を返す関数をラップしてエラーハンドリングを自動化
  */
-export const withErrorHandler = <T extends (...args: any[]) => Promise<any>>(
-  fn: T,
+export const withErrorHandler = <Args extends unknown[], Return>(
+  fn: (...args: Args) => Promise<Return>,
   context?: string,
-): T => {
-  return (async (...args: Parameters<T>) => {
+): ((...args: Args) => Promise<Return>) => {
+  return async (...args: Args): Promise<Return> => {
     try {
       return await fn(...args);
     } catch (error) {
       errorHandler(error, context);
-      throw error; // 上位でも処理が必要な場合のため再throw
+      throw error; // 上位（コンポーネント側など）でも処理が必要な場合のため再throw
     }
-  }) as T;
+  };
 };
