@@ -29,4 +29,6 @@ interface ImportMeta {
 // window.Sentryの型定義
 interface Window {
   Sentry?: typeof import("@sentry/react");
+  /** E2Eテスト中かどうかを判定するフラグ */
+    __IS_E2E_TESTING__?: boolean;
 }

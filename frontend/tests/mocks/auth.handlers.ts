@@ -1,5 +1,4 @@
 import { http, HttpResponse } from 'msw'
-import { BASE_API_URL } from '@/lib/constants'
 import type { TokenResponse, UserInfo } from '@/features/auth/types/auth'
 
 export const mockUser: UserInfo = {
@@ -16,23 +15,23 @@ export const mockToken: TokenResponse = {
 }
 
 export const authHandlers = [
-  http.get(`${BASE_API_URL}/auth/user/`, () =>
+  http.get(`**/auth/user/`, () =>
     HttpResponse.json(mockUser, { status: 200 })
   ),
 
-  http.post(`${BASE_API_URL}/auth/login/`, () =>
+  http.post(`**/auth/login/`, () =>
     HttpResponse.json(mockToken, { status: 200 })
   ),
 
-  http.post(`${BASE_API_URL}/auth/registration/`, () =>
+  http.post(`**/auth/registration/`, () =>
     HttpResponse.json(mockToken, { status: 201 })
   ),
 
-  http.post(`${BASE_API_URL}/auth/token/refresh/`, () =>
+  http.post(`**/auth/token/refresh/`, () =>
     HttpResponse.json({ access: 'new-access-token' }, { status: 200 })
   ),
 
-  http.post(`${BASE_API_URL}/auth/logout/`, () =>
+  http.post(`**/auth/logout/`, () =>
     HttpResponse.json(null, { status: 204 })
   ),
 ]

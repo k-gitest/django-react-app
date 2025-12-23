@@ -22,7 +22,7 @@ export const baseKyClient = ky.create({
     'Content-Type': 'application/json',
   },
   retry: {
-    limit: 3,
+    limit: 0,
     methods: ['get', 'put', 'delete'],
     statusCodes: [500, 502, 503, 504],
   },
@@ -38,6 +38,8 @@ export const baseKyClient = ky.create({
           .json()
           .then((data) => data as ApiErrorResponse)
           .catch(() => null);
+
+          console.error(response.status, errorBody)
 
           // カスタムApiErrorをthrow
           throw new ApiError(
