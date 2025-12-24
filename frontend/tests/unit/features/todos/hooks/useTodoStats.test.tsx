@@ -2,13 +2,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useTodoStats } from '@/features/todos/hooks/useTodoStats';
-import { apiClient } from '@/lib/api-client';
+import { todoService } from '@/features/todos/services/todo-service';
 import type { ReactNode } from 'react';
 
 // モック
-vi.mock('@/lib/api-client', () => ({
-  apiClient: {
-    get: vi.fn(),
+vi.mock('@/features/todos/services/todo-service', () => ({
+  todoService: {
+    getTodoStats: vi.fn(),
   },
 }));
 
@@ -20,7 +20,7 @@ vi.spyOn(console, 'log').mockImplementation(() => {});
 describe('useTodoStats', () => {
   let queryClient: QueryClient;
 
-  // モックデータ（サーバーからのレスポンス）
+  // モックデータ（サービスからのレスポンス）
   const mockStatsResponse = [
     { priority: 'HIGH', count: 5 },
     { priority: 'MEDIUM', count: 3 },
@@ -62,27 +62,9 @@ describe('useTodoStats', () => {
     );
   };
 
-  // モックレスポンスを作成するヘルパー関数
-  const mockApiGet = <T,>(data: T) => {
-    const mockJson = vi.fn().mockResolvedValue(data);
-    vi.mocked(apiClient.get).mockReturnValue({
-      json: mockJson,
-    } as unknown as ReturnType<typeof apiClient.get>);
-    return mockJson;
-  };
-
-  // エラーレスポンスを作成するヘルパー関数
-  const mockApiGetError = (error: Error) => {
-    const mockJson = vi.fn().mockRejectedValue(error);
-    vi.mocked(apiClient.get).mockReturnValue({
-      json: mockJson,
-    } as unknown as ReturnType<typeof apiClient.get>);
-    return mockJson;
-  };
-
-  describe('統計データ取得', () => {
+  describe('統計データ取得と変換', () => {
     it('統計データを正常に取得し、変換する', async () => {
-      const mockJson = mockApiGet(mockStatsResponse);
+      vi.mocked(todoService.getTodoStats).mockResolvedValue(mockStatsResponse);
 
       const { result } = renderHook(() => useTodoStats(), {
         wrapper: createWrapper(),
@@ -96,9 +78,8 @@ describe('useTodoStats', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      // APIが正しく呼ばれたことを確認
-      expect(apiClient.get).toHaveBeenCalledWith('todos/stats/');
-      expect(mockJson).toHaveBeenCalledTimes(1);
+      // サービスが正しく呼ばれたことを確認
+      expect(todoService.getTodoStats).toHaveBeenCalledTimes(1);
 
       // データが正しく変換されていることを確認
       expect(result.current.data).toEqual(expectedStatsData);
@@ -112,7 +93,7 @@ describe('useTodoStats', () => {
         { priority: 'MEDIUM', count: 2 },
       ];
 
-      mockApiGet(upperCaseResponse);
+      vi.mocked(todoService.getTodoStats).mockResolvedValue(upperCaseResponse);
 
       const { result } = renderHook(() => useTodoStats(), {
         wrapper: createWrapper(),
@@ -130,7 +111,7 @@ describe('useTodoStats', () => {
     });
 
     it('空の配列が返された場合も正しく処理される', async () => {
-      mockApiGet([]);
+      vi.mocked(todoService.getTodoStats).mockResolvedValue([]);
 
       const { result } = renderHook(() => useTodoStats(), {
         wrapper: createWrapper(),
@@ -145,7 +126,9 @@ describe('useTodoStats', () => {
     });
 
     it('エラー時にisErrorがtrueになる', async () => {
-      mockApiGetError(new Error('API Error'));
+      vi.mocked(todoService.getTodoStats).mockRejectedValue(
+        new Error('Service Error')
+      );
 
       const { result } = renderHook(() => useTodoStats(), {
         wrapper: createWrapper(),
@@ -162,7 +145,7 @@ describe('useTodoStats', () => {
 
     it('ネットワークエラーが発生した場合', async () => {
       const networkError = new Error('Network Error');
-      mockApiGetError(networkError);
+      vi.mocked(todoService.getTodoStats).mockRejectedValue(networkError);
 
       const { result } = renderHook(() => useTodoStats(), {
         wrapper: createWrapper(),
@@ -178,7 +161,7 @@ describe('useTodoStats', () => {
 
   describe('queryKeyとキャッシュ', () => {
     it('正しいqueryKeyが使用されている', async () => {
-      mockApiGet(mockStatsResponse);
+      vi.mocked(todoService.getTodoStats).mockResolvedValue(mockStatsResponse);
 
       const { result } = renderHook(() => useTodoStats(), {
         wrapper: createWrapper(),
@@ -194,7 +177,7 @@ describe('useTodoStats', () => {
     });
 
     it('キャッシュが機能することを確認', async () => {
-      const mockJson = mockApiGet(mockStatsResponse);
+      vi.mocked(todoService.getTodoStats).mockResolvedValue(mockStatsResponse);
 
       // 1回目のレンダリング
       const { result: result1 } = renderHook(() => useTodoStats(), {
@@ -205,9 +188,8 @@ describe('useTodoStats', () => {
         expect(result1.current.isSuccess).toBe(true);
       });
 
-      // APIリクエストが1回呼ばれたことを確認
-      expect(apiClient.get).toHaveBeenCalledTimes(1);
-      expect(mockJson).toHaveBeenCalledTimes(1);
+      // サービスが1回呼ばれたことを確認
+      expect(todoService.getTodoStats).toHaveBeenCalledTimes(1);
 
       // データが正しいことを確認
       expect(result1.current.data).toEqual(expectedStatsData);
@@ -220,7 +202,7 @@ describe('useTodoStats', () => {
 
   describe('データ変換', () => {
     it('fillプロパティが正しいCSS変数フォーマットになっている', async () => {
-      mockApiGet(mockStatsResponse);
+      vi.mocked(todoService.getTodoStats).mockResolvedValue(mockStatsResponse);
 
       const { result } = renderHook(() => useTodoStats(), {
         wrapper: createWrapper(),
@@ -237,7 +219,7 @@ describe('useTodoStats', () => {
     });
 
     it('元のpriorityとcountが保持されている', async () => {
-      mockApiGet(mockStatsResponse);
+      vi.mocked(todoService.getTodoStats).mockResolvedValue(mockStatsResponse);
 
       const { result } = renderHook(() => useTodoStats(), {
         wrapper: createWrapper(),
@@ -251,6 +233,50 @@ describe('useTodoStats', () => {
       result.current.data?.forEach((item, index) => {
         expect(item.priority).toBe(mockStatsResponse[index].priority);
         expect(item.count).toBe(mockStatsResponse[index].count);
+      });
+    });
+
+    it('混合ケースの優先度も正しく変換される', async () => {
+      const mixedCaseResponse = [
+        { priority: 'High', count: 1 },
+        { priority: 'MeDiUm', count: 2 },
+        { priority: 'LoW', count: 3 },
+      ];
+
+      vi.mocked(todoService.getTodoStats).mockResolvedValue(mixedCaseResponse);
+
+      const { result } = renderHook(() => useTodoStats(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isSuccess).toBe(true);
+      });
+
+      // すべてのfillが小文字に変換されていることを確認
+      expect(result.current.data).toEqual([
+        { priority: 'High', count: 1, fill: 'var(--color-high)' },
+        { priority: 'MeDiUm', count: 2, fill: 'var(--color-medium)' },
+        { priority: 'LoW', count: 3, fill: 'var(--color-low)' },
+      ]);
+    });
+
+    it('すべての必須プロパティが含まれている', async () => {
+      vi.mocked(todoService.getTodoStats).mockResolvedValue(mockStatsResponse);
+
+      const { result } = renderHook(() => useTodoStats(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isSuccess).toBe(true);
+      });
+
+      // 各アイテムが必須プロパティを持つことを確認
+      result.current.data?.forEach((item) => {
+        expect(item).toHaveProperty('priority');
+        expect(item).toHaveProperty('count');
+        expect(item).toHaveProperty('fill');
       });
     });
   });

@@ -1,7 +1,5 @@
 import { useApiQuery } from "@/hooks/use-tanstack-query";
-import { apiClient } from "@/lib/api-client";
-
-type ProgressStatsResponse = Record<string, number>;
+import { todoService } from "../services/todo-service";
 
 type ProgressStatsData = {
   range: string;
@@ -12,8 +10,7 @@ export const useProgressStats = () => {
   return useApiQuery<ProgressStatsData>({
     queryKey: ['todos', 'progress-stats'],
     queryFn: async () => {
-      const res = await apiClient.get('todos/progress-stats/').json<ProgressStatsResponse>();
-      // グラフ表示用のラベルと値のペアに変換
+      const res = await todoService.getProgressStats();
       return [
         { range: "0-20%", count: res.range_0_20 },
         { range: "21-40%", count: res.range_21_40 },

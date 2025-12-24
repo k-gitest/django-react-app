@@ -2,13 +2,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useProgressStats } from '@/features/todos/hooks/useProgressStats';
-import { apiClient } from '@/lib/api-client';
+import { todoService } from '@/features/todos/services/todo-service';
 import type { ReactNode } from 'react';
 
 // モック
-vi.mock('@/lib/api-client', () => ({
-  apiClient: {
-    get: vi.fn(),
+vi.mock('@/features/todos/services/todo-service', () => ({
+  todoService: {
+    getProgressStats: vi.fn(),
   },
 }));
 
@@ -20,7 +20,7 @@ vi.spyOn(console, 'log').mockImplementation(() => {});
 describe('useProgressStats', () => {
   let queryClient: QueryClient;
 
-  // モックデータ（サーバーからのレスポンス）
+  // モックデータ（サービスからのレスポンス）
   const mockProgressResponse = {
     range_0_20: 5,
     range_21_40: 3,
@@ -66,27 +66,11 @@ describe('useProgressStats', () => {
     );
   };
 
-  // モックレスポンスを作成するヘルパー関数
-  const mockApiGet = <T,>(data: T) => {
-    const mockJson = vi.fn().mockResolvedValue(data);
-    vi.mocked(apiClient.get).mockReturnValue({
-      json: mockJson,
-    } as unknown as ReturnType<typeof apiClient.get>);
-    return mockJson;
-  };
-
-  // エラーレスポンスを作成するヘルパー関数
-  const mockApiGetError = (error: Error) => {
-    const mockJson = vi.fn().mockRejectedValue(error);
-    vi.mocked(apiClient.get).mockReturnValue({
-      json: mockJson,
-    } as unknown as ReturnType<typeof apiClient.get>);
-    return mockJson;
-  };
-
-  describe('進捗統計データ取得', () => {
+  describe('進捗統計データ取得と変換', () => {
     it('進捗統計データを正常に取得し、変換する', async () => {
-      const mockJson = mockApiGet(mockProgressResponse);
+      vi.mocked(todoService.getProgressStats).mockResolvedValue(
+        mockProgressResponse
+      );
 
       const { result } = renderHook(() => useProgressStats(), {
         wrapper: createWrapper(),
@@ -100,9 +84,8 @@ describe('useProgressStats', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      // APIが正しく呼ばれたことを確認
-      expect(apiClient.get).toHaveBeenCalledWith('todos/progress-stats/');
-      expect(mockJson).toHaveBeenCalledTimes(1);
+      // サービスが正しく呼ばれたことを確認
+      expect(todoService.getProgressStats).toHaveBeenCalledTimes(1);
 
       // データが正しく変換されていることを確認
       expect(result.current.data).toEqual(expectedProgressData);
@@ -110,7 +93,9 @@ describe('useProgressStats', () => {
     });
 
     it('すべての進捗範囲が含まれている', async () => {
-      mockApiGet(mockProgressResponse);
+      vi.mocked(todoService.getProgressStats).mockResolvedValue(
+        mockProgressResponse
+      );
 
       const { result } = renderHook(() => useProgressStats(), {
         wrapper: createWrapper(),
@@ -143,7 +128,9 @@ describe('useProgressStats', () => {
         range_81_100: 0,
       };
 
-      mockApiGet(zeroCountResponse);
+      vi.mocked(todoService.getProgressStats).mockResolvedValue(
+        zeroCountResponse
+      );
 
       const { result } = renderHook(() => useProgressStats(), {
         wrapper: createWrapper(),
@@ -171,7 +158,9 @@ describe('useProgressStats', () => {
         range_81_100: 50,
       };
 
-      mockApiGet(largeCountResponse);
+      vi.mocked(todoService.getProgressStats).mockResolvedValue(
+        largeCountResponse
+      );
 
       const { result } = renderHook(() => useProgressStats(), {
         wrapper: createWrapper(),
@@ -192,7 +181,9 @@ describe('useProgressStats', () => {
     });
 
     it('エラー時にisErrorがtrueになる', async () => {
-      mockApiGetError(new Error('API Error'));
+      vi.mocked(todoService.getProgressStats).mockRejectedValue(
+        new Error('Service Error')
+      );
 
       const { result } = renderHook(() => useProgressStats(), {
         wrapper: createWrapper(),
@@ -209,7 +200,7 @@ describe('useProgressStats', () => {
 
     it('ネットワークエラーが発生した場合', async () => {
       const networkError = new Error('Network Error');
-      mockApiGetError(networkError);
+      vi.mocked(todoService.getProgressStats).mockRejectedValue(networkError);
 
       const { result } = renderHook(() => useProgressStats(), {
         wrapper: createWrapper(),
@@ -225,7 +216,9 @@ describe('useProgressStats', () => {
 
   describe('queryKeyとキャッシュ', () => {
     it('正しいqueryKeyが使用されている', async () => {
-      mockApiGet(mockProgressResponse);
+      vi.mocked(todoService.getProgressStats).mockResolvedValue(
+        mockProgressResponse
+      );
 
       const { result } = renderHook(() => useProgressStats(), {
         wrapper: createWrapper(),
@@ -241,7 +234,9 @@ describe('useProgressStats', () => {
     });
 
     it('キャッシュが機能することを確認', async () => {
-      const mockJson = mockApiGet(mockProgressResponse);
+      vi.mocked(todoService.getProgressStats).mockResolvedValue(
+        mockProgressResponse
+      );
 
       const { result } = renderHook(() => useProgressStats(), {
         wrapper: createWrapper(),
@@ -251,9 +246,8 @@ describe('useProgressStats', () => {
         expect(result.current.isSuccess).toBe(true);
       });
 
-      // APIリクエストが1回呼ばれたことを確認
-      expect(apiClient.get).toHaveBeenCalledTimes(1);
-      expect(mockJson).toHaveBeenCalledTimes(1);
+      // サービスが1回呼ばれたことを確認
+      expect(todoService.getProgressStats).toHaveBeenCalledTimes(1);
 
       // データが正しいことを確認
       expect(result.current.data).toEqual(expectedProgressData);
@@ -266,7 +260,9 @@ describe('useProgressStats', () => {
 
   describe('データ変換', () => {
     it('レスポンスのフィールド名が正しくマッピングされている', async () => {
-      mockApiGet(mockProgressResponse);
+      vi.mocked(todoService.getProgressStats).mockResolvedValue(
+        mockProgressResponse
+      );
 
       const { result } = renderHook(() => useProgressStats(), {
         wrapper: createWrapper(),
@@ -300,7 +296,9 @@ describe('useProgressStats', () => {
     });
 
     it('rangeフォーマットが正しい', async () => {
-      mockApiGet(mockProgressResponse);
+      vi.mocked(todoService.getProgressStats).mockResolvedValue(
+        mockProgressResponse
+      );
 
       const { result } = renderHook(() => useProgressStats(), {
         wrapper: createWrapper(),
@@ -317,7 +315,9 @@ describe('useProgressStats', () => {
     });
 
     it('配列の順序が保持されている', async () => {
-      mockApiGet(mockProgressResponse);
+      vi.mocked(todoService.getProgressStats).mockResolvedValue(
+        mockProgressResponse
+      );
 
       const { result } = renderHook(() => useProgressStats(), {
         wrapper: createWrapper(),
@@ -336,6 +336,26 @@ describe('useProgressStats', () => {
         '61-80%',
         '81-100%',
       ]);
+    });
+
+    it('すべての必須プロパティが含まれている', async () => {
+      vi.mocked(todoService.getProgressStats).mockResolvedValue(
+        mockProgressResponse
+      );
+
+      const { result } = renderHook(() => useProgressStats(), {
+        wrapper: createWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.isSuccess).toBe(true);
+      });
+
+      // 各アイテムが必須プロパティを持つことを確認
+      result.current.data?.forEach((item) => {
+        expect(item).toHaveProperty('range');
+        expect(item).toHaveProperty('count');
+      });
     });
   });
 });

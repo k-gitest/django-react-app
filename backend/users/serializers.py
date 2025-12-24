@@ -2,7 +2,9 @@ from dj_rest_auth.registration.serializers import RegisterSerializer
 from dj_rest_auth.serializers import LoginSerializer as DefaultLoginSerializer
 from rest_framework import serializers
 from django.db import IntegrityError
+
 from .models import CustomUser
+from .services import UserQueryService, UserRegistrationService
 
 
 # ============================================================================
@@ -30,12 +32,17 @@ class CustomRegisterSerializer(RegisterSerializer):
     
     first_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
     last_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.query_service = UserQueryService()
+        self.registration_service = UserRegistrationService()
 
     def validate_email(self, email):
         """
         メールアドレスの重複をチェック
         """
-        if CustomUser.objects.filter(email__iexact=email).exists():
+        if self.query_service.email_exists(email):
             raise serializers.ValidationError(
                 "A user is already registered with this e-mail address."
             )
@@ -47,7 +54,7 @@ class CustomRegisterSerializer(RegisterSerializer):
         """
         return {
             'email': self.validated_data.get('email', ''),
-            'password1': self.validated_data.get('password1', ''),
+            'password': self.validated_data.get('password1', ''),
             'first_name': self.validated_data.get('first_name', ''),
             'last_name': self.validated_data.get('last_name', ''),
         }
@@ -55,28 +62,25 @@ class CustomRegisterSerializer(RegisterSerializer):
     def save(self, request):
         """
         ユーザーを保存
-        allauthのadapter経由でユーザーを作成
+        サービス層経由でユーザーを作成
         """
-        from allauth.account.adapter import get_adapter
-        from allauth.account.utils import setup_user_email
-
-        adapter = get_adapter()
-        user = adapter.new_user(request)
-        self.cleaned_data = self.get_cleaned_data()
-        
-        user.email = self.cleaned_data.get('email')
-        user.set_password(self.cleaned_data.get('password1'))
-        user.first_name = self.cleaned_data.get('first_name', '')
-        user.last_name = self.cleaned_data.get('last_name', '')
+        cleaned_data = self.get_cleaned_data()
         
         try:
-            user.save()
+            user = self.registration_service.register_user(
+                request=request,
+                user_data=cleaned_data
+            )
+        except ValueError as e:
+            # サービス層からのバリデーションエラー
+            raise serializers.ValidationError({
+                'email': [str(e)]
+            })
         except IntegrityError:
+            # データベース制約エラー
             raise serializers.ValidationError({
                 'email': ['A user is already registered with this e-mail address.']
             })
-        
-        #setup_user_email(request, user, [])
         
         return user
 

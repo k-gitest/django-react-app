@@ -297,6 +297,154 @@ describe('todoService', () => {
     });
   });
 
+  describe('getTodoStats', () => {
+    const mockStatsResponse = [
+      { priority: 'HIGH', count: 5 },
+      { priority: 'MEDIUM', count: 3 },
+      { priority: 'LOW', count: 2 },
+    ];
+
+    it('Todo統計データを取得する', async () => {
+      const mockResponse = mockApiResponse(mockStatsResponse);
+      vi.mocked(apiClient.get).mockReturnValue(mockResponse);
+
+      const result = await todoService.getTodoStats();
+
+      // APIが正しく呼ばれたことを確認
+      expect(apiClient.get).toHaveBeenCalledWith('todos/stats/');
+      expect(apiClient.get).toHaveBeenCalledTimes(1);
+
+      // 結果が正しいことを確認
+      expect(result).toEqual(mockStatsResponse);
+    });
+
+    it('空配列が返される場合', async () => {
+      const mockResponse = mockApiResponse([]);
+      vi.mocked(apiClient.get).mockReturnValue(mockResponse);
+
+      const result = await todoService.getTodoStats();
+
+      expect(apiClient.get).toHaveBeenCalledWith('todos/stats/');
+      expect(result).toEqual([]);
+    });
+
+    it('すべての優先度が含まれている場合', async () => {
+      const allPriorities = [
+        { priority: 'HIGH', count: 10 },
+        { priority: 'MEDIUM', count: 20 },
+        { priority: 'LOW', count: 30 },
+      ];
+
+      const mockResponse = mockApiResponse(allPriorities);
+      vi.mocked(apiClient.get).mockReturnValue(mockResponse);
+
+      const result = await todoService.getTodoStats();
+
+      expect(result).toHaveLength(3);
+      expect(result).toEqual(allPriorities);
+    });
+
+    it('エラーが発生した場合はそのまま投げる', async () => {
+      const error = new Error('Stats API Error');
+      const mockJson = vi.fn().mockRejectedValue(error);
+      vi.mocked(apiClient.get).mockReturnValue({
+        json: mockJson,
+      } as unknown as ReturnType<typeof apiClient.get>);
+
+      await expect(todoService.getTodoStats()).rejects.toThrow('Stats API Error');
+      expect(apiClient.get).toHaveBeenCalledWith('todos/stats/');
+    });
+  });
+
+  describe('getProgressStats', () => {
+    const mockProgressResponse = {
+      range_0_20: 5,
+      range_21_40: 3,
+      range_41_60: 7,
+      range_61_80: 4,
+      range_81_100: 2,
+    };
+
+    it('進捗統計データを取得する', async () => {
+      const mockResponse = mockApiResponse(mockProgressResponse);
+      vi.mocked(apiClient.get).mockReturnValue(mockResponse);
+
+      const result = await todoService.getProgressStats();
+
+      // APIが正しく呼ばれたことを確認
+      expect(apiClient.get).toHaveBeenCalledWith('todos/progress-stats/');
+      expect(apiClient.get).toHaveBeenCalledTimes(1);
+
+      // 結果が正しいことを確認
+      expect(result).toEqual(mockProgressResponse);
+    });
+
+    it('すべての進捗範囲フィールドが含まれている', async () => {
+      const mockResponse = mockApiResponse(mockProgressResponse);
+      vi.mocked(apiClient.get).mockReturnValue(mockResponse);
+
+      const result = await todoService.getProgressStats();
+
+      // 5つの進捗範囲フィールドが含まれていることを確認
+      expect(result).toHaveProperty('range_0_20');
+      expect(result).toHaveProperty('range_21_40');
+      expect(result).toHaveProperty('range_41_60');
+      expect(result).toHaveProperty('range_61_80');
+      expect(result).toHaveProperty('range_81_100');
+    });
+
+    it('カウントが0の場合も正しく処理される', async () => {
+      const zeroCountResponse = {
+        range_0_20: 0,
+        range_21_40: 0,
+        range_41_60: 0,
+        range_61_80: 0,
+        range_81_100: 0,
+      };
+
+      const mockResponse = mockApiResponse(zeroCountResponse);
+      vi.mocked(apiClient.get).mockReturnValue(mockResponse);
+
+      const result = await todoService.getProgressStats();
+
+      expect(result).toEqual(zeroCountResponse);
+      // すべてのカウントが0であることを確認
+      Object.values(result).forEach((count) => {
+        expect(count).toBe(0);
+      });
+    });
+
+    it('大きな数値も正しく処理される', async () => {
+      const largeCountResponse = {
+        range_0_20: 1000,
+        range_21_40: 500,
+        range_41_60: 250,
+        range_61_80: 100,
+        range_81_100: 50,
+      };
+
+      const mockResponse = mockApiResponse(largeCountResponse);
+      vi.mocked(apiClient.get).mockReturnValue(mockResponse);
+
+      const result = await todoService.getProgressStats();
+
+      expect(result).toEqual(largeCountResponse);
+    });
+
+    it('エラーが発生した場合はそのまま投げる', async () => {
+      const error = new Error('Progress Stats API Error');
+      const mockJson = vi.fn().mockRejectedValue(error);
+      vi.mocked(apiClient.get).mockReturnValue({
+        json: mockJson,
+      } as unknown as ReturnType<typeof apiClient.get>);
+
+      await expect(todoService.getProgressStats()).rejects.toThrow(
+        'Progress Stats API Error'
+      );
+      expect(apiClient.get).toHaveBeenCalledWith('todos/progress-stats/');
+    });
+  });
+
   describe('エンドポイントのフォーマット', () => {
     it('すべてのエンドポイントが正しいフォーマットである', async () => {
       // getTodos
@@ -331,6 +479,18 @@ describe('todoService', () => {
       vi.mocked(apiClient.delete).mockResolvedValue(undefined as never);
       await todoService.deleteTodo(1);
       expect(apiClient.delete).toHaveBeenCalledWith('todos/1/');
+
+      // getTodoStats
+      const mockStatsResponse = mockApiResponse([]);
+      vi.mocked(apiClient.get).mockReturnValue(mockStatsResponse);
+      await todoService.getTodoStats();
+      expect(apiClient.get).toHaveBeenCalledWith('todos/stats/');
+
+      // getProgressStats
+      const mockProgressResponse = mockApiResponse({});
+      vi.mocked(apiClient.get).mockReturnValue(mockProgressResponse);
+      await todoService.getProgressStats();
+      expect(apiClient.get).toHaveBeenCalledWith('todos/progress-stats/');
     });
 
     it('IDが動的に埋め込まれる', async () => {
