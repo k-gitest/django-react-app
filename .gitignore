@@ -37,3 +37,18 @@ __pycache__/
 # ENV Files
 .env
 .env.*
+
+# terraform
+.terraform/
+.terraform/environment
+.terragrunt-cache/
+.terraform.lock.hcl
+
+terraform/.terraform/
+terraform/* */.tfstate
+terraform/*.tfstate.*
+terraform/*.tfplan
+terraform/*.backup
+
+terraform.tfstate
+terraform.tfstate.backup
