@@ -11,6 +11,11 @@
     },
     "ghcr.io/devcontainers/features/python:1": {
       "version": "3.12"
+    },
+    "ghcr.io/devcontainers/features/terraform:1": {
+      "version": "1.14",
+      "tflint": "0.56.0",
+      //"terragrunt": "latest"
     }
   },
   "customizations": {
@@ -23,7 +28,9 @@
         "dbaeumer.vscode-eslint",
         "esbenp.prettier-vscode",
         "ms-azuretools.vscode-docker",
-        "eamodio.gitlens"
+        "eamodio.gitlens",
+        "hashicorp.terraform",
+        "hashicorp.hcl"
       ],
       "settings": {
         "python.defaultInterpreterPath": "backend/.venv/bin/python",
@@ -39,6 +46,31 @@
         },
         "[javascriptreact]": {
           "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[typescript]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode",
+          "editor.formatOnSave": true
+        },
+        "[typescriptreact]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode",
+          "editor.formatOnSave": true
+        },
+        // Terraform設定
+        "[terraform]": {
+          "editor.defaultFormatter": "hashicorp.terraform",
+          "editor.formatOnSave": true
+        },
+        "[terraform-vars]": {
+          "editor.defaultFormatter": "hashicorp.terraform",
+          "editor.formatOnSave": true
+        },
+        "terraform.languageServer": {
+          "enabled": true,
+          "args": []
+        },
+        "terraform.experimentalFeatures": {
+          "validateOnSave": true,
+          "prefillRequiredFields": true
         }
       }
     }

@@ -36,6 +36,13 @@ Django/React モノレポベースのSPAアプリケーション
 - **テスト**: Playwright 1.57.0, Vitest 4.0.15, MSW 2.12.4, playwright-msw 3.0.1
 - **Linter**: ESLint 9.39.1
 
+### インフラ（Terraform管理）
+- **Neon**: PostgreSQLデータベース
+- **Backblaze B2**: オブジェクトストレージ（S3互換）
+- **Cloudflare Pages**: フロントエンドホスティング
+- **Render**: バックエンドホスティング
+- **Terraform Cloud**: インフラ状態管理
+
 ## プロジェクト構成
 
 ```text
@@ -120,6 +127,22 @@ Django/React モノレポベースのSPAアプリケーション
 ├── .devcontainer/             # Dev Container設定
 │   ├── devcontainer.json      # Codespaces/ローカル手動起動型
 │   └── devcontainer-compose.json  # ローカルCompose統合型（自動起動）
+│
+├── terraform/                 # terraform設定
+│   ├── modules/               # 共通モジュール（部品）
+│   │   ├── cloudflare/
+│   │   │   ├── main.tf        # リソース
+│   │   │   ├── outputs.tf
+│   │   │   └── variables.tf
+│   │   ├── neon/
+│   │   ├── render/
+│   │   └── blackblaze/
+│   └── envs/                  # 環境ごとの定義
+│       ├── production/              # 本番環境
+│       │   ├── main.tf        # 各moduleを呼び出し、本番用変数を渡す
+│       │   ├── outputs.tf
+│       │   └── variables.tf
+│       └── staging/           # ステージング環境
 │
 ├── docker-compose.yml         # Docker構成
 ├── .gitignore
@@ -1058,6 +1081,241 @@ npx playwright test --project=auth_chromium   # 認証済み
 5. **CI/CDとの統合**: デプロイ前に適切なテストを実行
 
 この戦略により、開発速度とコード品質のバランスを保ちながら、長期的な保守性を確保しています。
+
+---
+
+## インフラ構成（Terraform）
+
+### 概要
+
+このプロジェクトのインフラは **Terraform** で管理されており、以下のクラウドサービスを自動構築します。
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Infrastructure                          │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐    │
+│  │    Neon      │  │  Backblaze   │  │  Cloudflare  │    │
+│  │  PostgreSQL  │  │   B2 Storage │  │    Pages     │    │
+│  └──────┬───────┘  └──────┬───────┘  └──────────────┘    │
+│         │                  │                               │
+│         └────────┬─────────┘                               │
+│                  │                                         │
+│         ┌────────▼────────┐                                │
+│         │     Render      │                                │
+│         │  Django Backend │                                │
+│         └─────────────────┘                                │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### ディレクトリ構造
+```
+terraform/
+├── modules/              # 再利用可能なモジュール
+│   ├── neon/            # Neon PostgreSQL
+│   ├── backblaze/       # Backblaze B2
+│   ├── cloudflare/      # Cloudflare Pages
+│   └── render/          # Render Web Service
+└── envs/                # 環境ごとの構成
+    ├── production/      # 本番環境
+    │   ├── provider.tf
+    │   ├── variables.tf
+    │   ├── locals.tf
+    │   ├── main.tf
+    │   └── outputs.tf
+    └── staging/         # ステージング環境
+        └── ...
+```
+
+### インフラコンポーネント
+
+| サービス | 用途 | リソース |
+|---------|------|---------|
+| **Neon** | PostgreSQLデータベース | プロジェクト、ブランチ、DB、ロール |
+| **Backblaze B2** | 静的アセットストレージ | バケット、Application Key |
+| **Cloudflare Pages** | フロントエンドホスティング | Pagesプロジェクト |
+| **Render** | バックエンドホスティング | Web Service（Docker） |
+
+### Terraform Cloud設定
+
+#### 必要な環境変数
+```
+Environment Variables（Terraform Cloud）:
+  RENDER_API_KEY           # Render APIキー
+  NEON_API_KEY             # Neon APIキー
+  CLOUDFLARE_API_TOKEN     # Cloudflare APIトークン
+  B2_APPLICATION_KEY_ID    # Backblaze Key ID
+  B2_APPLICATION_KEY       # Backblaze Key Secret
+```
+
+#### Terraform Variables
+```
+Terraform Variables:
+  render_owner_id          # Render Owner ID（usr-xxx）
+  cloudflare_account_id    # Cloudflare Account ID
+  github_repo_url          # GitHub リポジトリURL
+```
+
+### 初期セットアップ
+
+#### 1. 前提条件
+
+- Terraform Cloud アカウント
+- 各サービスのアカウント作成
+  - [Neon](https://neon.tech/)
+  - [Backblaze](https://www.backblaze.com/b2/)
+  - [Cloudflare](https://www.cloudflare.com/)
+  - [Render](https://render.com/)
+
+#### 2. Terraform Cloudの準備
+```bash
+# Terraform Cloudにログイン
+terraform login
+
+# Organization作成（ブラウザで）
+# Organization名: django-react-app
+
+# Workspaces作成
+# - django-react-production
+# - django-react-staging
+```
+
+#### 3. APIキーの取得
+
+**Render**:
+```
+Dashboard → Account Settings → API Keys → Create API Key
+→ RENDER_API_KEY
+```
+
+**Neon**:
+```
+Dashboard → Account → API keys → Generate new API key
+→ NEON_API_KEY
+```
+
+**Cloudflare**:
+```
+Dashboard → My Profile → API Tokens → Create Token
+→ Edit Cloudflare Workers → CLOUDFLARE_API_TOKEN
+```
+
+**Backblaze**:
+```
+Dashboard → App Keys → Add a New Application Key
+→ B2_APPLICATION_KEY_ID / B2_APPLICATION_KEY
+```
+
+#### 4. GitHub連携
+
+**Cloudflare Pages**:
+```
+1. Cloudflare Dashboard → Workers & Pages
+2. Create application → Pages → Connect to Git
+3. GitHubアカウントを連携
+4. リポジトリへのアクセスを許可
+```
+
+**Render**:
+```
+1. Render Dashboard → Settings → GitHub Apps
+2. GitHubアカウントを連携
+3. リポジトリへのアクセスを許可
+```
+
+#### 5. Terraform実行
+```bash
+# 初期化
+cd terraform/envs/production
+terraform init
+
+# 構成プレビュー
+terraform plan
+
+# インフラ作成
+terraform apply
+
+# 確認
+terraform output
+```
+
+### デプロイ後の確認
+```bash
+# 出力値を確認
+terraform output deployment_info
+
+# 出力例:
+# deployment_info = {
+#   database = {
+#     provider = "Neon"
+#     host     = "ep-xxx.aws-ap-southeast-1.aws.neon.tech"
+#   }
+#   backend = {
+#     provider = "Render"
+#     url      = "https://django-react-app-backend-production.onrender.com"
+#   }
+#   frontend = {
+#     provider = "Cloudflare Pages"
+#     url      = "https://django-react-app-frontend-production.pages.dev"
+#   }
+#   storage = {
+#     provider = "Backblaze B2"
+#     bucket   = "django-react-app-assets-production"
+#   }
+# }
+```
+
+### リソース命名規則
+```
+形式: {project_name}-{component}-{environment}
+
+例:
+  - django-react-app-db-production
+  - django-react-app-assets-production
+  - django-react-app-frontend-production
+  - django-react-app-backend-production
+```
+
+### インフラ更新
+```bash
+# 変更をプレビュー
+terraform plan
+
+# 変更を適用
+terraform apply
+
+# 特定のリソースのみ更新
+terraform apply -target=module.render
+
+# インフラ削除（注意）
+terraform destroy
+```
+
+### トラブルシューティング
+
+#### エラー: 認証失敗
+```
+解決策:
+  1. Terraform Cloud Variables を確認
+  2. APIキーが有効か確認
+  3. 権限が正しく設定されているか確認
+```
+
+#### エラー: GitHub連携
+```
+解決策:
+  1. Cloudflare/Render Dashboard で手動連携を完了
+  2. リポジトリへのアクセス権を確認
+```
+
+#### エラー: リソース作成失敗
+```
+解決策:
+  1. terraform state list でリソース一覧を確認
+  2. 手動で作成されたリソースがあれば削除
+  3. terraform apply を再実行
+```
 
 ---
 
