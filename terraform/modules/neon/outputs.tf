@@ -47,3 +47,9 @@ output "endpoint_id" {
   description = "Neon endpoint ID"
   value       = neon_endpoint.main.id
 }
+
+output "password" {
+  description = "Neon role password"
+  value       = neon_role.main.password
+  sensitive   = true
+}

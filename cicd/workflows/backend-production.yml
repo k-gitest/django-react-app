@@ -1,0 +1,45 @@
+name: Backend CI/CD (Production)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-production.yml'
+      - '.github/workflows/reusable-backend-test.yml'
+  pull_request:
+    branches: [main]
+    paths: ['backend/**']
+
+jobs:
+  test:
+    name: Test (Production)
+    uses: ./.github/workflows/reusable-backend-test.yml
+    with:
+      environment: production
+      debug-mode: 'False'
+      strict-mode: true
+      coverage-threshold: 80
+
+  deploy-notification:
+    name: Deployment Notification
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+      - name: Create summary
+        run: |
+          echo "## 🚀 Backend Deployment (Production)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** \`production\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** \`main\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Status" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Tests passed (80%+ coverage)" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Security checks passed" >> $GITHUB_STEP_SUMMARY
+          echo "🔄 Render is deploying" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Backend URL:** ${{ vars.VITE_BASE_API_URL }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Frontend URL:** ${{ vars.FRONTEND_URL }}" >> $GITHUB_STEP_SUMMARY

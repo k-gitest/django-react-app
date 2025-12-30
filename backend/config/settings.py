@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
+    'storages',
     'dj_rest_auth',
     'dj_rest_auth.registration',
     'allauth',
@@ -217,3 +218,46 @@ ACCOUNT_EMAIL_VERIFICATION = 'none'      # 開発環境では無効化（本番�
 # カスタムユーザーモデルのフィールド設定
 # これがないとallauthがusernameフィールドを探してエラーになる
 USER_MODEL_USERNAME_FIELD = None
+
+# AWS S3 / Backblaze B2設定
+# django-storagesが以下の環境変数を自動的に読み込む
+AWS_ACCESS_KEY_ID = getenv('AWS_ACCESS_KEY_ID')  # Backblaze Key ID
+AWS_SECRET_ACCESS_KEY = getenv('AWS_SECRET_ACCESS_KEY')  # Backblaze Key
+AWS_STORAGE_BUCKET_NAME = getenv('AWS_STORAGE_BUCKET_NAME')
+AWS_S3_ENDPOINT_URL = getenv('AWS_S3_ENDPOINT_URL')  # Backblaze エンドポイント
+AWS_S3_REGION_NAME = 'us-west-004'  # Backblaze リージョン
+
+# S3互換設定
+AWS_S3_CUSTOM_DOMAIN = None  # CDNを使わない場合
+AWS_S3_OBJECT_PARAMETERS = {
+    'CacheControl': 'max-age=86400',  # 1日キャッシュ
+}
+
+# ストレージバックエンド設定
+if AWS_STORAGE_BUCKET_NAME:
+    # 本番環境：Backblaze B2を使用
+    STORAGES = {
+        "default": {
+            "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+        },
+        "staticfiles": {
+            "BACKEND": "storages.backends.s3boto3.S3StaticStorage",
+        },
+    }
+else:
+    # 開発環境：ローカルファイルシステムを使用
+    STORAGES = {
+        "default": {
+            "BACKEND": "django.core.files.storage.FileSystemStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        },
+    }
+
+# メディアファイルのURL設定
+if AWS_S3_ENDPOINT_URL:
+    MEDIA_URL = f"{AWS_S3_ENDPOINT_URL}/{AWS_STORAGE_BUCKET_NAME}/"
+else:
+    MEDIA_URL = '/media/'
+    MEDIA_ROOT = BASE_DIR / 'media'

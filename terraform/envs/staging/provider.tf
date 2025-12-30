@@ -29,6 +29,14 @@ terraform {
       source  = "Backblaze/b2"
       version = "~> 0.8"
     }
+    github = {
+      source  = "integrations/github"
+      version = "~> 6.0"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
   }
 }
 
@@ -49,3 +57,6 @@ provider "cloudflare" {}
 
 # Black blaze Provider
 provider "b2" {}
+
+# GitHub Provider
+provider "github" {}
