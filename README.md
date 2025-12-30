@@ -136,13 +136,30 @@ Django/React モノレポベースのSPAアプリケーション
 │   │   │   └── variables.tf
 │   │   ├── neon/
 │   │   ├── render/
-│   │   └── blackblaze/
+│   │   └── backblaze/
+│   │   └── github/
 │   └── envs/                  # 環境ごとの定義
 │       ├── production/              # 本番環境
 │       │   ├── main.tf        # 各moduleを呼び出し、本番用変数を渡す
 │       │   ├── outputs.tf
 │       │   └── variables.tf
 │       └── staging/           # ステージング環境
+│
+├── cicd/                 
+│   ├── actions/               
+│   │   ├── setup-node/
+│   │   │   └── actions.yml
+│   │   └── setup-python/
+│   └── workflows/                  
+│       ├── backend-production.yml
+│       ├── backend-staging.yml
+│       ├── e2e-smoke-test-production.yml
+│       ├── e2e-smoke-test-staging.yml
+│       ├── frontend-production.yml
+│       ├── frontend-staging.yml
+│       ├── pr-check.yml
+│       ├── reusable-backend-test.yml
+│       └── reusable-frontend-test.yml
 │
 ├── docker-compose.yml         # Docker構成
 ├── .gitignore

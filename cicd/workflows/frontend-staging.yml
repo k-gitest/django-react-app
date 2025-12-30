@@ -1,0 +1,98 @@
+name: Frontend CI/CD (Staging)
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-staging.yml'
+      - '.github/workflows/reusable-frontend-test.yml'
+  pull_request:
+    branches: [develop]
+    paths: ['frontend/**']
+
+jobs:
+  test:
+    name: Test (Staging)
+    uses: ./.github/workflows/reusable-frontend-test.yml
+    with:
+      environment: staging
+      api-url: https://django-react-app-backend-staging.onrender.com
+      strict-mode: false  # Stagingでは警告のみ
+      coverage-threshold: 60  # Productionより低い閾値
+
+  e2e:
+    name: E2E Tests (Pre-deployment)
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: ./.github/actions/setup-node
+        with:
+          working-directory: frontend
+      
+      - name: Get Playwright version
+        id: playwright-version
+        run: echo "version=$(node -p "require('./package.json').devDependencies['@playwright/test']")" >> $GITHUB_OUTPUT
+        working-directory: frontend
+      
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+      
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      
+      - name: Install Playwright system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+        working-directory: frontend
+      
+      - name: Run E2E tests with MSW (Chromium only)
+        run: npm run test:e2e -- --project=chromium --project=auth_chromium
+        working-directory: frontend
+      
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-staging
+          path: frontend/playwright-report/
+          retention-days: 7
+
+  deploy-notification:
+    name: Deployment Notification
+    runs-on: ubuntu-latest
+    needs: [test, e2e]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    
+    environment:
+      name: staging
+      url: https://django-react-app-frontend-staging.pages.dev
+    
+    steps:
+      - name: Create summary
+        run: |
+          echo "## 🚀 Frontend Deployment (Staging)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** \`staging\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** \`develop\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Pre-deployment Checks" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Unit/Integration tests passed (60%+ coverage)" >> $GITHUB_STEP_SUMMARY
+          echo "✅ E2E tests passed (Chromium, MSW mocked)" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Build successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "🔄 Cloudflare Pages is deploying" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**URL:** https://django-react-app-frontend-staging.pages.dev" >> $GITHUB_STEP_SUMMARY

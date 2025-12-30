@@ -1,5 +1,5 @@
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Staging環境 - 出力値
+# Production環境 - 出力値
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -86,6 +86,40 @@ output "render_service_url" {
 }
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GitHub（環境変数・シークレット）
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+output "github_environment" {
+  description = "GitHub Environment name"
+  value       = module.github_secrets.environment_name
+}
+
+output "github_variables_created" {
+  description = "List of GitHub Environment Variables created"
+  value       = module.github_secrets.variables_created
+}
+
+output "github_secrets_created" {
+  description = "List of GitHub Environment Secrets created"
+  value       = module.github_secrets.secrets_created
+}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# E2Eテスト用認証情報
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+output "e2e_test_email" {
+  description = "E2E test user email"
+  value       = var.e2e_test_email
+}
+
+output "e2e_test_password" {
+  description = "E2E test user password (sensitive)"
+  value       = random_password.e2e_test_password.result
+  sensitive   = true
+}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 環境情報
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -130,6 +164,16 @@ output "deployment_info" {
       provider = "Backblaze B2"
       bucket   = module.backblaze.bucket_name
       endpoint = module.backblaze.s3_endpoint
+    }
+    
+    github = {
+      environment = module.github_secrets.environment_name
+      variables   = module.github_secrets.variables_created
+      secrets     = module.github_secrets.secrets_created
+    }
+    
+    e2e_test = {
+      email = var.e2e_test_email
     }
   }
 }

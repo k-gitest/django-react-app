@@ -1,0 +1,184 @@
+name: Reusable Backend Tests
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: Environment name (staging/production)
+        required: true
+        type: string
+      debug-mode:
+        description: Django DEBUG setting
+        required: false
+        type: string
+        default: 'True'
+      strict-mode:
+        description: Fail on linting errors
+        required: false
+        type: boolean
+        default: false
+      coverage-threshold:
+        description: Minimum test coverage percentage
+        required: false
+        type: number
+        default: 0
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: ./.github/actions/setup-python
+      
+      - name: Install linting tools
+        run: pip install flake8 black isort
+      
+      - name: Run Black
+        run: black --check backend/
+        continue-on-error: ${{ !inputs.strict-mode }}
+      
+      - name: Run isort
+        run: isort --check-only backend/
+        continue-on-error: ${{ !inputs.strict-mode }}
+      
+      - name: Run Flake8
+        run: flake8 backend/ --count --statistics --max-line-length=88 --extend-ignore=E203,W503
+        continue-on-error: ${{ !inputs.strict-mode }}
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: ./.github/actions/setup-python
+      
+      - name: Run Django checks
+        env:
+          # データベース接続（テスト用）
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          DJANGO_SETTINGS_MODULE: config.settings
+          
+          # Django設定
+          DEBUG: ${{ inputs.debug-mode }}
+          SECRET_KEY: test-secret-key-for-ci
+          ENVIRONMENT: ${{ inputs.environment }}
+          
+          # CORS設定（本番環境チェック用）
+          FRONT_URL: ${{ vars.FRONTEND_URL || 'http://localhost:3000' }}
+          
+          # ストレージ設定（本番環境チェック用）
+          AWS_STORAGE_BUCKET_NAME: ${{ vars.AWS_STORAGE_BUCKET_NAME || '' }}
+          AWS_S3_ENDPOINT_URL: ${{ vars.AWS_S3_ENDPOINT_URL || '' }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID || '' }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY || '' }}
+        run: |
+          cd backend
+          if [ "${{ inputs.environment }}" == "production" ]; then
+            python manage.py check --deploy
+          else
+            python manage.py check
+          fi
+      
+      - name: Check migrations
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          DJANGO_SETTINGS_MODULE: config.settings
+          DEBUG: ${{ inputs.debug-mode }}
+          SECRET_KEY: test-secret-key-for-ci
+          ENVIRONMENT: ${{ inputs.environment }}
+          FRONT_URL: ${{ vars.FRONTEND_URL || 'http://localhost:3000' }}
+        run: |
+          cd backend
+          python manage.py makemigrations --check --dry-run --no-input
+      
+      - name: Run migrations
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          DJANGO_SETTINGS_MODULE: config.settings
+          DEBUG: ${{ inputs.debug-mode }}
+          SECRET_KEY: test-secret-key-for-ci
+          ENVIRONMENT: ${{ inputs.environment }}
+          FRONT_URL: ${{ vars.FRONTEND_URL || 'http://localhost:3000' }}
+        run: |
+          cd backend
+          python manage.py migrate --no-input
+      
+      - name: Run tests with coverage
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          DJANGO_SETTINGS_MODULE: config.settings
+          DEBUG: ${{ inputs.debug-mode }}
+          SECRET_KEY: test-secret-key-for-ci
+          ENVIRONMENT: ${{ inputs.environment }}
+          FRONT_URL: ${{ vars.FRONTEND_URL || 'http://localhost:3000' }}
+          
+          # ストレージ設定（テスト時は空でOK）
+          AWS_STORAGE_BUCKET_NAME: ${{ vars.AWS_STORAGE_BUCKET_NAME || '' }}
+          AWS_S3_ENDPOINT_URL: ${{ vars.AWS_S3_ENDPOINT_URL || '' }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID || '' }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY || '' }}
+        run: |
+          cd backend
+          pip install coverage
+          coverage run --source='.' manage.py test
+          coverage report
+          
+          if [ "${{ inputs.coverage-threshold }}" -gt 0 ]; then
+            coverage report --fail-under=${{ inputs.coverage-threshold }}
+          fi
+          
+          coverage xml
+      
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./backend/coverage.xml
+          flags: backend-${{ inputs.environment }}
+          name: backend-${{ inputs.environment }}-coverage
+        continue-on-error: true
+
+  security:
+    name: Security Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: ./.github/actions/setup-python
+      
+      - name: Install safety
+        run: pip install safety
+      
+      - name: Check vulnerabilities
+        run: safety check --json
+        continue-on-error: ${{ !inputs.strict-mode }}

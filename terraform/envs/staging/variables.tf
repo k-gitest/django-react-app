@@ -28,11 +28,6 @@ variable "environment" {
 variable "render_owner_id" {
   description = "Render Owner ID"
   type        = string
-
-  validation {
-    condition     = can(regex("^(usr|tea)-", var.render_owner_id))
-    error_message = "Owner ID must start with 'usr-' or 'tea-'."
-  }
 }
 
 variable "cloudflare_account_id" {
@@ -43,6 +38,21 @@ variable "cloudflare_account_id" {
 variable "github_repo_url" {
   description = "GitHub repository URL"
   type        = string
+}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# E2Eテスト用設定
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+variable "e2e_test_email" {
+  description = "E2E test user email"
+  type        = string
+  default     = "e2e-test@example.com"
+  
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$", var.e2e_test_email))
+    error_message = "Must be a valid email address."
+  }
 }
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
