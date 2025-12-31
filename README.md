@@ -14,6 +14,7 @@ Django/React モノレポベースのSPAアプリケーション
 - 🐳 **フロントエンド独立開発 (MSW)**: APIの実装を待たずに開発・テストが可能なMSWを活用。バックエンドへの依存を減らし、開発スピードを最大化します。
 - 🧪 **テスト充実**: Playwright(E2E)、Vitest(Unit)、Django TestCase
 - ☁️ **オンボーディングの高速化**: DockerおよびGitHub Codespacesに完全対応。環境構築の手間を省き、新メンバーが即日コードを書ける環境を提供します。
+- 🚀 **自動化されたCI/CD**: GitHub Actionsによる自動テスト・デプロイパイプライン
 
 ## 技術スタック
 
@@ -146,20 +147,11 @@ Django/React モノレポベースのSPAアプリケーション
 │       └── staging/           # ステージング環境
 │
 ├── cicd/                 
-│   ├── actions/               
+│   ├── actions/               # 再利用可能なカスタムアクション
 │   │   ├── setup-node/
 │   │   │   └── actions.yml
 │   │   └── setup-python/
-│   └── workflows/                  
-│       ├── backend-production.yml
-│       ├── backend-staging.yml
-│       ├── e2e-smoke-test-production.yml
-│       ├── e2e-smoke-test-staging.yml
-│       ├── frontend-production.yml
-│       ├── frontend-staging.yml
-│       ├── pr-check.yml
-│       ├── reusable-backend-test.yml
-│       └── reusable-frontend-test.yml
+│   └── workflows/             # CI/CDワークフロー
 │
 ├── docker-compose.yml         # Docker構成
 ├── .gitignore
@@ -1098,6 +1090,362 @@ npx playwright test --project=auth_chromium   # 認証済み
 5. **CI/CDとの統合**: デプロイ前に適切なテストを実行
 
 この戦略により、開発速度とコード品質のバランスを保ちながら、長期的な保守性を確保しています。
+
+---
+
+## CI/CD パイプライン
+
+### 概要
+
+GitHub Actionsによる自動化されたCI/CDパイプラインを採用し、コード品質の維持とデプロイの自動化を実現しています。
+
+### ワークフロー構成
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    GitHub Actions                           │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Pull Request                                               │
+│  └─ pr-check.yml                                           │
+│     ├─ Commit message validation (Conventional Commits)    │
+│     ├─ File size check (<5MB)                              │
+│     └─ Secret scan                                         │
+│                                                             │
+│  Push to develop branch                                     │
+│  ├─ backend-staging.yml                                    │
+│  │  ├─ Lint & Format (Black, isort, Flake8)               │
+│  │  ├─ Type check                                          │
+│  │  ├─ Tests (Django TestCase, 60%+ coverage)             │
+│  │  ├─ Security audit                                      │
+│  │  └─ Deploy notification                                 │
+│  │                                                          │
+│  ├─ frontend-staging.yml                                   │
+│  │  ├─ Lint & Format (ESLint, Prettier)                   │
+│  │  ├─ Type check (TypeScript)                            │
+│  │  ├─ Unit tests (Vitest, 60%+ coverage)                 │
+│  │  ├─ Build                                               │
+│  │  ├─ E2E tests (Playwright + MSW, Chromium only)        │
+│  │  ├─ Security audit (npm audit)                         │
+│  │  └─ Deploy notification                                 │
+│  │                                                          │
+│  └─ e2e-smoke-test-staging.yml (手動実行)                  │
+│     └─ Smoke tests (実環境での疎通確認)                    │
+│                                                             │
+│  Push to main branch                                        │
+│  ├─ backend-production.yml                                 │
+│  │  ├─ Lint & Format (Black, isort, Flake8)               │
+│  │  ├─ Type check                                          │
+│  │  ├─ Tests (Django TestCase, 80%+ coverage)             │
+│  │  ├─ Security audit                                      │
+│  │  └─ Deploy notification                                 │
+│  │                                                          │
+│  ├─ frontend-production.yml                                │
+│  │  ├─ Lint & Format (ESLint, Prettier)                   │
+│  │  ├─ Type check (TypeScript)                            │
+│  │  ├─ Unit tests (Vitest, 70%+ coverage)                 │
+│  │  ├─ Build                                               │
+│  │  ├─ E2E tests (Playwright + MSW, All browsers)         │
+│  │  ├─ Security audit (npm audit)                         │
+│  │  └─ Deploy notification                                 │
+│  │                                                          │
+│  └─ e2e-smoke-test-production.yml                          │
+│     ├─ 手動実行可能                                         │
+│     ├─ 定期実行 (6時間ごと、将来用)                         │
+│     └─ Smoke tests (実環境での疎通確認)                    │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### ワークフローの詳細
+
+#### 1. PR Quality Check (`pr-check.yml`)
+
+**トリガー**: Pull Request作成・更新時
+
+**実行内容**:
+
+| チェック | 説明 |
+|---------|------|
+| **Commit Message** | Conventional Commits形式の検証 |
+| **File Size** | 5MB以上のファイル検出（Git LFS推奨） |
+| **Secret Scan** | 認証情報の誤コミット検出 |
+
+**目的**: コード品質の最低基準を維持
+
+---
+
+#### 2. Backend CI/CD
+
+**Staging** (`backend-staging.yml`)
+- **トリガー**: `develop`ブランチへのプッシュ
+- **カバレッジ**: 60%以上
+- **デプロイ**: Render（自動）
+
+**Production** (`backend-production.yml`)
+- **トリガー**: `main`ブランチへのプッシュ
+- **カバレッジ**: 80%以上
+- **デプロイ**: Render（自動）
+
+**テストステップ**:
+```yaml
+1. Lint & Format
+   - Black (コードフォーマット)
+   - isort (import整理)
+   - Flake8 (静的解析)
+
+2. Django Checks
+   - python manage.py check --deploy (本番環境)
+   - python manage.py check (ステージング環境)
+
+3. Migration Check
+   - makemigrations --check --dry-run
+
+4. Tests
+   - Django TestCase
+   - Coverage報告
+
+5. Security Audit
+   - safety check (脆弱性スキャン)
+```
+
+---
+
+#### 3. Frontend CI/CD
+
+**Staging** (`frontend-staging.yml`)
+- **トリガー**: `develop`ブランチへのプッシュ
+- **カバレッジ**: 60%以上
+- **E2E**: Chromiumのみ
+- **デプロイ**: Cloudflare Pages（自動）
+
+**Production** (`frontend-production.yml`)
+- **トリガー**: `main`ブランチへのプッシュ
+- **カバレッジ**: 70%以上
+- **E2E**: 全ブラウザ（Chromium, Firefox, WebKit）
+- **デプロイ**: Cloudflare Pages（自動）
+
+**テストステップ**:
+```yaml
+1. Lint & Format
+   - ESLint (静的解析)
+   - Prettier (コードフォーマット)
+
+2. Type Check
+   - TypeScript compiler (tsc --noEmit)
+
+3. Unit & Integration Tests
+   - Vitest + Testing Library
+   - MSW (APIモック)
+   - Coverage報告
+
+4. Build
+   - Vite build
+   - Build size確認
+
+5. E2E Tests
+   - Playwright + playwright-msw
+   - 認証済み/未認証テスト分離
+
+6. Security Audit
+   - npm audit (脆弱性スキャン)
+```
+
+---
+
+#### 4. Smoke Tests
+
+**目的**: デプロイ後の実環境での疎通確認
+
+**Staging** (`e2e-smoke-test-staging.yml`)
+- **トリガー**: 手動実行のみ
+- **環境**: Staging環境
+- **ブラウザ**: Chromiumのみ
+
+**Production** (`e2e-smoke-test-production.yml`)
+- **トリガー**: 手動実行、定期実行（6時間ごと、将来用）
+- **環境**: Production環境
+- **ブラウザ**: Chromiumのみ
+
+**実行内容**:
+```yaml
+1. サービス疎通確認
+   - Frontend: curl チェック
+   - Backend: /api/v1/health/ エンドポイント
+
+2. Smoke Tests実行
+   - 重要なユーザーフロー検証
+   - @smoke タグ付きテストのみ実行
+
+3. 結果レポート
+   - GitHub Step Summary
+   - 失敗時の通知
+```
+
+---
+
+### 再利用可能なワークフロー
+
+#### Backend Tests (`reusable-backend-test.yml`)
+
+**パラメータ**:
+```yaml
+inputs:
+  environment: staging | production
+  debug-mode: 'True' | 'False'
+  strict-mode: boolean (lintエラーで失敗するか)
+  coverage-threshold: 0-100 (カバレッジ閾値)
+```
+
+#### Frontend Tests (`reusable-frontend-test.yml`)
+
+**パラメータ**:
+```yaml
+inputs:
+  environment: staging | production
+  strict-mode: boolean (lintエラーで失敗するか)
+  coverage-threshold: 0-100 (カバレッジ閾値)
+```
+
+---
+
+### カスタムアクション
+
+#### Setup Node.js (`setup-node/action.yml`)
+
+**機能**:
+- Node.js環境のセットアップ
+- npm キャッシュ管理
+- 依存関係のインストール
+
+**使用例**:
+```yaml
+- uses: ./.github/actions/setup-node
+  with:
+    node-version: '20'
+    working-directory: frontend
+```
+
+#### Setup Python (`setup-python/action.yml`)
+
+**機能**:
+- Python環境のセットアップ
+- pip キャッシュ管理
+- 依存関係のインストール
+- Django バージョン検証
+
+**使用例**:
+```yaml
+- uses: ./.github/actions/setup-python
+  with:
+    python-version: '3.12'
+    requirements-path: backend/requirements.txt
+```
+
+---
+
+### 環境変数管理
+
+**GitHub Environment Variables** (Terraform管理)
+
+| 環境 | 変数 | 用途 |
+|------|------|------|
+| **staging** | `VITE_BASE_API_URL` | バックエンドURL |
+| | `FRONTEND_URL` | フロントエンドURL |
+| | `VITE_STORAGE_URL` | ストレージURL |
+| | `E2E_TEST_EMAIL` | E2Eテスト用メール |
+| | `E2E_TEST_PASSWORD` | E2Eテスト用パスワード |
+| **production** | 同上 | 同上 |
+
+**設定方法**: Terraformで自動設定（`terraform/modules/github/`）
+
+---
+
+### デプロイフロー
+
+```
+1. コード変更
+   ↓
+2. Pull Request作成
+   └─ pr-check.yml 実行
+      ├─ Commit message検証
+      ├─ File size検証
+      └─ Secret scan
+   ↓
+3. developブランチにマージ
+   └─ backend-staging.yml, frontend-staging.yml 実行
+      ├─ Lint & Format
+      ├─ Type check
+      ├─ Tests (60%+ coverage)
+      ├─ Build
+      ├─ E2E tests (Chromium)
+      └─ デプロイ通知
+   ↓
+4. Render & Cloudflare が自動デプロイ
+   ↓
+5. 手動でスモークテスト実行（オプション）
+   └─ e2e-smoke-test-staging.yml
+   ↓
+6. mainブランチにマージ
+   └─ backend-production.yml, frontend-production.yml 実行
+      ├─ Lint & Format
+      ├─ Type check
+      ├─ Tests (70-80%+ coverage)
+      ├─ Build
+      ├─ E2E tests (全ブラウザ)
+      └─ デプロイ通知
+   ↓
+7. Render & Cloudflare が自動デプロイ
+   ↓
+8. 定期スモークテスト（6時間ごと、将来用）
+   └─ e2e-smoke-test-production.yml
+```
+
+---
+
+### テスト戦略の違い
+
+| 環境 | カバレッジ | E2Eブラウザ | Strict Mode |
+|------|-----------|------------|-------------|
+| **Staging** | 60%+ | Chromiumのみ | false |
+| **Production** | 70-80%+ | 全ブラウザ | true |
+
+**理由**:
+- Stagingは開発速度を優先し、基本的な品質を確保
+- Productionは品質を最優先し、全環境で動作保証
+
+---
+
+### トラブルシューティング
+
+#### ワークフローが失敗する
+
+```yaml
+# 確認項目
+1. GitHub Environment Variablesが設定されているか
+   - Repository → Settings → Environments
+
+2. Secretsが正しく設定されているか
+   - E2E_TEST_EMAIL
+   - E2E_TEST_PASSWORD
+
+3. テストが通るか
+   - ローカルで npm run test 実行
+   - ローカルで npm run test:e2e 実行
+```
+
+#### デプロイが自動で行われない
+
+```yaml
+# 確認項目
+1. RenderとCloudflareでGitHub連携が完了しているか
+
+2. ブランチ設定が正しいか
+   - Staging: develop
+   - Production: main
+
+3. ビルドコマンドが正しいか
+```
 
 ---
 
