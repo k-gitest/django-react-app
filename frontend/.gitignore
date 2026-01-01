@@ -42,3 +42,6 @@ playwright/.cache/
 playwright/.auth/
 e2e/.auth/
 playwright-results/
+
+# Vitest のカバレッジレポート出力先
+coverage/
