@@ -1,16 +1,23 @@
 from .settings import *
+import os
 
 # Database
 # **********************************************
-# テスト用：インメモリSQLite設定
+# テスト用：PostgreSQL設定
 # **********************************************
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        # 'NAME': ':memory:' を使用すると、テスト終了時にデータベースファイルが残りません
-        # 注意: ':memory:' はファイルシステム上ではなくメモリ上に作成されます
-        "NAME": ":memory:", 
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.getenv('PGDATABASE', 'test_db'),
+        'USER': os.getenv('PGUSER', 'postgres'),
+        'PASSWORD': os.getenv('PGPASSWORD', 'postgres'),
+        'HOST': os.getenv('PGHOST', 'localhost'),
+        'PORT': os.getenv('PGPORT', '5432'),
+        'OPTIONS': {
+            # テスト環境（Docker内など）ではSSLをオフ
+            'sslmode': 'disable',
+        },
     }
 }
 
@@ -22,3 +29,6 @@ PASSWORD_HASHERS = [
 # その他のテスト用設定
 DEBUG = False
 EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
+
+# ストレージ設定（テスト時は不要）
+AWS_STORAGE_BUCKET_NAME = None

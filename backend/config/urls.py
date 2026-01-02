@@ -2,6 +2,9 @@ from django.contrib import admin
 from django.urls import path, include
 from users.views import CustomRegisterView
 
+def health_check(request):
+    return JsonResponse({'status': 'healthy', 'service': 'backend'})
+
 urlpatterns = [
     path("admin/", admin.site.urls),
 
@@ -25,4 +28,7 @@ urlpatterns = [
     # PUT/PATCH /api/v1/todos/{id}/: 更新
     # DELETE /api/v1/todos/{id}/: 削除
     path('api/v1/todos/', include('todos.urls')),
+
+    # CIでのhealth-checkエンドポイント
+    path('api/v1/health/', health_check, name='health_check'),
 ]

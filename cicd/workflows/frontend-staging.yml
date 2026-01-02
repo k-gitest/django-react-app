@@ -17,9 +17,9 @@ jobs:
     uses: ./.github/workflows/reusable-frontend-test.yml
     with:
       environment: staging
-      api-url: https://django-react-app-backend-staging.onrender.com
       strict-mode: false  # Stagingでは警告のみ
-      coverage-threshold: 60  # Productionより低い閾値
+      coverage-threshold: 60  # Stagingは60%
+    secrets: inherit  # Environment Variables にアクセス
 
   e2e:
     name: E2E Tests (Pre-deployment)
@@ -77,7 +77,7 @@ jobs:
     
     environment:
       name: staging
-      url: https://django-react-app-frontend-staging.pages.dev
+      url: ${{ vars.FRONTEND_URL }}
     
     steps:
       - name: Create summary
@@ -95,4 +95,5 @@ jobs:
           echo "### Deployment" >> $GITHUB_STEP_SUMMARY
           echo "🔄 Cloudflare Pages is deploying" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**URL:** https://django-react-app-frontend-staging.pages.dev" >> $GITHUB_STEP_SUMMARY
+          echo "**Frontend URL:** ${{ vars.FRONTEND_URL }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Backend API:** ${{ vars.VITE_BASE_API_URL }}" >> $GITHUB_STEP_SUMMARY
