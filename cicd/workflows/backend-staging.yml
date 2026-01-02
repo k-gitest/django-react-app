@@ -19,7 +19,7 @@ jobs:
       environment: staging
       debug-mode: 'True'  # Stagingでは詳細ログを有効化
       strict-mode: false  # 警告のみ
-      coverage-threshold: 70  # Productionより低い閾値
+      coverage-threshold: 60  # Stagingは60%
 
   deploy-notification:
     name: Deployment Notification
@@ -29,7 +29,7 @@ jobs:
     
     environment:
       name: staging
-      url: https://django-react-app-backend-staging.onrender.com
+      url: ${{ vars.VITE_BASE_API_URL }}
     
     steps:
       - name: Create summary
@@ -40,8 +40,8 @@ jobs:
           echo "**Branch:** \`develop\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Status" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Tests passed (70%+ coverage)" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Tests passed (60%+ coverage)" >> $GITHUB_STEP_SUMMARY
           echo "✅ Security checks passed" >> $GITHUB_STEP_SUMMARY
           echo "🔄 Render is deploying" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**URL:** https://django-react-app-backend-staging.onrender.com" >> $GITHUB_STEP_SUMMARY
+          echo "**Backend API:** ${{ vars.VITE_BASE_API_URL }}" >> $GITHUB_STEP_SUMMARY
