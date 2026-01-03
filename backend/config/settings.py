@@ -261,3 +261,18 @@ if AWS_S3_ENDPOINT_URL:
 else:
     MEDIA_URL = '/media/'
     MEDIA_ROOT = BASE_DIR / 'media'
+
+# キャッシュ設定
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": getenv("REDIS_URL"),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            # UpstashはSSL必須。証明書検証でエラーが出る場合は以下を指定
+            "CONNECTION_POOL_KWARGS": {
+                "ssl_cert_reqs": None,
+            },
+        },
+    }
+}
