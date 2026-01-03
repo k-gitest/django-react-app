@@ -1684,6 +1684,712 @@ terraform destroy
 
 ---
 
+## Terraform + デプロイワークフロー
+
+### 概要
+
+本プロジェクトでは、**Terraform Cloud**によるインフラ管理と**GitHub Actions**による自動デプロイを組み合わせ、安全で再現性の高いデプロイフローを実現しています。
+
+```
+┌────────────────────────────────────────────────────────────┐
+│              Terraform + Deployment Flow                   │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│  1. terraform/** 変更 + PR作成                             │
+│     └─ terraform-plan.yml（自動実行）                      │
+│        ├─ Staging/Production Plan を表示                  │
+│        └─ PRにコメント                                     │
+│                                                            │
+│  2. PR マージ（develop または main）                       │
+│     └─ 通常のCI/CDワークフロー実行                         │
+│                                                            │
+│  3. terraform-apply.yml（手動実行）                        │
+│     ├─ Terraform Apply                                     │
+│     │  ├─ インフラ構築・変更                               │
+│     │  └─ GitHub Environment Variables 更新               │
+│     │                                                      │
+│     └─ デプロイ戦略の選択                                  │
+│        ├─ Staging: Parallel（高速）                       │
+│        └─ Production: Sequential（安全）                  │
+│                                                            │
+│  4. アプリケーションデプロイ（自動トリガー）                │
+│     ├─ Backend Deployment（Render）                       │
+│     │  ├─ Render自動デプロイ開始                          │
+│     │  └─ Health Check（最大5分）                         │
+│     │                                                      │
+│     └─ Frontend Deployment（Cloudflare Pages）            │
+│        ├─ Cloudflare Pages自動デプロイ開始                │
+│        └─ Health Check（最大5分）                         │
+│                                                            │
+│  5. デプロイ完了 🎉                                        │
+│                                                            │
+└────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Terraform ワークフロー詳細
+
+#### 1. terraform-plan.yml（自動実行）
+
+**トリガー**: 
+- Pull Request作成・更新時
+- `terraform/**` または `backend/.env.example` または `frontend/.env.example` などの変更を検出
+
+**実行内容**:
+
+| ステップ | 説明 |
+|---------|------|
+| **変更検出** | dorny/paths-filter で変更ファイルを検出 |
+| **環境判定** | Staging/Productionへの影響を自動判定 |
+| **Terraform Plan** | 変更される内容をプレビュー |
+| **PRコメント** | Plan結果をPRにコメント |
+
+**判定ロジック**:
+
+```yaml
+# Staging Plan を実行する条件
+- terraform/envs/staging/** 変更
+- terraform/modules/** 変更
+→ Staging に影響あり
+
+# Production Plan を実行する条件
+- terraform/envs/production/** 変更
+- terraform/modules/** 変更（PRがmainブランチ向けの場合のみ）
+→ Production に影響あり
+
+# アプリ設定のみ変更の場合
+- backend/.env.example 変更
+- frontend/.env.example 変更
+→ Terraform Plan はスキップ（無風プラン防止）
+→ PRに通知コメント
+```
+
+**PRコメント例**:
+```markdown
+### Terraform Plan (Staging)
+
+<details>
+<summary>Show Plan</summary>
+
+Terraform will perform the following actions:
+
+  # module.github.github_actions_environment_variable.vite_base_api_url will be updated in-place
+  ~ resource "github_actions_environment_variable" "vite_base_api_url" {
+      ~ value         = "https://old-url.com" -> "https://new-url.com"
+    }
+
+Plan: 0 to add, 1 to change, 0 to destroy.
+
+</details>
+
+**Workspace:** `django-react-staging`
+**Status:** success
+```
+
+---
+
+#### 2. terraform-apply.yml（手動実行）
+
+**トリガー**: 
+- GitHub Actions UI から手動実行
+- インフラ変更が必要な時のみ実行
+
+**入力パラメータ**:
+
+| パラメータ | 説明 | デフォルト |
+|-----------|------|----------|
+| `environment` | 環境選択（staging/production） | 必須 |
+| `auto-approve` | 自動承認（確認スキップ） | false |
+| `trigger-deployment` | デプロイ自動トリガー | true |
+| `deployment-strategy` | デプロイ戦略（auto/parallel/sequential） | auto |
+
+**実行フロー**:
+
+```
+1. 環境選択
+   └─ staging または production
+
+2. GitHub Environment による承認
+   ├─ Staging: 承認不要
+   └─ Production: レビュアー承認が必要
+
+3. Terraform Apply
+   ├─ インフラ構築・変更
+   ├─ GitHub Environment Variables 更新
+   └─ Terraform Outputs 取得
+
+4. デプロイ戦略の決定
+   ├─ auto（デフォルト）
+   │  ├─ Staging → parallel（高速）
+   │  └─ Production → sequential（安全）
+   │
+   ├─ parallel（手動選択）
+   │  └─ Backend/Frontend 同時デプロイ
+   │
+   └─ sequential（手動選択）
+      ├─ Backend デプロイ
+      ├─ Health Check
+      └─ Frontend デプロイ
+
+5. Repository Dispatch
+   └─ アプリケーションデプロイワークフローをトリガー
+```
+
+**実行例**:
+```bash
+# GitHub Actions UI から実行
+
+Environment: production
+Auto approve: false
+Trigger deployment: true
+Deployment strategy: auto
+```
+
+---
+
+#### 3. terraform-fmt.yml（自動実行）
+
+**トリガー**: 
+- Pull Request作成・更新時
+- `terraform/**` の変更を検出
+
+**実行内容**:
+```yaml
+1. Terraform Format Check
+   └─ terraform fmt -check -recursive
+
+2. フォーマットエラーがある場合
+   ├─ PRにコメント
+   └─ 修正コマンドを提示
+```
+
+**PRコメント例**:
+```markdown
+### ⚠️ Terraform Format Issues
+
+The following files need formatting:
+
+- `terraform/modules/neon/main.tf`
+- `terraform/envs/staging/main.tf`
+
+**Fix command:**
+```bash
+terraform fmt -recursive terraform/
+```
+
+---
+
+#### 4. terraform-destroy.yml（緊急時のみ）
+
+**トリガー**: 
+- 手動実行のみ
+- 環境削除が必要な時のみ使用
+
+**安全機能**:
+
+| 機能 | 説明 |
+|------|------|
+| **確認ワード** | "destroy" を入力しないと実行不可 |
+| **理由の記録** | 削除理由を必須入力 |
+| **厳格な承認** | Production は 2人以上の承認が必要 |
+| **30秒待機** | 実行前に30秒の待機時間 |
+| **監査証跡** | 削除理由と実行者を記録 |
+
+**入力パラメータ**:
+```yaml
+environment: staging | production  # 環境選択
+confirmation: "destroy"            # 確認ワード（必須）
+reason: "理由を記述"                # 削除理由（必須）
+```
+
+---
+
+### アプリケーションデプロイワークフロー
+
+#### 1. backend-deploy.yml（Post-Infrastructure）
+
+**トリガー**: 
+- `repository_dispatch` イベント（`deploy-backend`）
+- Terraform Apply 成功後に自動実行
+
+**実行内容**:
+
+```yaml
+1. デプロイ情報表示
+   ├─ Environment（staging/production）
+   ├─ Triggered by（terraform-apply）
+   └─ Infrastructure Info（DB host, Backend URL）
+
+2. Render自動デプロイ待機
+   └─ 2分待機（Renderがデプロイ完了するまで）
+
+3. Health Check（最大5回リトライ）
+   ├─ Backend URL/api/health/ にアクセス
+   ├─ 200 OK → 成功
+   └─ エラー → 30秒待機して再試行
+
+4. デプロイサマリー作成
+   ├─ 成功時: 次のステップを表示
+   └─ 失敗時: トラブルシューティング情報を表示
+```
+
+**Health Check の仕組み**:
+```bash
+MAX_RETRIES=5
+RETRY_COUNT=0
+
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+  if curl -f -s -o /dev/null "$BACKEND_URL/api/health"; then
+    echo "✅ Backend is healthy!"
+    exit 0
+  fi
+  
+  RETRY_COUNT=$((RETRY_COUNT + 1))
+  echo "⏳ Retry $RETRY_COUNT/$MAX_RETRIES..."
+  sleep 30
+done
+
+echo "❌ Backend health check failed"
+exit 1
+```
+
+---
+
+#### 2. frontend-deploy.yml（Post-Infrastructure）
+
+**トリガー**: 
+- `repository_dispatch` イベント（`deploy-frontend`）
+- Backend Deploy 成功後に自動実行（sequential の場合）
+
+**実行内容**:
+
+```yaml
+1. デプロイ情報表示
+   ├─ Environment（staging/production）
+   ├─ Triggered by（terraform-apply）
+   └─ Configuration（Frontend URL, Backend API URL）
+
+2. Cloudflare Pages自動デプロイ待機
+   └─ 3分待機（Cloudflare Pagesがデプロイ完了するまで）
+
+3. Health Check（最大5回リトライ）
+   ├─ Frontend URL にアクセス
+   ├─ HTTP 200 → 成功
+   └─ エラー → 30秒待機して再試行
+
+4. デプロイサマリー作成
+   ├─ 成功時: 全デプロイ完了を表示
+   └─ 失敗時: トラブルシューティング情報を表示
+```
+
+---
+
+### デプロイ戦略の違い
+
+#### Parallel（並列実行）- Staging推奨
+
+```
+Terraform Apply 完了
+  ↓
+┌─────────────┬─────────────┐
+│  Backend    │  Frontend   │ ← 同時実行
+│  Deploy     │  Deploy     │
+└─────────────┴─────────────┘
+  ↓             ↓
+完了（2-3分）
+```
+
+**特徴**:
+- ⚡ 高速（2-3分で完了）
+- ⚠️ Frontend が先に完成する可能性
+- 💡 Staging では許容範囲
+
+---
+
+#### Sequential（順次実行）- Production推奨
+
+```
+Terraform Apply 完了
+  ↓
+Backend Deploy
+  ↓
+Health Check（最大5分）
+  ↓ ✅ Healthy
+Frontend Deploy
+  ↓
+完了（5-7分）
+```
+
+**特徴**:
+- 🛡️ 安全（ゼロダウンタイム）
+- ⏱️ 時間がかかる（5-7分）
+- 💡 Production では必須
+
+---
+
+### 実際の運用フロー
+
+#### シナリオ1: 新しい環境変数の追加
+
+```bash
+# 1. 環境変数を .env.example に追加
+echo "NEW_API_KEY=your-api-key" >> backend/.env.example
+
+# 2. Terraform に反映
+# terraform/modules/github/main.tf を編集
+resource "github_actions_environment_variable" "new_api_key" {
+  variable_name = "NEW_API_KEY"
+  value         = var.new_api_key
+}
+
+# 3. PR作成
+git add .
+git commit -m "feat: add new API key environment variable"
+git push origin feat/add-api-key
+
+# 4. terraform-plan.yml が自動実行
+# → PRにPlan結果がコメントされる
+
+# 5. レビュー & マージ（develop）
+
+# 6. terraform-apply.yml を手動実行
+# → Environment: staging
+# → Trigger deployment: true（デフォルト）
+
+# 7. 自動デプロイ開始
+# → Backend Deploy（2分待機 + Health Check）
+# → Frontend Deploy（3分待機 + Health Check）
+
+# 8. 完了 🎉
+```
+
+---
+
+#### シナリオ2: データベース設定の変更
+
+```bash
+# 1. Neon モジュールを編集
+# terraform/modules/neon/main.tf
+resource "neon_branch" "main" {
+  project_id = neon_project.main.id
+  name       = var.branch_name
+  
+  # Compute上限を変更
+  default_endpoint_settings {
+    autoscaling_limit_min_cu = 0.25
+    autoscaling_limit_max_cu = 0.50  # 0.25 → 0.50 に変更
+  }
+}
+
+# 2. PR作成（develop向け）
+git add terraform/
+git commit -m "feat: increase Neon compute limit to 0.50"
+git push origin feat/increase-compute
+
+# 3. terraform-plan.yml が自動実行
+# → Staging Plan 表示（modules変更を検出）
+# → Production Plan も表示（早期警告）
+
+# 4. PRコメントで確認
+# "⚠️ Shared Module Change Detected
+#  Module changes affect both Staging AND Production."
+
+# 5. レビュー & マージ（develop）
+
+# 6. terraform-apply.yml を手動実行（Staging）
+# → Environment: staging
+# → Deployment strategy: auto（→ parallel）
+
+# 7. 自動デプロイ開始（並列）
+# → Backend Deploy & Frontend Deploy（同時実行）
+# → 2-3分で完了
+
+# 8. Staging で動作確認
+
+# 9. main ブランチにマージ
+
+# 10. terraform-apply.yml を手動実行（Production）
+# → Environment: production
+# → Deployment strategy: auto（→ sequential）
+
+# 11. 自動デプロイ開始（順次）
+# → Backend Deploy → Health Check → Frontend Deploy
+# → 5-7分で完了
+
+# 12. Production デプロイ完了 🎉
+```
+
+---
+
+#### シナリオ3: インフラのみ変更（デプロイ不要）
+
+```bash
+# 1. Terraform ファイルを編集
+# 例: タグを追加
+
+# 2. PR作成 & マージ
+
+# 3. terraform-apply.yml を手動実行
+# → Environment: staging
+# → Trigger deployment: false  # ← デプロイをスキップ
+
+# 4. Terraform Apply のみ実行
+# → アプリケーションデプロイはトリガーされない
+
+# 5. 完了
+```
+
+---
+
+### GitHub Environment 設定
+
+Terraform実行に必要なEnvironmentの設定:
+
+#### terraform-staging
+
+```
+Settings → Environments → New environment
+
+Name: terraform-staging
+Protection rules:
+  ✅ Required reviewers: 0人
+  ❌ Wait timer: なし
+```
+
+#### terraform-production
+
+```
+Settings → Environments → New environment
+
+Name: terraform-production
+Protection rules:
+  ✅ Required reviewers: 1人以上
+  ⏱️ Wait timer: 0分（任意）
+```
+
+---
+
+### GitHub Secrets 設定
+
+#### Repository Secrets
+
+```
+Settings → Secrets and variables → Actions → New repository secret
+
+Name: TF_API_TOKEN
+Secret: <Terraform Cloud API Token>
+```
+
+```
+Settings → Secrets and variables → Actions → New repository secret
+
+Name: GH_PAT
+Secret: <Personal Access Token>
+Scopes: repo + workflow
+```
+
+**GH_PAT の作成**:
+```
+1. GitHub → Settings → Developer settings
+2. Personal access tokens → Tokens (classic)
+3. Generate new token (classic)
+4. Select scopes:
+   ✅ repo (Full control)
+   ✅ workflow (Update workflows)
+5. Generate token
+6. Copy token
+```
+
+---
+
+### Terraform Cloud 設定
+
+#### Organization & Workspaces
+
+```
+1. Terraform Cloud にログイン
+2. Organization作成: django-react-app
+3. Workspaces作成:
+   - django-react-staging
+   - django-react-production
+```
+
+#### Workspace Variables
+
+**両方のWorkspaceに設定**:
+
+| Variable | Type | Sensitive | 説明 |
+|----------|------|-----------|------|
+| `NEON_API_KEY` | Environment | ✅ | Neon API Key |
+| `RENDER_API_KEY` | Environment | ✅ | Render API Key |
+| `CLOUDFLARE_API_TOKEN` | Environment | ✅ | Cloudflare API Token |
+| `B2_APPLICATION_KEY_ID` | Environment | ✅ | Backblaze Key ID |
+| `B2_APPLICATION_KEY` | Environment | ✅ | Backblaze Key Secret |
+| `GITHUB_TOKEN` | Environment | ✅ | GitHub PAT（repo権限） |
+
+**Terraform Variables**（環境ごとに異なる値）:
+
+| Variable | Type | Staging | Production |
+|----------|------|---------|------------|
+| `environment` | Terraform | staging | production |
+| `project_name` | Terraform | django-react-app | django-react-app |
+| `render_owner_id` | Terraform | usr-xxx | usr-xxx |
+| `github_repo_url` | Terraform | https://github.com/... | https://github.com/... |
+
+---
+
+### トラブルシューティング
+
+#### エラー: "Resource not accessible by integration"
+
+```yaml
+Error: Resource not accessible by integration
+```
+
+**原因**: デフォルトの `GITHUB_TOKEN` では Repository Dispatch できない
+
+**解決**:
+```bash
+1. Personal Access Token (PAT) を作成
+   - Scopes: repo + workflow
+
+2. GitHub Secrets に GH_PAT として登録
+
+3. ワークフローで使用
+   token: ${{ secrets.GH_PAT }}
+```
+
+---
+
+#### エラー: Backend Health Check Timeout
+
+```
+❌ Backend health check failed after 5 retries
+```
+
+**確認項目**:
+```bash
+1. Render Dashboard でデプロイログを確認
+   - マイグレーションエラー？
+   - 環境変数の設定ミス？
+
+2. 環境変数が正しく設定されているか確認
+   - GitHub Environment Variables
+   - Render Environment Variables
+
+3. データベース接続を確認
+   - Neon Database が起動しているか
+   - 接続情報が正しいか
+```
+
+---
+
+#### エラー: Frontend Health Check Timeout
+
+```
+❌ Frontend health check failed after 5 retries
+```
+
+**確認項目**:
+```bash
+1. Cloudflare Pages Dashboard でビルドログを確認
+   - ビルドエラー？
+   - 環境変数の設定ミス？
+
+2. 環境変数が正しく設定されているか確認
+   - VITE_BASE_API_URL
+   - VITE_STORAGE_URL
+
+3. DNS/CDN の伝播を確認
+   - 数分待ってから再度アクセス
+```
+
+---
+
+#### エラー: Terraform Apply Failed
+
+```
+Error: Error creating resource
+```
+
+**確認項目**:
+```bash
+1. Terraform Cloud のログを確認
+   https://app.terraform.io/app/django-react-app/workspaces/...
+
+2. API キーが有効か確認
+   - Neon, Render, Cloudflare, Backblaze, GitHub
+
+3. リソースが既に存在しないか確認
+   - 手動で作成したリソースがあれば削除
+   - または terraform import でインポート
+
+4. Provider API Status を確認
+   - Neon Status: https://neon.tech/status
+   - Render Status: https://status.render.com
+   - Cloudflare Status: https://www.cloudflarestatus.com
+```
+
+---
+
+### ベストプラクティス
+
+#### 1. デプロイタイミング
+
+```
+推奨:
+  ✅ Staging: いつでも
+  ✅ Production: 営業時間外（深夜・早朝）
+  ✅ Production: 金曜日は避ける
+```
+
+#### 2. 変更の段階的ロールアウト
+
+```
+手順:
+  1. develop → Staging デプロイ
+  2. Staging で動作確認（数時間〜数日）
+  3. main → Production デプロイ
+  4. Production で動作確認
+```
+
+#### 3. ロールバック準備
+
+```
+事前準備:
+  ✅ 前バージョンのタグを作成
+  ✅ データベースバックアップ
+  ✅ ロールバック手順の確認
+```
+
+#### 4. モニタリング
+
+```
+デプロイ後の確認:
+  ✅ Render Dashboard でログ確認
+  ✅ Cloudflare Pages でビルドログ確認
+  ✅ Neon Console でDB接続確認
+  ✅ Smoke Tests の実行（手動）
+```
+
+---
+
+### まとめ
+
+| フェーズ | ワークフロー | 自動/手動 | 頻度 |
+|---------|------------|----------|------|
+| **Plan** | terraform-plan.yml | 自動 | 毎PR |
+| **Format** | terraform-fmt.yml | 自動 | 毎PR |
+| **Apply** | terraform-apply.yml | 手動 | 月1-2回 |
+| **Deploy** | backend-deploy.yml | 自動（Terraform後） | Apply時 |
+| | frontend-deploy.yml | 自動（Terraform後） | Apply時 |
+| **Destroy** | terraform-destroy.yml | 手動 | 年1回以下 |
+
+この構成により、**安全で自動化されたインフラ管理とアプリケーションデプロイ**を実現できます
+
+---
+
 ## よく使うコマンド
 
 ### バックエンド

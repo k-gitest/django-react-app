@@ -1,9 +1,11 @@
 from django.contrib import admin
 from django.urls import path, include
+from django.http import JsonResponse
 from users.views import CustomRegisterView
 
 def health_check(request):
-    return JsonResponse({'status': 'healthy', 'service': 'backend'})
+    # status=200 を明示的に返す（curl -f は 200番台を成功とみなすため）
+    return JsonResponse({'status': 'healthy', 'service': 'backend'}, status=200)
 
 urlpatterns = [
     path("admin/", admin.site.urls),
