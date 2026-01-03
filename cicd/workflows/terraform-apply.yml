@@ -1,0 +1,306 @@
+name: Terraform Apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to apply
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      auto-approve:
+        description: Auto approve (skip confirmation)
+        required: false
+        type: boolean
+        default: false
+      trigger-deployment:
+        description: Trigger application deployment after apply
+        required: false
+        type: boolean
+        default: true
+      deployment-strategy:
+        description: Deployment strategy
+        required: false
+        type: choice
+        options:
+          - auto     # 環境に応じて自動選択
+          - parallel # 並列実行（高速）
+          - sequential # 順次実行（安全）
+        default: auto
+
+# 並列実行を防ぐ
+concurrency:
+  group: terraform-apply-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: Apply (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    outputs:
+      apply-success: ${{ steps.apply.outcome == 'success' }}
+      deployment-strategy: ${{ steps.strategy.outputs.strategy }}
+      neon-host: ${{ steps.tf_outputs.outputs.neon_host }}
+      backend-url: ${{ steps.env_urls.outputs.backend_url }}
+      frontend-url: ${{ steps.env_urls.outputs.frontend_url }}
+    
+    environment:
+      name: ${{ inputs.environment }}
+      url: https://app.terraform.io/app/django-react-app/workspaces/django-react-${{ inputs.environment }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Determine Deployment Strategy
+        id: strategy
+        run: |
+          STRATEGY="${{ inputs.deployment-strategy }}"
+          
+          # auto の場合は環境に応じて決定
+          if [ "$STRATEGY" == "auto" ]; then
+            if [ "${{ inputs.environment }}" == "production" ]; then
+              STRATEGY="sequential"
+              echo "🔴 Production: Using sequential deployment (safe)"
+            else
+              STRATEGY="parallel"
+              echo "🔵 Staging: Using parallel deployment (fast)"
+            fi
+          fi
+          
+          echo "strategy=$STRATEGY" >> $GITHUB_OUTPUT
+          
+          echo "## 🚀 Deployment Strategy" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Selected:** \`$STRATEGY\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$STRATEGY" == "parallel" ]; then
+            echo "### ⚡ Parallel Deployment" >> $GITHUB_STEP_SUMMARY
+            echo "- Backend and Frontend deploy simultaneously" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Faster (saves 2-3 minutes)" >> $GITHUB_STEP_SUMMARY
+            echo "- ⚠️ Frontend may be ready before Backend" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### 🛡️ Sequential Deployment" >> $GITHUB_STEP_SUMMARY
+            echo "- Backend deploys first, then Frontend" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Zero user-facing downtime" >> $GITHUB_STEP_SUMMARY
+            echo "- ⏱️ Takes longer (waits for Backend health check)" >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ~1.14.0
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+      
+      - name: Terraform Init
+        run: terraform init
+        working-directory: terraform/envs/${{ inputs.environment }}
+      
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan -no-color -out=tfplan
+          terraform show -no-color tfplan > plan.txt
+        working-directory: terraform/envs/${{ inputs.environment }}
+      
+      - name: Show Plan Summary
+        run: |
+          echo "## Terraform Plan (${{ inputs.environment }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Changes to be applied:" >> $GITHUB_STEP_SUMMARY
+          echo '```terraform' >> $GITHUB_STEP_SUMMARY
+          head -n 100 plan.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        working-directory: terraform/envs/${{ inputs.environment }}
+      
+      - name: Terraform Apply
+        id: apply
+        run: terraform apply -auto-approve tfplan
+        working-directory: terraform/envs/${{ inputs.environment }}
+      
+      - name: Get Terraform Outputs
+        id: tf_outputs
+        if: steps.apply.outcome == 'success'
+        run: |
+          echo "neon_host=$(terraform output -raw neon_host 2>/dev/null || echo '')" >> $GITHUB_OUTPUT
+          echo "neon_database=$(terraform output -raw neon_database 2>/dev/null || echo '')" >> $GITHUB_OUTPUT
+          echo "b2_bucket=$(terraform output -raw b2_bucket_name 2>/dev/null || echo '')" >> $GITHUB_OUTPUT
+        working-directory: terraform/envs/${{ inputs.environment }}
+        continue-on-error: true
+      
+      - name: Get Environment URLs
+        id: env_urls
+        if: steps.apply.outcome == 'success'
+        run: |
+          echo "frontend_url=${{ vars.FRONTEND_URL }}" >> $GITHUB_OUTPUT
+          echo "backend_url=${{ vars.VITE_BASE_API_URL }}" >> $GITHUB_OUTPUT
+      
+      - name: Create Deployment Summary
+        if: steps.apply.outcome == 'success'
+        run: |
+          echo "## 🚀 Terraform Apply Completed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** \`${{ inputs.environment }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ✅ Success" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ inputs.trigger-deployment }}" == "true" ]; then
+            echo "### 🔄 Next: Application Deployment" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Deployment strategy: **${{ steps.strategy.outputs.strategy }}**" >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          echo "## ❌ Terraform Apply Failed" >> $GITHUB_STEP_SUMMARY
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # 並列デプロイ（Staging向け）
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  
+  trigger-deployment-parallel:
+    name: Trigger ${{ matrix.service }} Deployment
+    runs-on: ubuntu-latest
+    needs: apply
+    if: |
+      needs.apply.outputs.apply-success == 'true' && 
+      inputs.trigger-deployment &&
+      needs.apply.outputs.deployment-strategy == 'parallel'
+    
+    strategy:
+      matrix:
+        include:
+          - service: Backend
+            event: deploy-backend
+          - service: Frontend
+            event: deploy-frontend
+    
+    steps:
+      - name: Trigger Dispatch
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.GH_PAT }}
+          event-type: ${{ matrix.event }}
+          client-payload: |
+            {
+              "environment": "${{ inputs.environment }}",
+              "triggered_by": "terraform-apply",
+              "run_id": "${{ github.run_id }}",
+              "deployment_strategy": "parallel",
+              "backend_url": "${{ needs.apply.outputs.backend-url }}",
+              "frontend_url": "${{ needs.apply.outputs.frontend-url }}",
+              "neon_host": "${{ needs.apply.outputs.neon-host }}"
+            }
+      
+      - name: Create Summary
+        run: |
+          echo "## ⚡ ${{ matrix.service }} Deployment Triggered" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Strategy:** Parallel (simultaneous with other services)" >> $GITHUB_STEP_SUMMARY
+          echo "**Event:** \`${{ matrix.event }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "[View workflow](https://github.com/${{ github.repository }}/actions)" >> $GITHUB_STEP_SUMMARY
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # 順次デプロイ（Production向け）
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  
+  trigger-backend-sequential:
+    name: Trigger Backend Deployment (Sequential)
+    runs-on: ubuntu-latest
+    needs: apply
+    if: |
+      needs.apply.outputs.apply-success == 'true' && 
+      inputs.trigger-deployment &&
+      needs.apply.outputs.deployment-strategy == 'sequential'
+    
+    steps:
+      - name: Trigger Backend Deployment
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.GH_PAT }}
+          event-type: deploy-backend
+          client-payload: |
+            {
+              "environment": "${{ inputs.environment }}",
+              "triggered_by": "terraform-apply",
+              "run_id": "${{ github.run_id }}",
+              "deployment_strategy": "sequential",
+              "backend_url": "${{ needs.apply.outputs.backend-url }}",
+              "neon_host": "${{ needs.apply.outputs.neon-host }}"
+            }
+      
+      - name: Wait for Backend Health
+        run: |
+          echo "## 🛡️ Sequential Deployment: Backend First" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⏳ Waiting for Backend to become healthy before deploying Frontend..." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "This ensures zero user-facing downtime." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Backend のデプロイ完了を待つ（最大5分）
+          MAX_WAIT=300  # 5分
+          ELAPSED=0
+          INTERVAL=30   # 30秒ごとにチェック
+          
+          BACKEND_URL="${{ needs.apply.outputs.backend-url }}"
+          
+          echo "Checking Backend health: $BACKEND_URL/api/health"
+          
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            if curl -f -s -o /dev/null "$BACKEND_URL/api/health"; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "✅ Backend is healthy! (after ${ELAPSED}s)" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "Proceeding to Frontend deployment..." >> $GITHUB_STEP_SUMMARY
+              exit 0
+            fi
+            
+            echo "⏳ Backend not ready yet (${ELAPSED}s elapsed)..."
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ Backend health check timeout (${MAX_WAIT}s)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Frontend deployment will still proceed, but Backend may not be fully ready." >> $GITHUB_STEP_SUMMARY
+          exit 0  # タイムアウトしても続行
+
+  trigger-frontend-sequential:
+    name: Trigger Frontend Deployment (Sequential)
+    runs-on: ubuntu-latest
+    needs: [apply, trigger-backend-sequential]
+    if: |
+      needs.apply.outputs.apply-success == 'true' && 
+      inputs.trigger-deployment &&
+      needs.apply.outputs.deployment-strategy == 'sequential'
+    
+    steps:
+      - name: Trigger Frontend Deployment
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.GH_PAT }}
+          event-type: deploy-frontend
+          client-payload: |
+            {
+              "environment": "${{ inputs.environment }}",
+              "triggered_by": "terraform-apply",
+              "run_id": "${{ github.run_id }}",
+              "deployment_strategy": "sequential",
+              "frontend_url": "${{ needs.apply.outputs.frontend-url }}",
+              "backend_url": "${{ needs.apply.outputs.backend-url }}"
+            }
+      
+      - name: Create Summary
+        run: |
+          echo "## 🚀 Frontend Deployment Triggered" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Strategy:** Sequential (after Backend health check)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "[View workflow](https://github.com/${{ github.repository }}/actions)" >> $GITHUB_STEP_SUMMARY
