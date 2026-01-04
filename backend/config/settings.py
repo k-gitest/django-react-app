@@ -289,3 +289,15 @@ SESSION_COOKIE_AGE = 1209600  # 2週間（秒単位）
 SESSION_SAVE_EVERY_REQUEST = (
     False  # リクエストごとに保存するとRedisへの負荷が増えるため通常はFalse
 )
+
+# qstash設定
+QSTASH_TOKEN = getenv("QSTASH_TOKEN")
+QSTASH_CURRENT_SIGNING_KEY = getenv("QSTASH_CURRENT_SIGNING_KEY")
+QSTASH_NEXT_SIGNING_KEY = getenv("QSTASH_NEXT_SIGNING_KEY")
+
+# resend設定
+RESEND_API_KEY = getenv("RESEND_API_KEY")
+WEBHOOK_BASE_URL = getenv("WEBHOOK_BASE_URL", "http://localhost:8000")
+
+# フロントエンドURL
+FRONTEND_URL = config('FRONT_URL', default='http://localhost:3000')

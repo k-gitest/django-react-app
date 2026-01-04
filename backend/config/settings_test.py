@@ -3,21 +3,13 @@ import os
 
 # Database
 # **********************************************
-# テスト用：PostgreSQL設定
+# テスト用：SQLite（インメモリ）
 # **********************************************
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('PGDATABASE', 'test_db'),
-        'USER': os.getenv('PGUSER', 'postgres'),
-        'PASSWORD': os.getenv('PGPASSWORD', 'postgres'),
-        'HOST': os.getenv('PGHOST', 'localhost'),
-        'PORT': os.getenv('PGPORT', '5432'),
-        'OPTIONS': {
-            # テスト環境（Docker内など）ではSSLをオフ
-            'sslmode': 'disable',
-        },
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': ':memory:',
     }
 }
 
@@ -32,3 +24,21 @@ EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
 
 # ストレージ設定（テスト時は不要）
 AWS_STORAGE_BUCKET_NAME = None
+
+# 環境変数（ダミー）
+QSTASH_TOKEN = 'test_token'
+QSTASH_CURRENT_SIGNING_KEY = 'test_key'
+QSTASH_NEXT_SIGNING_KEY = 'test_key'
+RESEND_API_KEY = 'test_api_key'
+WEBHOOK_BASE_URL = 'http://localhost:8000'
+FRONT_URL = 'http://localhost:3000'
+
+# キャッシュ（テスト用）
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+    }
+}
+
+# テスト環境フラグ
+TESTING = True

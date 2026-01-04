@@ -1,6 +1,7 @@
 from django.test import TestCase
 from django.contrib.auth import get_user_model
 from django.http import Http404
+from django.core.cache import cache
 from todos.models import Todo
 from todos.service import TodoService
 
@@ -12,6 +13,9 @@ class TodoServiceTestCase(TestCase):
 
     def setUp(self):
         """各テストの前に実行される初期設定"""
+        # キャッシュをクリア
+        cache.clear()
+        
         # テストユーザー作成
         self.user1 = User.objects.create_user(
             email='user1@example.com',
@@ -41,6 +45,10 @@ class TodoServiceTestCase(TestCase):
             priority=Todo.Priority.LOW,
             progress=0
         )
+
+    def tearDown(self):
+        """各テスト後にキャッシュをクリア"""
+        cache.clear()
 
     # ============================================
     # get_user_todos のテスト

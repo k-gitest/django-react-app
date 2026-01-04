@@ -23,6 +23,11 @@ Django/React モノレポベースのSPAアプリケーション
 - **API**: Django REST Framework 3.14.0
 - **認証**: dj-rest-auth 7.0.1, djangorestframework-simplejwt 5.5.1
 - **データベース**: PostgreSQL 17 (psycopg2-binary 2.9.9)
+- **キャッシュ/セッション**: Redis (Upstash), django-redis 5.4.0
+- **レート制限**: django-ratelimit 4.1.0
+- **メール送信**: Resend 0.8.0
+- **非同期処理**: QStash (Upstash)
+- **HTTPクライアント**: requests 2.31.0
 - **サーバー**: gunicorn 21.2.0
 - **その他**: django-cors-headers, python-dotenv, python-decouple
 
@@ -641,6 +646,8 @@ Cookie認証への移行により、フロントエンド側のトークン管�
 
 **不要なネットワークリクエストの削減**: サーバー状態（認証情報）をキャッシュ管理することで、コンポーネントの再レンダリングに伴う重複した API 呼び出しを最小限に抑えています。
 
+---
+
 ## Todo管理機能
 
 ### 概要
@@ -823,12 +830,284 @@ def get_user_todos(user):
 
 ---
 
+## パフォーマンス最適化
+
+### Redis による最適化
+
+**Upstash Redis**を使用して、キャッシュ、セッション管理、レート制限を実装しています。
+
+#### 1. 統計データのキャッシュ
+```python
+# backend/todos/service.py
+CACHE_TIMEOUT = 900  # 15分
+
+@staticmethod
+def get_priority_stats(user):
+    cache_key = f"todo_stats:{user.id}:priority"
+    stats = cache.get(cache_key)
+    
+    if stats is None:
+        stats = Todo.objects.filter(user=user) \
+            .values('priority') \
+            .annotate(count=Count('id'))
+        cache.set(cache_key, stats, CACHE_TIMEOUT)
+    
+    return stats
+```
+
+- キャッシュがあればRedisから取得
+- なければDBで集計してRedisに保存
+- Todo作成・更新・削除時に`cache.delete()`で無効化
+
+---
+
+#### 2. レート制限
+```python
+# backend/users/views.py
+from django_ratelimit.decorators import ratelimit
+
+@method_decorator(ratelimit(key='ip', rate='5/5m', method='POST', block=True), 
+                  name='dispatch')
+class CustomLoginView(LoginView):
+    """ログイン試行を5分間に5回までに制限"""
+    pass
+
+@method_decorator(ratelimit(key='ip', rate='3/1h', method='POST', block=True), 
+                  name='dispatch')
+class CustomRegisterView(RegisterView):
+    """新規登録を1時間に3回までに制限"""
+    pass
+```
+
+**エラーハンドリング**:
+```python
+# backend/users/exceptions.py
+def custom_exception_handler(exc, context):
+    if isinstance(exc, Ratelimited):
+        return Response(
+            {"detail": "リクエストが多すぎます。しばらく時間を置いてから再度お試しください。"},
+            status=status.HTTP_429_TOO_MANY_REQUESTS
+        )
+    return exception_handler(exc, context)
+```
+
+**保護対象**:
+
+| エンドポイント | 制限 |
+|-------------|-----|
+| `/api/v1/auth/login/` | 5回/5分 |
+| `/api/v1/auth/registration/` | 3回/1時間 |
+
+---
+
+#### 3. セッション管理
+```python
+# backend/config/settings.py
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": getenv("REDIS_URL"),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "CONNECTION_POOL_KWARGS": {
+                "ssl_cert_reqs": None,  # Upstash SSL対応
+            },
+        },
+    }
+}
+
+SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+SESSION_CACHE_ALIAS = "default"
+SESSION_COOKIE_AGE = 1209600  # 2週間
+```
+
+- セッションデータをRedisに保存
+- PostgreSQLの負荷を軽減
+
+---
+
+### 使用用途まとめ
+
+| 用途 | 保持期間 | 無効化タイミング |
+|-----|---------|---------------|
+| **統計キャッシュ** | 15分 | Todo作成・更新・削除時 |
+| **レート制限カウンター** | 5分〜1時間 | 自動（TTL切れ） |
+| **セッション** | 2週間 | ログアウト時 |
+
+---
+
+### 環境変数
+```bash
+# backend/.env
+REDIS_URL=rediss://default:password@region.upstash.io:6379
+```
+
+**重要**: `rediss://`（sが2つ）を使用してください。Upstash は TLS 必須です。
+
+---
+
+## メール送信機能（非同期処理）
+
+### 概要
+
+ユーザー登録時に**QStash + Resend**を使用してウェルカムメールを非同期送信します。
+
+**アーキテクチャ**:
+```
+ユーザー登録
+    ↓
+QStash にメッセージ送信（即座にレスポンス）
+    ↓
+Webhook エンドポイント（/api/v1/webhooks/send-welcome-email）
+    ↓
+Resend でメール送信
+```
+
+### 使用技術
+
+| サービス | 用途 | 選定理由 |
+|---------|------|---------|
+| **QStash** | 非同期タスクキュー | 自動リトライ、サーバーレス課金、メンテナンス不要 |
+| **Resend** | メール送信 | 開発者フレンドリーなAPI、高い到達率 |
+
+### 実装
+
+#### 1. メール送信サービス
+```python
+# backend/users/email_service.py
+import resend
+from django.conf import settings
+
+class EmailService:
+    @staticmethod
+    def send_welcome_email(email: str, first_name: str):
+        params = {
+            "from": "noreply@yourdomain.com",
+            "to": [email],
+            "subject": f"Welcome, {first_name}!",
+            "html": f"<h1>Welcome to Django React App!</h1>"
+        }
+        response = resend.Emails.send(params)
+        return {"success": True, "id": response["id"]}
+```
+
+#### 2. QStash サービス
+```python
+# backend/users/qstash_service.py
+import requests
+from django.conf import settings
+
+class QStashService:
+    @staticmethod
+    def send_welcome_email_async(email: str, first_name: str):
+        webhook_url = f"{settings.WEBHOOK_BASE_URL}/api/v1/webhooks/send-welcome-email"
+        
+        requests.post(
+            f"https://qstash.upstash.io/v2/publish/{webhook_url}",
+            headers={
+                "Authorization": f"Bearer {settings.QSTASH_TOKEN}",
+                "Content-Type": "application/json",
+            },
+            json={"email": email, "first_name": first_name}
+        )
+```
+
+#### 3. Webhook エンドポイント
+```python
+# backend/users/views.py
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def send_welcome_email_webhook(request):
+    # QStash署名検証
+    if not _verify_qstash_signature(request):
+        return Response({"error": "Invalid signature"}, status=401)
+    
+    # メール送信
+    result = EmailService.send_welcome_email(
+        email=request.data.get("email"),
+        first_name=request.data.get("first_name")
+    )
+    return Response({"message": "Email sent"}, status=200)
+```
+
+### 環境変数
+```bash
+# backend/.env
+QSTASH_TOKEN=your_qstash_token
+QSTASH_CURRENT_SIGNING_KEY=sig_xxx
+QSTASH_NEXT_SIGNING_KEY=sig_xxx
+RESEND_API_KEY=re_xxx
+WEBHOOK_BASE_URL=https://your-backend.onrender.com
+FRONT_URL=https://your-frontend.pages.dev
+```
+
+### セキュリティ
+
+| 機能 | 実装 |
+|-----|------|
+| **署名検証** | QStashからのリクエストをHMAC-SHA256で検証 |
+| **レート制限** | 登録エンドポイントを3回/時間に制限 |
+| **テスト環境** | メール送信とレート制限を自動無効化 |
+
+### メリット
+
+- ⚡ **ユーザー登録が高速**: メール送信を待たずに即座にレスポンス
+- 🔄 **自動リトライ**: QStashが失敗時に自動で再送（最大3回）
+- 🐳 **Renderのスリープ対応**: サーバーがスリープしていても問題なし
+- 🧪 **テストフレンドリー**: テスト環境では自動的に無効化
+
+### 実装ファイル
+
+| ファイル | 役割 |
+|---------|------|
+| `users/email_service.py` | Resendメール送信ロジック |
+| `users/qstash_service.py` | QStash非同期タスク送信 |
+| `users/views.py` | Webhookエンドポイント、署名検証 |
+| `users/exceptions.py` | レート制限エラーハンドリング |
+
+### 開発環境での動作確認
+
+**Codespaces の場合**:
+```bash
+# 1. バックエンドURLを確認
+# PORTS タブで 8000 の URL をコピー
+
+# 2. .env に設定
+WEBHOOK_BASE_URL=https://your-codespace-8000.app.github.dev
+
+# 3. ポートを Public に変更
+# PORTS タブ → 8000 → 右クリック → Port Visibility → Public
+
+# 4. ユーザー登録をテスト
+```
+
+**ローカル開発の場合**:
+```bash
+# ngrok で外部公開
+ngrok http 8000
+
+# .env に ngrok URL を設定
+WEBHOOK_BASE_URL=https://xxxx.ngrok-free.app
+```
+
+---
+
 ## データベース戦略
 
-### 採用：Neon PostgreSQL
+### 採用：Neon PostgreSQL + Upstash Redis
 
-本プロジェクトでは、デプロイの移植性と開発効率を重視し、**Neon (PostgreSQL)** をデータベースとして採用しています。
+本プロジェクトでは、永続化データに**Neon (PostgreSQL)**、揮発性データに**Upstash Redis**を採用しています。
 
+**役割分担**:
+
+| データ種別 | ストレージ | 用途 |
+|----------|----------|-----|
+| **永続データ** | PostgreSQL | ユーザー情報、Todo、認証情報 |
+| **キャッシュ** | Redis | 統計集計結果、APIレスポンス |
+| **レート制限** | Redis | IP制限カウンター |
+| **セッション** | Redis | ユーザーセッション |
+
+### Neon PostgreSQL
 **選定理由**:
 
 | 理由 | メリット |
@@ -837,9 +1116,18 @@ def get_user_todos(user):
 | **移植性** | 標準PostgreSQL準拠のため、将来的なDB移行が容易。ベンダーロックインのリスクが低い |
 | **低レイテンシ** | Renderと同じリージョン配置でプライベートネットワーク経由の高速通信が可能 |
 
+### Upstash Redis
+**選定理由**:
+
+| 理由 | メリット |
+|---|---|
+| **サーバーレス課金** | 使用量ベースの従量課金 |
+| **低レイテンシ** | Renderと同じリージョン配置可能 |
+| **フルマネージド** | メンテナンス・スケーリング不要 |
+
 ### デプロイ構成と速度最適化
 
-**原則**: アプリケーション（Render）とDB（Neon）は**同じリージョン**に配置すること
+**原則**: アプリケーション（Render）とDB（Neon/Redis）は**同じリージョン**に配置すること
 
 | 配置 | 速度 | 理由 |
 |---|---|---|
@@ -1498,6 +1786,9 @@ terraform/
 | サービス | 用途 | リソース |
 |---------|------|---------|
 | **Neon** | PostgreSQLデータベース | プロジェクト、ブランチ、DB、ロール |
+| **Upstash Redis** | Redisキャッシュ/セッション | Database、REST Token |
+| **Upstash QStash** | 非同期タスクキュー | Endpoint |
+| **Resend** | メール送信 | API Key |
 | **Backblaze B2** | 静的アセットストレージ | バケット、Application Key |
 | **Cloudflare Pages** | フロントエンドホスティング | Pagesプロジェクト |
 | **Render** | バックエンドホスティング | Web Service（Docker） |
