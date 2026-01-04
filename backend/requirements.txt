@@ -14,3 +14,4 @@ boto3==1.35.77
 django-redis==5.4.0
 redis==5.0.1
 django-ratelimit==4.1.0
+resend==0.8.0

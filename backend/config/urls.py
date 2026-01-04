@@ -33,4 +33,7 @@ urlpatterns = [
 
     # CIでのhealth-checkエンドポイント
     path('api/v1/health/', health_check, name='health_check'),
+
+    # mail送信　Webhookエンドポイント
+    path('api/v1/webhooks/', include('users.urls')),
 ]
