@@ -1,12 +1,22 @@
+from ratelimit.decorators import ratelimit
+from django.utils.decorators import method_decorator
 from dj_rest_auth.registration.views import RegisterView
 from dj_rest_auth.views import LoginView
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
 
 
+# クラス全体の POST メソッドに対してレートリミットをかける
+@method_decorator(ratelimit(key='ip', rate='5/5m', method='POST', block=True), name='dispatch')
+class CustomLoginView(LoginView):
+    """ログイン試行を5分間に5回までに制限"""
+    pass
+
+@method_decorator(ratelimit(key='ip', rate='3/1h', method='POST', block=True), name='dispatch')
 class CustomRegisterView(RegisterView):
     """
     新規登録時にJWT CookieをSet-Cookieヘッダーに設定
+    新規登録は制限をより厳しく（1時間に3回まで）
     """
     def perform_create(self, serializer):
         """
