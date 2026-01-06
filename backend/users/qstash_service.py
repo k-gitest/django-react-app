@@ -1,34 +1,29 @@
-import requests
-from django.conf import settings
+from common.infrastructure.qstash_client import QStashClient as BaseQStashService
 
 
-class QStashService:
-    """QStashを使った非同期タスク送信"""
+class UserQStashService:
+    """
+    ユーザー関連の非同期タスク送信
+    
+    common.QStashServiceをラップし、Users固有のペイロードを構築
+    """
     
     @staticmethod
-    def send_welcome_email_async(email: str, first_name: str):
-        """ウェルカムメール送信をQStash経由で非同期実行"""
-        webhook_url = f"{settings.WEBHOOK_BASE_URL}/api/v1/webhooks/send-welcome-email"
+    def send_welcome_email_async(email: str, first_name: str) -> dict:
+        """
+        ウェルカムメール送信をQStash経由で非同期実行
         
-        payload = {
-            "email": email,
-            "first_name": first_name
-        }
+        Args:
+            email: 送信先メールアドレス
+            first_name: ユーザーの名前
         
-        try:
-            response = requests.post(
-                f"https://qstash.upstash.io/v2/publish/{webhook_url}",
-                headers={
-                    "Authorization": f"Bearer {settings.QSTASH_TOKEN}",
-                    "Content-Type": "application/json",
-                    "Upstash-Forward-Authorization": f"Bearer {settings.QSTASH_TOKEN}",  # Webhook認証用
-                },
-                json=payload,
-                timeout=10
-            )
-            response.raise_for_status()
-            return {"success": True, "message_id": response.json().get("messageId")}
-            
-        except requests.exceptions.RequestException as e:
-            print(f"Failed to send message to QStash: {str(e)}")
-            return {"success": False, "error": str(e)}
+        Returns:
+            dict: {"success": bool, "message_id": str or None, "error": str or None}
+        """
+        return BaseQStashService.publish(
+            endpoint_path="/api/v1/webhooks/send-welcome-email",
+            payload={
+                "email": email,
+                "first_name": first_name
+            }
+        )

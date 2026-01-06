@@ -44,8 +44,10 @@ INSTALLED_APPS = [
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
+    "common",
     "users",
     "todos",
+    'webhooks',
 ]
 
 MIDDLEWARE = [
@@ -298,6 +300,12 @@ QSTASH_NEXT_SIGNING_KEY = getenv("QSTASH_NEXT_SIGNING_KEY")
 # resend設定
 RESEND_API_KEY = getenv("RESEND_API_KEY")
 WEBHOOK_BASE_URL = getenv("WEBHOOK_BASE_URL", "http://localhost:8000")
+DEFAULT_FROM_EMAIL = getenv("DEFAULT_FROM_EMAIL", "noreply@example.com")
 
 # フロントエンドURL
-FRONTEND_URL = config('FRONT_URL', default='http://localhost:3000')
+FRONTEND_URL = config("FRONT_URL", default="http://localhost:3000")
+
+# Vector Search & Embeddings
+GOOGLE_API_KEY = getenv("GOOGLE_API_KEY")
+UPSTASH_VECTOR_REST_URL = getenv("UPSTASH_VECTOR_REST_URL")
+UPSTASH_VECTOR_REST_TOKEN = getenv("UPSTASH_VECTOR_REST_TOKEN")

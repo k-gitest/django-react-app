@@ -9,7 +9,9 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
 from .email_service import EmailService
-from .qstash_service import QStashService
+from .email_service import UserEmailService
+from .qstash_service import UserQStashService
+from common.permissions import IsQStashAuthenticated
 import hmac
 import hashlib
 
@@ -54,7 +56,7 @@ class CustomRegisterView(RegisterView):
 
         # テスト環境ではメール送信をスキップ
         if not is_testing():
-            QStashService.send_welcome_email_async(
+            UserQStashService.send_welcome_email_async(
                 email=user.email,
                 first_name=user.first_name or "User"
             )
@@ -94,11 +96,13 @@ class CustomRegisterView(RegisterView):
 
 
 @api_view(['POST'])
-@permission_classes([AllowAny])
+@permission_classes([IsQStashAuthenticated])
 def send_welcome_email_webhook(request):
     """
     QStashから呼び出されるWebhook
     ウェルカムメールを実際に送信する
+
+    署名検証はIsQStashAuthenticatedで自動処理
     """
     
     if not _verify_qstash_signature(request):
@@ -116,7 +120,7 @@ def send_welcome_email_webhook(request):
             status=status.HTTP_400_BAD_REQUEST
         )
     
-    result = EmailService.send_welcome_email(email, first_name)
+    result = UserEmailService.send_welcome_email(email, first_name)
     
     if result["success"]:
         return Response(
