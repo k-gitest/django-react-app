@@ -4,7 +4,7 @@ from rest_framework import serializers
 from django.db import IntegrityError
 
 from .models import CustomUser
-from .services import UserQueryService, UserRegistrationService
+from .user_service import UserQueryService, UserRegistrationService
 
 
 # ============================================================================
