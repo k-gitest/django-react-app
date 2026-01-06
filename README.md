@@ -60,13 +60,22 @@ Django/React モノレポベースのSPAアプリケーション
 │   │   ├── wsgi.py / asgi.py  # サーバーインターフェース
 │   │   └── __init__.py
 │   │
+│   ├── common/
+│   │   ├── infrastructure/
+│   │   │   ├── email_client.py
+│   │   │   └── qstash_client.py
+│   │   ├── security.py
+│   │   └── permissions.py
+│   │
 │   ├── users/                 # ユーザー管理アプリケーション
 │   │   ├── models.py          # データモデル定義
 │   │   ├── views.py           # APIビュー（薄いコントローラ）
-│   │   ├── service.py         # ビジネスロジック層
+│   │   ├── services.py         # ビジネスロジック層
 │   │   ├── utils.py           # ユーティリティ関数
 │   │   ├── urls.py            # アプリ固有のルーティング
 │   │   ├── serializers.py     # DRFシリアライザ
+│   │   ├── email_service.py   
+│   │   ├── qstash_service.py  
 │   │   ├── tests/             # テストコード
 │   │   │   ├── test_models.py
 │   │   │   └── test_services.py
@@ -74,6 +83,21 @@ Django/React モノレポベースのSPAアプリケーション
 │   │   │   └── commands/
 │   │   │       └── seed_db.py
 │   │   └── migrations/        # DBマイグレーション
+│   │
+│   ├── todos/
+│   │   ├── views.py 
+│   │   ├── models.py                    
+│   │   ├── service.py                  
+│   │   ├── serializers.py                  
+│   │   ├── qstash_service.py
+│   │   ├── embedding_service.py
+│   │   ├── vector_service.py
+│   │   └── urls.py                     
+│   │
+│   ├── webhooks/                     
+│   │   ├── __init__.py
+│   │   ├── apps.py
+│   │   └── urls.py        
 │   │
 │   ├── manage.py
 │   ├── requirements.txt
