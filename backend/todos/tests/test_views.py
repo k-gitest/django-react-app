@@ -82,39 +82,49 @@ class TodoViewSetTestCase(TestCase):
 
     def test_create_todo_success(self):
         """作成: 正常なデータでタスクを作成"""
-        self.client.force_authenticate(user=self.user1)
-        data = {
-            'todo_title': '新しいタスク',
-            'priority': 'HIGH',
-            'progress': 0
-        }
+        from unittest.mock import patch
         
-        response = self.client.post('/api/v1/todos/', data)
-        
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data['todo_title'], '新しいタスク')
-        self.assertEqual(response.data['priority'], 'HIGH')
-        
-        # DBに保存されているか確認
-        self.assertTrue(
-            Todo.objects.filter(
-                user=self.user1,
-                todo_title='新しいタスク'
-            ).exists()
-        )
+        with patch('todos.service.TodoQStashService.queue_vector_indexing') as mock_queue:
+            mock_queue.return_value = {"success": True, "message_id": "msg_123", "error": None}
+            
+            self.client.force_authenticate(user=self.user1)
+            data = {
+                'todo_title': '新しいタスク',
+                'priority': 'HIGH',
+                'progress': 0
+            }
+            
+            response = self.client.post('/api/v1/todos/', data)
+            
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+            self.assertEqual(response.data['todo_title'], '新しいタスク')
+            self.assertEqual(response.data['priority'], 'HIGH')
+            
+            # DBに保存されているか確認
+            self.assertTrue(
+                Todo.objects.filter(
+                    user=self.user1,
+                    todo_title='新しいタスク'
+                ).exists()
+            )
 
     def test_create_todo_with_default_values(self):
         """作成: 最小限のデータで作成（デフォルト値使用）"""
-        self.client.force_authenticate(user=self.user1)
-        data = {
-            'todo_title': 'シンプルなタスク'
-        }
+        from unittest.mock import patch
         
-        response = self.client.post('/api/v1/todos/', data)
-        
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data['priority'], 'MEDIUM')  # デフォルト
-        self.assertEqual(response.data['progress'], 0)  # デフォルト
+        with patch('todos.service.TodoQStashService.queue_vector_indexing') as mock_queue:
+            mock_queue.return_value = {"success": True, "message_id": "msg_123", "error": None}
+            
+            self.client.force_authenticate(user=self.user1)
+            data = {
+                'todo_title': 'シンプルなタスク'
+            }
+            
+            response = self.client.post('/api/v1/todos/', data)
+            
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+            self.assertEqual(response.data['priority'], 'MEDIUM')  # デフォルト
+            self.assertEqual(response.data['progress'], 0)  # デフォルト
 
     def test_create_todo_invalid_priority(self):
         """作成: 無効な優先度で400エラー"""
@@ -142,35 +152,45 @@ class TodoViewSetTestCase(TestCase):
 
     def test_update_todo_success(self):
         """更新: 自分のタスクを更新"""
-        self.client.force_authenticate(user=self.user1)
-        data = {
-            'todo_title': '更新されたタスク',
-            'progress': 75
-        }
+        from unittest.mock import patch
         
-        response = self.client.patch(f'/api/v1/todos/{self.todo1.id}/', data)
-        
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['todo_title'], '更新されたタスク')
-        self.assertEqual(response.data['progress'], 75)
-        
-        # DBも更新されているか確認
-        self.todo1.refresh_from_db()
-        self.assertEqual(self.todo1.todo_title, '更新されたタスク')
-        self.assertEqual(self.todo1.progress, 75)
+        with patch('todos.service.TodoQStashService.queue_vector_indexing') as mock_queue:
+            mock_queue.return_value = {"success": True, "message_id": "msg_123", "error": None}
+            
+            self.client.force_authenticate(user=self.user1)
+            data = {
+                'todo_title': '更新されたタスク',
+                'progress': 75
+            }
+            
+            response = self.client.patch(f'/api/v1/todos/{self.todo1.id}/', data)
+            
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual(response.data['todo_title'], '更新されたタスク')
+            self.assertEqual(response.data['progress'], 75)
+            
+            # DBも更新されているか確認
+            self.todo1.refresh_from_db()
+            self.assertEqual(self.todo1.todo_title, '更新されたタスク')
+            self.assertEqual(self.todo1.progress, 75)
 
     def test_update_todo_partial(self):
         """更新: 部分更新が可能"""
-        self.client.force_authenticate(user=self.user1)
-        data = {
-            'progress': 100
-        }
+        from unittest.mock import patch
         
-        response = self.client.patch(f'/api/v1/todos/{self.todo1.id}/', data)
-        
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['progress'], 100)
-        self.assertEqual(response.data['todo_title'], 'User1のタスク1')  # 変更なし
+        with patch('todos.service.TodoQStashService.queue_vector_indexing') as mock_queue:
+            mock_queue.return_value = {"success": True, "message_id": "msg_123", "error": None}
+            
+            self.client.force_authenticate(user=self.user1)
+            data = {
+                'progress': 100
+            }
+            
+            response = self.client.patch(f'/api/v1/todos/{self.todo1.id}/', data)
+            
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual(response.data['progress'], 100)
+            self.assertEqual(response.data['todo_title'], 'User1のタスク1')  # 変更なし
 
     def test_update_todo_unauthorized(self):
         """更新: 他人のタスクは更新不可（404）"""
@@ -185,15 +205,20 @@ class TodoViewSetTestCase(TestCase):
 
     def test_delete_todo_success(self):
         """削除: 自分のタスクを削除"""
-        self.client.force_authenticate(user=self.user1)
-        todo_id = self.todo1.id
+        from unittest.mock import patch
         
-        response = self.client.delete(f'/api/v1/todos/{todo_id}/')
-        
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        
-        # DBから削除されているか確認
-        self.assertFalse(Todo.objects.filter(id=todo_id).exists())
+        with patch('todos.service.TodoQStashService.queue_vector_indexing') as mock_queue:
+            mock_queue.return_value = {"success": True, "message_id": "msg_123", "error": None}
+            
+            self.client.force_authenticate(user=self.user1)
+            todo_id = self.todo1.id
+            
+            response = self.client.delete(f'/api/v1/todos/{todo_id}/')
+            
+            self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+            
+            # DBから削除されているか確認
+            self.assertFalse(Todo.objects.filter(id=todo_id).exists())
 
     def test_delete_todo_unauthorized(self):
         """削除: 他人のタスクは削除不可（404）"""
@@ -266,3 +291,366 @@ class TodoViewSetTestCase(TestCase):
         # それぞれのタスク数が正しい
         self.assertEqual(user1_count, 2)
         self.assertEqual(user2_count, 1)
+
+    # ============================================
+    # 🆕 ベクトル検索エンドポイントのテスト
+    # ============================================
+    
+    def test_search_action_success(self):
+        """カスタムアクション: search - セマンティック検索成功"""
+        from unittest.mock import patch, MagicMock
+        
+        with patch('todos.vector_service.VectorService') as mock_vector_service_class:
+            mock_instance = MagicMock()
+            mock_instance.search_similar.return_value = [
+                {
+                    "id": 1,
+                    "score": 0.85,
+                    "title": "会議資料の作成",
+                    "priority": "HIGH",
+                    "progress": 50
+                }
+            ]
+            mock_vector_service_class.return_value = mock_instance
+            
+            self.client.force_authenticate(user=self.user1)
+            response = self.client.get('/api/v1/todos/search/', {'q': '明日の会議'})
+            
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual(response.data['query'], '明日の会議')
+            self.assertEqual(response.data['count'], 1)
+            self.assertEqual(len(response.data['results']), 1)
+            self.assertEqual(response.data['results'][0]['score'], 0.85)
+    
+    def test_search_action_missing_query(self):
+        """カスタムアクション: search - クエリなしで400エラー"""
+        self.client.force_authenticate(user=self.user1)
+        response = self.client.get('/api/v1/todos/search/')
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('error', response.data)
+    
+    def test_search_action_with_parameters(self):
+        """カスタムアクション: search - パラメータ付き検索"""
+        from unittest.mock import patch, MagicMock
+        
+        with patch('todos.vector_service.VectorService') as mock_vector_service_class:
+            mock_instance = MagicMock()
+            mock_instance.search_similar.return_value = []
+            mock_vector_service_class.return_value = mock_instance
+            
+            self.client.force_authenticate(user=self.user1)
+            response = self.client.get('/api/v1/todos/search/', {
+                'q': 'テスト',
+                'top_k': 10,
+                'min_score': 0.6
+            })
+            
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual(response.data['count'], 0)
+            
+            # VectorService が正しいパラメータで呼ばれたか確認
+            mock_instance.search_similar.assert_called_once_with(
+                'テスト',
+                self.user1.id,
+                10,
+                0.6
+            )
+    
+    def test_search_action_invalid_top_k(self):
+        """カスタムアクション: search - 無効なtop_kで400エラー"""
+        self.client.force_authenticate(user=self.user1)
+        
+        # top_k が範囲外
+        response = self.client.get('/api/v1/todos/search/', {
+            'q': 'テスト',
+            'top_k': 200
+        })
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+    
+    def test_search_action_invalid_min_score(self):
+        """カスタムアクション: search - 無効なmin_scoreで400エラー"""
+        self.client.force_authenticate(user=self.user1)
+        
+        # min_score が範囲外
+        response = self.client.get('/api/v1/todos/search/', {
+            'q': 'テスト',
+            'min_score': 1.5
+        })
+        
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+    
+    def test_search_action_unauthenticated(self):
+        """カスタムアクション: search - 未認証は401"""
+        response = self.client.get('/api/v1/todos/search/', {'q': 'テスト'})
+        
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+    
+    def test_bulk_index_action_success(self):
+        """カスタムアクション: bulk-index - 一括インデックス成功"""
+        from unittest.mock import patch
+        
+        with patch('todos.service.TodoQStashService.queue_bulk_vector_indexing') as mock_queue:
+            mock_queue.return_value = {
+                "success": True,
+                "message_id": "msg_bulk_123",
+                "error": None
+            }
+            
+            self.client.force_authenticate(user=self.user1)
+            response = self.client.post('/api/v1/todos/bulk-index/')
+            
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual(response.data['status'], 'queued')
+            self.assertIn('message', response.data)
+    
+    def test_bulk_index_action_error(self):
+        """カスタムアクション: bulk-index - エラー時は500"""
+        from unittest.mock import patch
+        
+        with patch('todos.service.TodoQStashService.queue_bulk_vector_indexing') as mock_queue:
+            mock_queue.side_effect = Exception("Queue error")
+            
+            self.client.force_authenticate(user=self.user1)
+            response = self.client.post('/api/v1/todos/bulk-index/')
+            
+            self.assertEqual(response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
+            self.assertIn('error', response.data)
+    
+    def test_bulk_index_action_unauthenticated(self):
+        """カスタムアクション: bulk-index - 未認証は401"""
+        response = self.client.post('/api/v1/todos/bulk-index/')
+        
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+# ============================================
+# 🆕 Webhook エンドポイントのテスト
+# ============================================
+
+class VectorIndexingWebhookTestCase(TestCase):
+    """Vector indexing webhook のテスト"""
+    
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            email='test@example.com',
+            password='testpass123'
+        )
+        self.todo = Todo.objects.create(
+            user=self.user,
+            todo_title='テストタスク',
+            priority=Todo.Priority.HIGH,
+            progress=50
+        )
+    
+    def test_vector_indexing_webhook_upsert_success(self):
+        """Webhook: upsert操作が成功する"""
+        from unittest.mock import patch, MagicMock
+        import hmac
+        import hashlib
+        import json
+        
+        # 実際のリクエストボディと一致する署名を生成
+        payload = {'todo_id': self.todo.id, 'operation': 'upsert'}
+        body = json.dumps(payload).encode()
+        signature = hmac.new(b"test_signing_key", body, hashlib.sha256).hexdigest()
+        
+        with patch('django.conf.settings.QSTASH_CURRENT_SIGNING_KEY', 'test_signing_key'):
+            with patch('django.conf.settings.QSTASH_NEXT_SIGNING_KEY', 'test_next_key'):
+                with patch('todos.views.VectorService') as mock_vector_service_class:
+                    mock_instance = MagicMock()
+                    mock_vector_service_class.return_value = mock_instance
+                    
+                    response = self.client.post(
+                        '/api/v1/webhooks/vector-indexing',
+                        data=body,
+                        content_type='application/json',
+                        HTTP_UPSTASH_SIGNATURE=f'v1={signature}'
+                    )
+                    
+                    self.assertEqual(response.status_code, status.HTTP_200_OK)
+                    self.assertEqual(response.data['operation'], 'upsert')
+                    mock_instance.add_todo.assert_called_once()
+    
+    def test_vector_indexing_webhook_delete_success(self):
+        """Webhook: delete操作が成功する"""
+        from unittest.mock import patch, MagicMock
+        import hmac
+        import hashlib
+        import json
+        
+        payload = {'todo_id': self.todo.id, 'operation': 'delete'}
+        body = json.dumps(payload).encode()
+        signature = hmac.new(b"test_signing_key", body, hashlib.sha256).hexdigest()
+        
+        with patch('django.conf.settings.QSTASH_CURRENT_SIGNING_KEY', 'test_signing_key'):
+            with patch('django.conf.settings.QSTASH_NEXT_SIGNING_KEY', 'test_next_key'):
+                with patch('todos.views.VectorService') as mock_vector_service_class:
+                    mock_instance = MagicMock()
+                    mock_vector_service_class.return_value = mock_instance
+                    
+                    response = self.client.post(
+                        '/api/v1/webhooks/vector-indexing',
+                        data=body,
+                        content_type='application/json',
+                        HTTP_UPSTASH_SIGNATURE=f'v1={signature}'
+                    )
+                    
+                    self.assertEqual(response.status_code, status.HTTP_200_OK)
+                    self.assertEqual(response.data['operation'], 'delete')
+                    mock_instance.delete_todo.assert_called_once_with(self.todo.id)
+    
+    def test_vector_indexing_webhook_missing_todo_id(self):
+        """Webhook: todo_idなしで400エラー"""
+        from unittest.mock import patch
+        import hmac
+        import hashlib
+        import json
+        
+        payload = {'operation': 'upsert'}
+        body = json.dumps(payload).encode()
+        signature = hmac.new(b"test_signing_key", body, hashlib.sha256).hexdigest()
+        
+        with patch('django.conf.settings.QSTASH_CURRENT_SIGNING_KEY', 'test_signing_key'):
+            with patch('django.conf.settings.QSTASH_NEXT_SIGNING_KEY', 'test_next_key'):
+                response = self.client.post(
+                    '/api/v1/webhooks/vector-indexing',
+                    data=body,
+                    content_type='application/json',
+                    HTTP_UPSTASH_SIGNATURE=f'v1={signature}'
+                )
+                
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+    
+    def test_vector_indexing_webhook_invalid_signature(self):
+        """Webhook: 無効な署名で401エラー（認証失敗）"""
+        from unittest.mock import patch
+        import json
+        
+        payload = {'todo_id': self.todo.id}
+        body = json.dumps(payload).encode()
+        
+        with patch('django.conf.settings.QSTASH_CURRENT_SIGNING_KEY', 'test_signing_key'):
+            with patch('django.conf.settings.QSTASH_NEXT_SIGNING_KEY', 'test_next_key'):
+                response = self.client.post(
+                    '/api/v1/webhooks/vector-indexing',
+                    data=body,
+                    content_type='application/json',
+                    HTTP_UPSTASH_SIGNATURE='v1=invalid_signature_xyz'
+                )
+                
+                # DRFのパーミッションクラスは認証失敗時に401を返す
+                self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class BulkVectorIndexingWebhookTestCase(TestCase):
+    """Bulk vector indexing webhook のテスト"""
+    
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            email='test@example.com',
+            password='testpass123'
+        )
+        Todo.objects.create(user=self.user, todo_title='タスク1', priority=Todo.Priority.HIGH)
+        Todo.objects.create(user=self.user, todo_title='タスク2', priority=Todo.Priority.MEDIUM)
+    
+    def test_bulk_vector_indexing_webhook_success(self):
+        """Webhook: 一括インデックスが成功する"""
+        from unittest.mock import patch, MagicMock
+        import hmac
+        import hashlib
+        import json
+        
+        payload = {'user_id': self.user.id}
+        body = json.dumps(payload).encode()
+        signature = hmac.new(b"test_signing_key", body, hashlib.sha256).hexdigest()
+        
+        with patch('django.conf.settings.QSTASH_CURRENT_SIGNING_KEY', 'test_signing_key'):
+            with patch('django.conf.settings.QSTASH_NEXT_SIGNING_KEY', 'test_next_key'):
+                with patch('todos.views.VectorService') as mock_vector_service_class:
+                    mock_instance = MagicMock()
+                    mock_vector_service_class.return_value = mock_instance
+                    
+                    response = self.client.post(
+                        '/api/v1/webhooks/bulk-vector-indexing',
+                        data=body,
+                        content_type='application/json',
+                        HTTP_UPSTASH_SIGNATURE=f'v1={signature}'
+                    )
+                    
+                    self.assertEqual(response.status_code, status.HTTP_200_OK)
+                    self.assertEqual(response.data['count'], 2)
+                    mock_instance.add_todos_batch.assert_called_once()
+    
+    def test_bulk_vector_indexing_webhook_no_todos(self):
+        """Webhook: Todoがない場合"""
+        from unittest.mock import patch
+        import hmac
+        import hashlib
+        import json
+        
+        new_user = User.objects.create_user(
+            email='newuser@example.com',
+            password='testpass123'
+        )
+        
+        payload = {'user_id': new_user.id}
+        body = json.dumps(payload).encode()
+        signature = hmac.new(b"test_signing_key", body, hashlib.sha256).hexdigest()
+        
+        with patch('django.conf.settings.QSTASH_CURRENT_SIGNING_KEY', 'test_signing_key'):
+            with patch('django.conf.settings.QSTASH_NEXT_SIGNING_KEY', 'test_next_key'):
+                response = self.client.post(
+                    '/api/v1/webhooks/bulk-vector-indexing',
+                    data=body,
+                    content_type='application/json',
+                    HTTP_UPSTASH_SIGNATURE=f'v1={signature}'
+                )
+                
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                self.assertEqual(response.data['count'], 0)
+    
+    def test_bulk_vector_indexing_webhook_missing_user_id(self):
+        """Webhook: user_idなしで400エラー"""
+        from unittest.mock import patch
+        import hmac
+        import hashlib
+        import json
+        
+        payload = {}
+        body = json.dumps(payload).encode()
+        signature = hmac.new(b"test_signing_key", body, hashlib.sha256).hexdigest()
+        
+        with patch('django.conf.settings.QSTASH_CURRENT_SIGNING_KEY', 'test_signing_key'):
+            with patch('django.conf.settings.QSTASH_NEXT_SIGNING_KEY', 'test_next_key'):
+                response = self.client.post(
+                    '/api/v1/webhooks/bulk-vector-indexing',
+                    data=body,
+                    content_type='application/json',
+                    HTTP_UPSTASH_SIGNATURE=f'v1={signature}'
+                )
+                
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+    
+    def test_bulk_vector_indexing_webhook_invalid_signature(self):
+        """Webhook: 無効な署名で401エラー（認証失敗）"""
+        from unittest.mock import patch
+        import json
+        
+        payload = {'user_id': self.user.id}
+        body = json.dumps(payload).encode()
+        
+        with patch('django.conf.settings.QSTASH_CURRENT_SIGNING_KEY', 'test_signing_key'):
+            with patch('django.conf.settings.QSTASH_NEXT_SIGNING_KEY', 'test_next_key'):
+                response = self.client.post(
+                    '/api/v1/webhooks/bulk-vector-indexing',
+                    data=body,
+                    content_type='application/json',
+                    HTTP_UPSTASH_SIGNATURE='v1=invalid_signature_xyz'
+                )
+                
+                # DRFのパーミッションクラスは認証失敗時に401を返す
+                self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
