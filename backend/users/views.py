@@ -5,7 +5,6 @@ from dj_rest_auth.views import LoginView
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
 from .email_service import UserEmailService
@@ -37,16 +36,51 @@ def apply_ratelimit(**kwargs):
 
 @method_decorator(apply_ratelimit(key='ip', rate='5/5m', method='POST', block=True), name='dispatch')
 class CustomLoginView(LoginView):
-    """ログイン試行を5分間に5回までに制限"""
-    pass
+    """
+    カスタムログインビュー
+    
+    - レート制限（5回/5分）
+    - JWT Cookie自動発行
+    - 分析ログ記録（MotherDuck）
+    """
+    
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        
+        # ログイン成功時のみ記録
+        if response.status_code == 200:
+            try:
+                # ユーザーオブジェクトを取得
+                user = None
+                if hasattr(self, 'user') and self.user:
+                    user = self.user
+                elif response.data.get('user'):
+                    from django.contrib.auth import get_user_model
+                    User = get_user_model()
+                    user = User.objects.get(pk=response.data['user']['pk'])
+                
+                if user:
+                    AnalyticsService.log_auth_event(
+                        user=user,
+                        event_type="login",
+                        request=request,
+                        success=True
+                    )
+            except Exception as e:
+                logger.error(f"Failed to log auth event: {e}")
+        
+        return response
 
 
 @method_decorator(apply_ratelimit(key='ip', rate='3/1h', method='POST', block=True), name='dispatch')
 class CustomRegisterView(RegisterView):
     """
-    新規登録時にJWT CookieをSet-Cookieヘッダーに設定
-    レート制限: 1時間に3回まで
-    ウェルカムメール送信（QStash経由）
+    カスタム登録ビュー
+    
+    - レート制限（3回/1時間）
+    - JWT Cookie自動発行
+    - ウェルカムメール送信（QStash経由）
+    - 分析ログ記録（MotherDuck）
     """
     
     def perform_create(self, serializer):
@@ -71,6 +105,18 @@ class CustomRegisterView(RegisterView):
         
         if hasattr(self, 'access_token') and hasattr(self, 'refresh_token'):
             self._set_jwt_cookies(response, self.access_token, self.refresh_token)
+        
+        # 登録成功時のみ記録
+        if response.status_code == 201:
+            try:
+                AnalyticsService.log_auth_event(
+                    user=self.user,
+                    event_type="register",
+                    request=request,
+                    success=True
+                )
+            except Exception as e:
+                logger.error(f"Failed to log auth event: {e}")
         
         return response
             
@@ -104,10 +150,7 @@ def send_welcome_email_webhook(request):
     """
     QStashから呼び出されるWebhook
     ウェルカムメールを実際に送信する
-
-    署名検証はIsQStashAuthenticatedで自動処理
     """
-    
     if not _verify_qstash_signature(request):
         return Response(
             {"error": "Invalid signature"},
@@ -167,6 +210,7 @@ def _verify_qstash_signature(request):
     return (signatures.get("v1") == current_signature or 
             signatures.get("v1") == next_signature)
 
+
 @api_view(['POST'])
 @permission_classes([IsQStashAuthenticated])
 def analytics_event_webhook(request):
@@ -187,7 +231,6 @@ def analytics_event_webhook(request):
         client = MotherDuckClient()
         
         if event_type == "auth_event":
-            # 認証イベント
             client.insert_auth_event(event_data)
         else:
             return Response({
@@ -204,56 +247,3 @@ def analytics_event_webhook(request):
         return Response({
             "error": str(e)
         }, status=500)
-
-@method_decorator(ratelimit(key='ip', rate='5/5m', method='POST', block=True), name='dispatch')
-class CustomLoginView(LoginView):
-    """
-    カスタムログインビュー
-    
-    - レート制限（5回/5分）
-    - JWT Cookie自動発行
-    - 分析ログ記録（MotherDuck）
-    """
-    
-    def post(self, request, *args, **kwargs):
-        response = super().post(request, *args, **kwargs)
-        
-        # ログイン成功時のみ記録
-        if response.status_code == 200:
-            # 分析ログ記録（同期処理、軽量なのでOK）
-            AnalyticsService.log_auth_event(
-                user=self.user,
-                event_type="login",
-                request=request,
-                success=True
-            )
-        
-        return response
-
-@method_decorator(ratelimit(key='ip', rate='3/1h', method='POST', block=True), name='dispatch')
-class CustomRegisterView(RegisterView):
-    """
-    カスタム登録ビュー
-    
-    - レート制限（3回/1時間）
-    - JWT Cookie自動発行
-    - 分析ログ記録（MotherDuck）
-    """
-    
-    def create(self, request, *args, **kwargs):
-        response = super().create(request, *args, **kwargs)
-        
-        # 登録成功時のみ記録
-        if response.status_code == 201:
-            # ユーザーオブジェクトを取得
-            user = self.user
-            
-            # 分析ログ記録
-            AnalyticsService.log_auth_event(
-                user=user,
-                event_type="register",
-                request=request,
-                success=True
-            )
-        
-        return response
