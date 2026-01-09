@@ -309,3 +309,6 @@ FRONTEND_URL = config("FRONT_URL", default="http://localhost:3000")
 GOOGLE_API_KEY = getenv("GOOGLE_API_KEY")
 UPSTASH_VECTOR_REST_URL = getenv("UPSTASH_VECTOR_REST_URL")
 UPSTASH_VECTOR_REST_TOKEN = getenv("UPSTASH_VECTOR_REST_TOKEN")
+
+# ===== MotherDuck =====
+MOTHERDUCK_TOKEN = config('MOTHERDUCK_TOKEN', default='')
