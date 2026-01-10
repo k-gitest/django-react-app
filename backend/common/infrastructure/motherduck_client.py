@@ -76,6 +76,35 @@ class MotherDuckClient:
                     hour INTEGER GENERATED ALWAYS AS (EXTRACT(HOUR FROM created_at))
                 )
             """)
+
+            # 4. Todoイベントテーブル
+            self._conn.execute("""
+                CREATE TABLE IF NOT EXISTS django_react_app.logs.todo_events (
+                    id UUID DEFAULT uuid() PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    todo_id INTEGER NOT NULL,
+                    event_type VARCHAR NOT NULL,  -- 'create', 'update', 'delete', 'complete'
+                    
+                    -- Todoの内容（イベント発生時のスナップショット）
+                    todo_title VARCHAR,
+                    priority VARCHAR,  -- 'LOW', 'MEDIUM', 'HIGH'
+                    progress INTEGER,  -- 0-100
+                    is_completed BOOLEAN,
+                    
+                    -- 変更内容（updateイベントの場合）
+                    changed_fields VARCHAR,  -- JSON文字列: {"priority": ["LOW", "HIGH"], "progress": [0, 50]}
+                    
+                    -- 削除理由（deleteイベントの場合）
+                    deletion_reason VARCHAR,  -- 'completed', 'cancelled', 'duplicate', 'other'
+                    
+                    -- メタデータ
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    
+                    -- 分析用の計算カラム
+                    date DATE GENERATED ALWAYS AS (CAST(created_at AS DATE)),
+                    hour INTEGER GENERATED ALWAYS AS (EXTRACT(HOUR FROM created_at))
+                )
+            """)
             
             logger.info("MotherDuck schema initialized successfully")
         except Exception as e:
@@ -119,6 +148,50 @@ class MotherDuckClient:
             return True
         except Exception as e:
             logger.error(f"Failed to insert auth event: {e}")
+            return False
+
+    def insert_todo_event(self, event_data: dict) -> bool:
+        """
+        TodoイベントをMotherDuckに挿入
+        
+        Args:
+            event_data: {
+                "user_id": int,
+                "todo_id": int,
+                "event_type": str,  # 'create', 'update', 'delete', 'complete'
+                "todo_title": str,
+                "priority": str,
+                "progress": int,
+                "is_completed": bool,
+                "changed_fields": str (optional),  # JSON文字列
+                "deletion_reason": str (optional),
+            }
+        
+        Returns:
+            bool: 成功/失敗
+        """
+        try:
+            self._conn.execute("""
+                INSERT INTO django_react_app.logs.todo_events 
+                (user_id, todo_id, event_type, todo_title, 
+                priority, progress, is_completed, changed_fields, deletion_reason)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, [
+                event_data.get("user_id"),
+                event_data.get("todo_id"),
+                event_data.get("event_type"),
+                event_data.get("todo_title"),
+                event_data.get("priority"),
+                event_data.get("progress"),
+                event_data.get("is_completed"),
+                event_data.get("changed_fields"),
+                event_data.get("deletion_reason"),
+            ])
+            
+            logger.info(f"Todo event inserted: {event_data.get('event_type')} for todo {event_data.get('todo_id')}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to insert todo event: {e}")
             return False
     
     def query(self, sql: str):
