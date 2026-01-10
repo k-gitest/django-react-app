@@ -1,11 +1,12 @@
 from django.urls import path, include
 from . import views
-from .views import CustomLoginView, CustomRegisterView
+from .views import CustomLoginView, CustomRegisterView, CustomLogoutView
 
 urlpatterns = [
     # カスタムビュー
     path('login/', CustomLoginView.as_view(), name='rest_login'),
     path('registration/', CustomRegisterView.as_view(), name='rest_register'),
+    path('logout/', CustomLogoutView.as_view(), name='rest_logout'),
 
     # その他のdj_rest_authエンドポイント（logout, user, token/refreshなど）
     path('', include('dj_rest_auth.urls')),

@@ -3,6 +3,7 @@ from django.db.models import Count, Case, When
 from django.shortcuts import get_object_or_404
 from django.core.cache import cache
 from .qstash_service import TodoQStashService
+from .analytics_service import TodoAnalyticsService
 import logging
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,7 @@ class TodoService:
         タスクの作成
         
         ベクトルインデックスは非同期で実行（QStash経由）
+        分析ログをMotherDuckに記録
         
         Args:
             user: 作成者
@@ -50,6 +52,8 @@ class TodoService:
         except Exception as e:
             # QStash送信失敗でもTodo作成は成功
             logger.error(f"Failed to queue vector indexing: {e}")
+
+        TodoAnalyticsService.log_todo_create(user=user, todo=todo)
         
         return todo
 
@@ -59,6 +63,7 @@ class TodoService:
         タスクの更新
         
         ベクトルインデックスは非同期で更新（QStash経由）
+        分析ログをMotherDuckに記録
         
         Args:
             todo_id: 更新対象のID
@@ -67,11 +72,25 @@ class TodoService:
         """
         # 認可チェック: 存在確認 + 本人確認
         todo = get_object_or_404(Todo, id=todo_id, user=user)
+
+        # 変更前の値を保存（分析用）
+        old_values = {
+            "todo_title": todo.todo_title,
+            "priority": todo.priority,
+            "progress": todo.progress,
+        }
         
         # 更新
         for key, value in validated_data.items():
             setattr(todo, key, value)
         todo.save()
+
+        # 変更されたフィールドを検出
+        changed_fields = {}
+        for key, old_value in old_values.items():
+            new_value = getattr(todo, key)
+            if old_value != new_value:
+                changed_fields[key] = [old_value, new_value]
         
         TodoService._invalidate_stats_cache(user.id)
         
@@ -83,6 +102,14 @@ class TodoService:
         except Exception as e:
             logger.error(f"Failed to queue vector indexing: {e}")
         
+        # 完了イベントの検出
+        if old_values["progress"] < 100 and todo.progress == 100:
+            # 完了イベント
+            TodoAnalyticsService.log_todo_complete(user=user, todo=todo)
+        elif changed_fields:
+            # 通常の更新イベント（変更がある場合のみ）
+            TodoAnalyticsService.log_todo_update(user=user, todo=todo, changed_fields=changed_fields)
+        
         return todo
 
     @staticmethod
@@ -91,6 +118,7 @@ class TodoService:
         タスクの削除
         
         ベクトルインデックスは非同期で削除（QStash経由）
+        分析ログをMotherDuckに記録
         
         Args:
             todo_id: 削除対象のID
@@ -106,6 +134,12 @@ class TodoService:
                 logger.warning(f"QStash queue failed: {result['error']}")
         except Exception as e:
             logger.error(f"Failed to queue vector deletion: {e}")
+
+        # 削除理由を判定
+        deletion_reason = "completed" if todo.progress == 100 else "cancelled"
+        
+        # 分析ログ記録（削除前に実行）
+        TodoAnalyticsService.log_todo_delete(user=user, todo=todo, deletion_reason=deletion_reason)
         
         todo.delete()
         TodoService._invalidate_stats_cache(user.id)

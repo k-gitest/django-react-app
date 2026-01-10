@@ -2,6 +2,7 @@ from django_ratelimit.decorators import ratelimit
 from django.utils.decorators import method_decorator
 from dj_rest_auth.registration.views import RegisterView
 from dj_rest_auth.views import LoginView
+from dj_rest_auth.views import LogoutView
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
 from rest_framework.decorators import api_view, permission_classes
@@ -142,6 +143,20 @@ class CustomRegisterView(RegisterView):
             max_age=int(settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds()),
             **cookie_settings
         )
+
+class CustomLogoutView(LogoutView):
+    def logout(self, request):
+        # ログアウト前にユーザーを特定して記録
+        user = getattr(request, 'user', None)
+        if user and user.is_authenticated:
+            # 引数から use_async=True を削除して呼び出す
+            AnalyticsService.log_auth_event(
+                user=user,
+                event_type="logout",
+                request=request,
+                success=True
+            )
+        return super().logout(request)
 
 
 @api_view(['POST'])
