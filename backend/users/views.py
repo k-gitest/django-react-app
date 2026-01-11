@@ -13,6 +13,7 @@ from .qstash_service import UserQStashService
 from common.permissions import IsQStashAuthenticated
 from common.infrastructure.motherduck_client import MotherDuckClient
 from .analytics_service import AnalyticsService
+import subprocess
 import hmac
 import hashlib
 import logging
@@ -261,4 +262,60 @@ def analytics_event_webhook(request):
         logger.error(f"Analytics webhook error: {e}")
         return Response({
             "error": str(e)
+        }, status=500)
+    
+@api_view(['POST'])
+@permission_classes([IsQStashAuthenticated])
+def dlt_pipeline_webhook(request):
+    """
+    QStashから呼ばれるdltパイプライン実行Webhook
+    
+    15分ごとにQStashから呼ばれ、PostgreSQL → MotherDuck 同期を実行
+    """
+    logger.info("=" * 60)
+    logger.info("dlt pipeline webhook called")
+    logger.info(f"Request from: {request.META.get('REMOTE_ADDR')}")
+    logger.info("=" * 60)
+    
+    try:
+        # dltパイプラインを実行
+        result = subprocess.run(
+            ['python', '/workspace/backend/dlt_worker/pipeline.py'],
+            capture_output=True,
+            text=True,
+            timeout=300  # 5分タイムアウト
+        )
+        
+        if result.returncode == 0:
+            logger.info("dlt pipeline executed successfully")
+            logger.info(f"Output: {result.stdout}")
+            
+            return Response({
+                "status": "success",
+                "message": "Pipeline executed successfully",
+                "output": result.stdout[-500:]  # 最後の500文字のみ返す
+            })
+        else:
+            logger.error(f"dlt pipeline failed: {result.stderr}")
+            
+            return Response({
+                "status": "error",
+                "message": "Pipeline execution failed",
+                "error": result.stderr[-500:]
+            }, status=500)
+    
+    except subprocess.TimeoutExpired:
+        logger.error("dlt pipeline timeout (5 minutes)")
+        
+        return Response({
+            "status": "error",
+            "message": "Pipeline execution timeout (5 minutes)"
+        }, status=500)
+    
+    except Exception as e:
+        logger.error(f"dlt pipeline error: {e}")
+        
+        return Response({
+            "status": "error",
+            "message": str(e)
         }, status=500)
