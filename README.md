@@ -12,6 +12,7 @@ Django/React モノレポベースのSPAアプリケーション
 - 🎯 **チーム開発に適したレイヤードアーキテクチャ**: 複数人での並行開発を想定し、View/Service/Modelの責務を分離。コードの衝突（コンフリクト）を最小限に抑え、テスタビリティを向上させています。
 - 🔐 **JWT認証**: dj-rest-auth + simplejwtによる堅牢な認証システム
 - 🔍 **AIセマンティック検索**: Google Gemini API + Upstash Vectorによる自然言語検索。「明日の会議関連」などの曖昧な検索が可能
+- 📊 **データ分析基盤（MotherDuck Analytics）**: イベントログのリアルタイム記録とDB状態の定期同期により、ユーザー行動とデータ状態を包括的に分析可能
 - 🐳 **フロントエンド独立開発 (MSW)**: APIの実装を待たずに開発・テストが可能なMSWを活用。バックエンドへの依存を減らし、開発スピードを最大化します。
 - 🧪 **テスト充実**: Playwright(E2E)、Vitest(Unit)、Django TestCase
 - ☁️ **オンボーディングの高速化**: DockerおよびGitHub Codespacesに完全対応。環境構築の手間を省き、新メンバーが即日コードを書ける環境を提供します。
@@ -24,6 +25,7 @@ Django/React モノレポベースのSPAアプリケーション
 - **API**: Django REST Framework 3.14.0
 - **認証**: dj-rest-auth 7.0.1, djangorestframework-simplejwt 5.5.1
 - **データベース**: PostgreSQL 17 (psycopg2-binary 2.9.9)
+- **データウェアハウス**: MotherDuck (DuckDB), dlt 1.20.0
 - **キャッシュ/セッション**: Redis (Upstash), django-redis 5.4.0
 - **レート制限**: django-ratelimit 4.1.0
 - **メール送信**: Resend 0.8.0
@@ -65,9 +67,13 @@ Django/React モノレポベースのSPAアプリケーション
 │   ├── common/
 │   │   ├── infrastructure/
 │   │   │   ├── email_client.py
-│   │   │   └── qstash_client.py
+│   │   │   ├── qstash_client.py
+│   │   │   └── motherduck_client.py
 │   │   ├── security.py
 │   │   └── permissions.py
+│   │
+│   ├── dlt_worker/
+│   │   └── pipeline.py
 │   │
 │   ├── users/                 # ユーザー管理アプリケーション
 │   │   ├── models.py          # データモデル定義
@@ -78,6 +84,7 @@ Django/React モノレポベースのSPAアプリケーション
 │   │   ├── serializers.py     # DRFシリアライザ
 │   │   ├── email_service.py   
 │   │   ├── qstash_service.py  
+│   │   ├── analytics_service.py  
 │   │   ├── tests/             # テストコード
 │   │   │   ├── test_models.py
 │   │   │   └── test_services.py
@@ -94,6 +101,7 @@ Django/React モノレポベースのSPAアプリケーション
 │   │   ├── qstash_service.py
 │   │   ├── embedding_service.py
 │   │   ├── vector_service.py
+│   │   ├── analytics_service.py
 │   │   └── urls.py                     
 │   │
 │   ├── webhooks/                     
@@ -1365,6 +1373,592 @@ chunks = splitter.split_text(long_document)
   - セマンティック検索 + キーワード検索の組み合わせ
 - 🚀 リアルタイムインデックス更新
 - **コスト**: $70-200+/月
+
+---
+
+## MotherDuck Analytics
+
+このプロジェクトでは、**MotherDuck**（クラウドDWH）を使用して、アプリケーションのイベントログとDB状態を分析可能にしています。
+
+---
+
+### アーキテクチャ選定の経緯
+
+データ同期方法として、当初3つのアプローチを検討しました：
+
+1. **CDC（PostgreSQL論理レプリケーション）** - WALをリアルタイムで読み取る真のCDC
+2. **Webhook方式** - CRUD操作ごとに明示的に記録
+3. **dlt バッチETL** - 定期的に増分SELECTで同期
+
+最終的に **Webhook + dlt バッチETL のハイブリッドアプローチ** を採用しました。
+
+---
+
+### CDC（論理レプリケーション）を見送った理由
+
+#### 1. 不可逆的な変更
+
+PostgreSQLの論理レプリケーションは、一度有効化すると**元に戻すことが非常に困難**です。
+```sql
+-- wal_levelを変更（不可逆）
+ALTER SYSTEM SET wal_level = 'logical';
+-- ⚠️ PostgreSQL再起動が必要
+-- ⚠️ 一度変更すると戻すのが困難
+
+-- 問題が発生した場合
+ALTER SYSTEM SET wal_level = 'replica';
+-- ⚠️ また再起動が必要
+-- ⚠️ Replication Slotの削除が必要
+-- ⚠️ WALが溜まっている場合、ディスク容量圧迫
+-- ⚠️ 復旧が非常に困難
+```
+
+**リスク**:
+- 本番DBに影響を与える可能性
+- ダウンタイムが発生する可能性
+- データ損失のリスク
+
+---
+
+#### 2. Neonの制約
+```yaml
+Neon（使用中のPostgreSQL）の制限:
+  ❌ wal_level = 'logical' への変更が制限されている
+  ❌ Replication Slotの作成が制限されている
+  ❌ サーバーレス特性と相性が悪い
+```
+
+---
+
+#### 3. 常駐プロセスが必要（Render無料枠では不可能）
+
+論理レプリケーションには、24時間365日動作する**CDCコンシューマー**が必要です。
+```python
+# CDCコンシューマー（常駐プロセス）の例
+
+import psycopg2
+from psycopg2.extras import LogicalReplicationConnection
+
+# 無限ループで変更を受信
+while True:
+    msg = cur.read_message()
+    # MotherDuckに書き込み
+    ...
+```
+
+**Renderの問題**:
+```yaml
+無料プラン:
+  ❌ 常駐プロセスを実行できない
+  ❌ リクエストがない時はスリープする
+
+有料プラン（$7/月〜）:
+  ✅ 常駐プロセス可能
+  ⚠️ コストが増加
+```
+
+---
+
+#### 4. WALのディスク使用量問題
+```yaml
+WALの肥大化:
+  - wal_level = 'logical' は通常より多くの情報を保存
+  - Replication Slotが読み取るまでWALが削除されない
+  - CDCコンシューマー停止時、WALが無限に増加
+
+リスク:
+  ⚠️ ディスク容量の圧迫
+  ⚠️ パフォーマンス低下
+  ⚠️ DBクラッシュの可能性
+```
+
+---
+
+#### 5. インフラの複雑化
+```yaml
+必要なコンポーネント:
+  - Publication/Subscription設定
+  - Replication Slot管理
+  - CDCコンシューマー（常駐プロセス）
+  - エラーハンドリング
+  - 監視・アラート
+  - WALクリーンアップ
+
+学習時間:
+  - 最低でも1〜2週間
+  - 本番運用レベルまで1〜2ヶ月
+```
+
+---
+
+### dltはCDCではない
+
+**誤解しやすいポイント**: dltの`sql_database` Sourceは、WALを読み取るCDCではなく、**バッチETL**（増分SELECT）です。
+
+#### dltの実際の動作
+```python
+# dlt sql_database の実際の動作
+
+import dlt
+from dlt.sources.sql_database import sql_database
+
+source = sql_database(
+    credentials={...},
+    table_names=["custom_user", "todos_todo"],
+    incremental=dlt.sources.incremental("updated_at"),  # ← 重要
+)
+
+# 実際に実行されるのは単なるSQLクエリ:
+# SELECT * FROM custom_user WHERE updated_at > '前回実行時刻' ORDER BY updated_at
+# SELECT * FROM todos_todo WHERE updated_at > '前回実行時刻' ORDER BY updated_at
+
+# ❌ WALを読まない
+# ❌ 論理レプリケーション不要
+# ❌ Replication Slot不要
+# ✅ 通常のSELECT文のみ
+```
+
+#### CDCとdltの違い
+
+| 項目 | CDC（論理レプリケーション） | dlt バッチETL |
+|------|----------------------------|-------------|
+| データ取得方法 | WALをリアルタイム読み取り | 定期的にSELECT実行 |
+| リアルタイム性 | 数秒 | 15分 |
+| wal_level変更 | ❌ 必須（不可逆） | ✅ 不要 |
+| Replication Slot | ❌ 必要 | ✅ 不要 |
+| 常駐プロセス | ❌ 必要 | ✅ 不要 |
+| WAL肥大化リスク | ❌ あり | ✅ なし |
+| 実装複雑度 | 非常に複雑 | シンプル |
+| ロールバック | ❌ 困難 | ✅ 簡単 |
+
+---
+
+### スケジュール実行方法の比較
+
+dltパイプラインの定期実行方法として、**Render Cron Jobs** と **QStash Schedules** を比較しました。
+
+#### Render Cron Jobs
+```yaml
+コスト:
+  基本料金: $1/月〜
+  実行時間課金: $0.10/時間
+  
+例: 15分ごと実行（1回2分）
+  月間実行時間: 96時間
+  無料枠: 7時間/月
+  超過料金: $8.9/月
+  
+  総コスト: $9.9/月 ❌
+```
+
+#### QStash Schedules（採用）
+```yaml
+コスト:
+  QStash: 無料枠 500リクエスト/日
+  Render: 既存Web Service（追加コストなし）
+  
+例: 15分ごと実行
+  日間実行: 96回 < 500回（無料枠内）
+  
+  総コスト: $0/月 ✅
+
+年間節約: $118.8
+```
+
+**結論**: QStash Schedulesを採用（無料、既存インフラ活用）
+
+---
+
+### 最終的な選択：ハイブリッドアプローチ
+```
+┌─────────────────────────────────────────────────────────────┐
+│         ハイブリッドアプローチ                               │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  【Webhook方式】（同期処理、10-50ms）                        │
+│    目的: イベントログの記録                                  │
+│    利点: リアルタイム、シンプル                              │
+│                                                             │
+│    Django View                                              │
+│      └─ AnalyticsService.log_auth_event()                  │
+│          └─ MotherDuckClient.insert_auth_event()           │
+│              └─ MotherDuck: logs.auth_events               │
+│                                                             │
+│    ⚠️ WAL不要、Replication Slot不要                         │
+│    ⚠️ 常駐プロセス不要                                      │
+│    ⚠️ wal_level変更不要                                     │
+│                                                             │
+│  【dlt バッチETL】（15分ごと、QStash経由）                   │
+│    目的: DB状態の定期同期                                   │
+│    利点: 自動化、増分読み込み                                │
+│                                                             │
+│    QStash Schedules (*/15 * * * *)                         │
+│      └─ Webhook: /api/v1/webhooks/dlt-pipeline             │
+│          └─ dlt_worker/pipeline.py（数秒で終了）            │
+│              └─ SELECT * WHERE updated_at > '...'          │
+│                  └─ MotherDuck: dwh.*                      │
+│                                                             │
+│    ⚠️ WAL不要、通常のSELECT文のみ                           │
+│    ⚠️ 常駐プロセス不要（QStashが起動）                       │
+│    ⚠️ wal_level変更不要                                     │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 比較表
+
+| 項目 | CDC（論理レプリケーション） | Webhook方式（採用） | dlt バッチETL（採用） |
+|------|----------------------------|----------------|------------------|
+| **リアルタイム性** | ⭐⭐⭐⭐⭐（数秒） | ⭐⭐⭐⭐⭐（即座） | ⭐⭐⭐☆☆（15分） |
+| **wal_level変更** | ❌ 必須（不可逆） | ✅ 不要 | ✅ 不要 |
+| **Replication Slot** | ❌ 必要 | ✅ 不要 | ✅ 不要 |
+| **常駐プロセス** | ❌ 必要 | ✅ 不要 | ✅ 不要 |
+| **WAL肥大化** | ❌ リスクあり | ✅ なし | ✅ なし |
+| **ロールバック** | ❌ 困難 | ✅ 簡単 | ✅ 簡単 |
+| **Neon無料プラン** | ❌ 制限あり | ✅ 問題なし | ✅ 問題なし |
+| **Render無料枠** | ❌ 不可 | ✅ 可能 | ✅ 可能 |
+| **実装複雑度** | 非常に複雑 | 中程度 | シンプル |
+| **学習コスト** | 1〜2ヶ月 | 数時間 | 1週間 |
+| **月額コスト** | $40〜50 | $0 | $0 |
+| **データ完全性** | 完全 | 記録漏れリスク | 完全 |
+| **保守性** | 難しい | 中程度 | 簡単 |
+
+---
+
+### 採用理由まとめ
+```yaml
+Webhook + dlt バッチETL を採用した理由:
+
+1. 技術的メリット:
+   ✅ wal_level変更不要
+   ✅ Replication Slot不要
+   ✅ 常駐プロセス不要
+   ✅ WAL肥大化リスクなし
+   ✅ 簡単にロールバック可能
+
+2. 運用メリット:
+   ✅ シンプルで保守しやすい
+   ✅ 学習コストが低い
+   ✅ デバッグが容易
+   ✅ エラー復旧が簡単
+
+3. コストメリット:
+   ✅ $0/月で運用可能
+   ✅ Neon/Render無料プランで動作
+   ✅ QStash無料枠内
+
+4. 要件適合性:
+   ✅ イベントログ: リアルタイム記録
+   ✅ DB状態: 15分ごとに同期
+   ✅ 分析に十分な粒度
+   ✅ 将来的な拡張も可能
+```
+
+---
+
+### アーキテクチャ概要
+```
+┌─────────────────────────────────────────────────────────────┐
+│         MotherDuck Analytics Pipeline                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  【同期的なイベント記録】（10-50ms）                         │
+│    ├─ logs.auth_events                                      │
+│    │   - ログイン・ログアウト・登録イベント                  │
+│    │   - リアルタイムで記録                                 │
+│    │                                                        │
+│    └─ logs.todo_events                                      │
+│        - Todo作成・更新・削除・完了イベント                 │
+│        - リアルタイムで記録                                 │
+│                                                             │
+│  【非同期的なDB状態同期】（15分ごと）                        │
+│    ├─ dwh.custom_user                                       │
+│    │   - 全ユーザーの最終状態                               │
+│    │   - dlt（Data Load Tool）による増分同期               │
+│    │                                                        │
+│    └─ dwh.todos_todo                                        │
+│        - 全Todoの最終状態                                   │
+│        - dlt（Data Load Tool）による増分同期               │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 1. 同期的なイベント記録（Realtime Logging）
+
+**目的**: ユーザーの行動をリアルタイムで記録
+
+**実装場所**:
+- `backend/users/analytics_service.py` - 認証イベント記録
+- `backend/todos/analytics_service.py` - Todoイベント記録
+- `backend/common/infrastructure/motherduck_client.py` - MotherDuck接続
+
+**記録されるイベント**:
+
+| テーブル | イベント種別 | 記録タイミング |
+|---------|------------|--------------|
+| `logs.auth_events` | login, logout, register, login_failed | 認証時に即座に記録 |
+| `logs.todo_events` | create, update, delete, complete | CRUD操作時に即座に記録 |
+
+**特徴**:
+- ✅ リアルタイム記録（10-50ms）
+- ✅ イベント駆動型
+- ✅ 失敗してもアプリケーションの動作は継続
+- ✅ タイムスタンプ自動付与
+
+**使用例**:
+```python
+# ログインイベントの記録
+AnalyticsService.log_auth_event(
+    user=user,
+    event_type="login",
+    request=request,
+    success=True
+)
+
+# Todo作成イベントの記録
+TodoAnalyticsService.log_todo_create(
+    user=user,
+    todo=todo
+)
+```
+
+**分析クエリ例**:
+```sql
+-- 時間帯別のログイン数
+SELECT 
+    hour,
+    COUNT(*) as login_count
+FROM my_db.logs.auth_events
+WHERE event_type = 'login'
+GROUP BY hour
+ORDER BY hour;
+
+-- Todo完了率
+WITH todo_lifecycle AS (
+    SELECT 
+        todo_id,
+        MAX(CASE WHEN event_type = 'complete' THEN 1 ELSE 0 END) as is_completed
+    FROM my_db.logs.todo_events
+    GROUP BY todo_id
+)
+SELECT 
+    COUNT(*) as total_todos,
+    SUM(is_completed) as completed_todos,
+    ROUND(SUM(is_completed) * 100.0 / COUNT(*), 2) as completion_rate
+FROM todo_lifecycle;
+```
+
+---
+
+### 2. 非同期的なDB状態同期（Batch ETL）
+
+**目的**: DBの最終状態を定期的にDWHに同期して、分析を可能にする
+
+**実装場所**:
+- `backend/dlt_worker/pipeline.py` - メインパイプライン
+- `backend/users/views.py::dlt_pipeline_webhook` - Webhookエンドポイント
+- QStash Schedules - スケジュール管理
+
+**同期されるテーブル**:
+
+| テーブル | 同期方式 | 実行頻度 |
+|---------|---------|---------|
+| `dwh.custom_user` | 増分同期（merge） | 15分ごと |
+| `dwh.todos_todo` | 増分同期（merge） | 15分ごと |
+
+**技術スタック**:
+- **dlt** (Data Load Tool) - PostgreSQL → MotherDuck ETL
+- **QStash** (Upstash) - スケジュール実行（Cron）
+- **MotherDuck** - クラウドDWH
+
+**特徴**:
+- ✅ 増分読み込み（`updated_at` カラムで差分のみ取得）
+- ✅ 自動スケジュール（15分ごと実行）
+- ✅ QStash署名検証（セキュリティ）
+- ✅ エラーハンドリング・リトライ機能
+
+**手動実行**:
+```bash
+# パイプラインを手動実行
+docker compose exec backend python dlt_worker/pipeline.py
+
+# 期待される出力:
+# ============================================================
+# Starting dlt pipeline
+# Tables to sync: ['custom_user', 'todos_todo']
+# Connecting to PostgreSQL: ...
+# Connecting to MotherDuck...
+# Pipeline completed successfully!
+# ============================================================
+```
+
+**分析クエリ例**:
+```sql
+-- 現在のユーザー数
+SELECT COUNT(*) as total_users 
+FROM my_db.django_react_app_dwh.custom_user
+WHERE is_active = true;
+
+-- ユーザーごとの未完了Todo数
+SELECT 
+    user_id,
+    COUNT(*) as incomplete_todos,
+    AVG(progress) as avg_progress
+FROM my_db.django_react_app_dwh.todos_todo
+WHERE progress < 100
+GROUP BY user_id
+ORDER BY incomplete_todos DESC;
+
+-- ユーザー登録日と現在のTodo状況
+SELECT 
+    u.id,
+    u.email,
+    u.date_joined as registered_at,
+    COUNT(t.id) as current_todo_count,
+    AVG(t.progress) as avg_progress
+FROM my_db.django_react_app_dwh.custom_user u
+LEFT JOIN my_db.django_react_app_dwh.todos_todo t ON u.id = t.user_id
+GROUP BY u.id, u.email, u.date_joined
+ORDER BY current_todo_count DESC;
+```
+
+---
+
+### 3. イベントログとDB状態の使い分け
+
+| 分析内容 | 使用するデータ | 理由 |
+|---------|-------------|------|
+| ユーザーの行動履歴 | `logs.auth_events`, `logs.todo_events` | イベントログは履歴が残る |
+| 現在のユーザー数 | `dwh.custom_user` | DB状態は最新の状態を反映 |
+| Todo完了までの時間 | `logs.todo_events` | イベントログに作成・完了のタイムスタンプがある |
+| 現在の未完了Todo数 | `dwh.todos_todo` | DB状態は最新の進捗を反映 |
+| ユーザー登録後の行動分析 | 両方を結合 | 登録イベント + 現在のTodo状況 |
+
+---
+
+### 4. 環境変数
+
+以下の環境変数が必要です：
+```bash
+# PostgreSQL (Neon)
+PGHOST=ep-xxx.aws.neon.tech
+PGDATABASE=neondb
+PGUSER=neondb_owner
+PGPASSWORD=xxx
+PGPORT=5432
+
+# MotherDuck
+MOTHERDUCK_TOKEN=your_motherduck_token
+
+# QStash (スケジュール実行用)
+QSTASH_TOKEN=qstash_xxx
+QSTASH_CURRENT_SIGNING_KEY=sig_xxx
+QSTASH_NEXT_SIGNING_KEY=sig_xxx
+
+# Webhook Base URL（署名検証用）
+WEBHOOK_BASE_URL=https://your-app.onrender.com
+```
+
+---
+
+### 5. QStash Schedules 設定
+
+**スケジュール名**: `dlt-pipeline-sync`
+
+**Cron式**: `*/15 * * * *` （15分ごと）
+
+**Destination**: `https://your-app.onrender.com/api/v1/webhooks/dlt-pipeline`
+
+**Headers**:
+```
+Content-Type: application/json
+```
+
+**Retry設定**:
+- Retries: 3
+- Retry Delay: `5000 * (retried + 1)` （5秒、10秒、15秒）
+
+---
+
+### 6. MotherDuckでの確認方法
+
+#### MotherDuck Web UIにアクセス
+```
+https://app.motherduck.com/
+```
+
+#### データベース構造
+```
+my_db/
+├── logs/
+│   ├── auth_events (認証イベントログ)
+│   └── todo_events (Todoイベントログ)
+│
+└── django_react_app_dwh/
+    ├── custom_user (ユーザー最終状態)
+    ├── todos_todo (Todo最終状態)
+    ├── _dlt_version (dltメタデータ)
+    ├── _dlt_loads (同期履歴)
+    └── _dlt_pipeline_state (パイプライン状態)
+```
+
+#### 同期履歴の確認
+```sql
+SELECT 
+    load_id,
+    schema_name,
+    status,
+    inserted_at
+FROM my_db.django_react_app_dwh._dlt_loads
+ORDER BY inserted_at DESC
+LIMIT 10;
+```
+
+---
+
+### 7. トラブルシューティング
+
+#### パイプラインが失敗する
+```bash
+# ログ確認
+docker compose logs backend | grep -i "dlt"
+
+# 環境変数確認
+docker compose exec backend python -c "
+import os
+print('PGHOST:', os.getenv('PGHOST'))
+print('MOTHERDUCK_TOKEN:', 'set' if os.getenv('MOTHERDUCK_TOKEN') else 'not set')
+"
+
+# 手動実行
+docker compose exec backend python dlt_worker/pipeline.py
+```
+
+#### Webhook が 401 Unauthorized
+```bash
+# QStash署名キーを確認
+docker compose exec backend python -c "
+from django.conf import settings
+print('QSTASH_CURRENT_SIGNING_KEY:', settings.QSTASH_CURRENT_SIGNING_KEY[:10] + '...')
+print('WEBHOOK_BASE_URL:', os.getenv('WEBHOOK_BASE_URL'))
+"
+```
+
+#### MotherDuckにデータが表示されない
+```sql
+-- スキーマを確認
+SHOW DATABASES;
+SHOW SCHEMAS FROM my_db;
+SHOW TABLES FROM my_db.django_react_app_dwh;
+
+-- 同期履歴を確認
+SELECT * FROM my_db.django_react_app_dwh._dlt_loads 
+ORDER BY inserted_at DESC LIMIT 5;
+```
 
 ---
 
