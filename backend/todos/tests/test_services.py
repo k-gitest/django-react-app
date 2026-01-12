@@ -591,3 +591,171 @@ class TodoServiceTestCase(TestCase):
             self.assertEqual(todo.todo_title, '新しいタスク')
             # QStashは呼ばれた
             mock_queue.assert_called_once()
+
+    # ============================================
+    # MotherDuck Analytics のテスト
+    # ============================================
+
+    def test_create_todo_logs_analytics(self):
+        """create_todo: Todo作成時に分析ログが記録される"""
+        from unittest.mock import patch
+        
+        with patch('todos.service.TodoQStashService.queue_vector_indexing') as mock_queue, \
+            patch('todos.service.TodoAnalyticsService.log_todo_create') as mock_analytics:
+            mock_queue.return_value = {"success": True, "message_id": "msg_123", "error": None}
+            
+            validated_data = {
+                'todo_title': '新しいタスク',
+                'priority': Todo.Priority.HIGH,
+                'progress': 0
+            }
+            
+            # Act
+            todo = TodoService.create_todo(self.user1, validated_data)
+            
+            # Assert
+            self.assertIsNotNone(todo.id)
+            mock_analytics.assert_called_once_with(user=self.user1, todo=todo)
+
+    def test_update_todo_logs_analytics_on_change(self):
+        """update_todo: Todo更新時に分析ログが記録される（変更がある場合）"""
+        from unittest.mock import patch
+        
+        with patch('todos.service.TodoQStashService.queue_vector_indexing') as mock_queue, \
+            patch('todos.service.TodoAnalyticsService.log_todo_update') as mock_analytics:
+            mock_queue.return_value = {"success": True, "message_id": "msg_123", "error": None}
+            
+            validated_data = {
+                'todo_title': '更新されたタスク',
+                'progress': 75
+            }
+            
+            # Act
+            updated_todo = TodoService.update_todo(
+                self.todo1.id,
+                self.user1,
+                validated_data
+            )
+            
+            # Assert
+            self.assertEqual(updated_todo.todo_title, '更新されたタスク')
+            mock_analytics.assert_called_once()
+            
+            # 呼び出し引数を確認
+            call_kwargs = mock_analytics.call_args[1]
+            self.assertEqual(call_kwargs['user'], self.user1)
+            self.assertEqual(call_kwargs['todo'], updated_todo)
+            self.assertIn('changed_fields', call_kwargs)
+
+    def test_update_todo_logs_complete_event(self):
+        """update_todo: 完了時に完了イベントがログされる"""
+        from unittest.mock import patch
+        
+        with patch('todos.service.TodoQStashService.queue_vector_indexing') as mock_queue, \
+            patch('todos.service.TodoAnalyticsService.log_todo_complete') as mock_complete, \
+            patch('todos.service.TodoAnalyticsService.log_todo_update') as mock_update:
+            mock_queue.return_value = {"success": True, "message_id": "msg_123", "error": None}
+            
+            # 50% → 100% に更新
+            validated_data = {'progress': 100}
+            
+            # Act
+            updated_todo = TodoService.update_todo(
+                self.todo1.id,
+                self.user1,
+                validated_data
+            )
+            
+            # Assert
+            self.assertEqual(updated_todo.progress, 100)
+            # 完了イベントが記録される
+            mock_complete.assert_called_once_with(user=self.user1, todo=updated_todo)
+            # 通常の更新イベントは記録されない
+            mock_update.assert_not_called()
+
+    def test_update_todo_no_analytics_when_no_change(self):
+        """update_todo: 変更がない場合は分析ログが記録されない"""
+        from unittest.mock import patch
+        
+        with patch('todos.service.TodoQStashService.queue_vector_indexing') as mock_queue, \
+            patch('todos.service.TodoAnalyticsService.log_todo_update') as mock_analytics:
+            mock_queue.return_value = {"success": True, "message_id": "msg_123", "error": None}
+            
+            # 同じ値で更新（変更なし）
+            validated_data = {
+                'todo_title': 'タスク1',  # 元の値と同じ
+                'progress': 50  # 元の値と同じ
+            }
+            
+            # Act
+            updated_todo = TodoService.update_todo(
+                self.todo1.id,
+                self.user1,
+                validated_data
+            )
+            
+            # Assert
+            # 変更がないため、分析ログは記録されない
+            mock_analytics.assert_not_called()
+
+    def test_delete_todo_logs_analytics_with_reason(self):
+        """delete_todo: Todo削除時に分析ログが記録される（理由付き）"""
+        from unittest.mock import patch
+        
+        with patch('todos.service.TodoQStashService.queue_vector_indexing') as mock_queue, \
+            patch('todos.service.TodoAnalyticsService.log_todo_delete') as mock_analytics:
+            mock_queue.return_value = {"success": True, "message_id": "msg_123", "error": None}
+            
+            todo_id = self.todo1.id
+            
+            # Act
+            TodoService.delete_todo(todo_id, self.user1)
+            
+            # Assert
+            mock_analytics.assert_called_once()
+            call_kwargs = mock_analytics.call_args[1]
+            self.assertEqual(call_kwargs['user'], self.user1)
+            self.assertEqual(call_kwargs['deletion_reason'], 'cancelled')  # progress < 100
+
+    def test_delete_completed_todo_logs_completed_reason(self):
+        """delete_todo: 完了済みTodo削除時は理由が'completed'"""
+        from unittest.mock import patch
+        
+        with patch('todos.service.TodoQStashService.queue_vector_indexing') as mock_queue, \
+            patch('todos.service.TodoAnalyticsService.log_todo_delete') as mock_analytics:
+            mock_queue.return_value = {"success": True, "message_id": "msg_123", "error": None}
+            
+            # todo2はprogress=100
+            todo_id = self.todo2.id
+            
+            # Act
+            TodoService.delete_todo(todo_id, self.user1)
+            
+            # Assert
+            mock_analytics.assert_called_once()
+            call_kwargs = mock_analytics.call_args[1]
+            self.assertEqual(call_kwargs['deletion_reason'], 'completed')  # progress == 100
+
+    def test_analytics_continues_on_motherduck_failure(self):
+        """create_todo: MotherDuck記録失敗でもTodo作成は成功する"""
+        from unittest.mock import patch
+        
+        with patch('todos.service.TodoQStashService.queue_vector_indexing') as mock_queue, \
+            patch('todos.service.TodoAnalyticsService.log_todo_create') as mock_analytics:
+            mock_queue.return_value = {"success": True, "message_id": "msg_123", "error": None}
+            # MotherDuckへの記録が失敗
+            mock_analytics.side_effect = Exception("MotherDuck connection error")
+            
+            validated_data = {
+                'todo_title': '新しいタスク',
+                'priority': Todo.Priority.HIGH,
+                'progress': 0
+            }
+            
+            # Act - 例外は発生せず、Todo作成は成功するはず
+            # （実装がtry-exceptで囲まれているか確認）
+            todo = TodoService.create_todo(self.user1, validated_data)
+            
+            # Assert - Todo作成は成功している
+            self.assertIsNotNone(todo.id)
+            self.assertEqual(todo.todo_title, '新しいタスク')

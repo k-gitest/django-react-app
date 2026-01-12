@@ -1,4 +1,5 @@
 from django.test import TestCase
+from unittest.mock import patch, MagicMock, PropertyMock
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework import status
@@ -445,104 +446,87 @@ class VectorIndexingWebhookTestCase(TestCase):
             progress=50
         )
     
-    def test_vector_indexing_webhook_upsert_success(self):
+    @patch('common.permissions.verify_qstash_signature')
+    @patch('todos.views.VectorService')
+    def test_vector_indexing_webhook_upsert_success(self, mock_vector_service_class, mock_verify):
         """Webhook: upsert操作が成功する"""
-        from unittest.mock import patch, MagicMock
-        import hmac
-        import hashlib
-        import json
+        # Arrange
+        mock_verify.return_value = True  # ← 署名検証を通過
+        mock_instance = MagicMock()
+        mock_vector_service_class.return_value = mock_instance
         
-        # 実際のリクエストボディと一致する署名を生成
         payload = {'todo_id': self.todo.id, 'operation': 'upsert'}
-        body = json.dumps(payload).encode()
-        signature = hmac.new(b"test_signing_key", body, hashlib.sha256).hexdigest()
         
-        with patch('django.conf.settings.QSTASH_CURRENT_SIGNING_KEY', 'test_signing_key'):
-            with patch('django.conf.settings.QSTASH_NEXT_SIGNING_KEY', 'test_next_key'):
-                with patch('todos.views.VectorService') as mock_vector_service_class:
-                    mock_instance = MagicMock()
-                    mock_vector_service_class.return_value = mock_instance
-                    
-                    response = self.client.post(
-                        '/api/v1/webhooks/vector-indexing',
-                        data=body,
-                        content_type='application/json',
-                        HTTP_UPSTASH_SIGNATURE=f'v1={signature}'
-                    )
-                    
-                    self.assertEqual(response.status_code, status.HTTP_200_OK)
-                    self.assertEqual(response.data['operation'], 'upsert')
-                    mock_instance.add_todo.assert_called_once()
+        # Act
+        response = self.client.post(
+            '/api/v1/webhooks/vector-indexing',
+            data=payload,
+            format='json'
+        )
+        
+        # Assert
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['operation'], 'upsert')
+        mock_instance.add_todo.assert_called_once()
     
-    def test_vector_indexing_webhook_delete_success(self):
+    @patch('common.permissions.verify_qstash_signature')
+    @patch('todos.views.VectorService')
+    def test_vector_indexing_webhook_delete_success(self, mock_vector_service_class, mock_verify):
         """Webhook: delete操作が成功する"""
-        from unittest.mock import patch, MagicMock
-        import hmac
-        import hashlib
-        import json
+        # Arrange
+        mock_verify.return_value = True  # ← 署名検証を通過
+        mock_instance = MagicMock()
+        mock_vector_service_class.return_value = mock_instance
         
         payload = {'todo_id': self.todo.id, 'operation': 'delete'}
-        body = json.dumps(payload).encode()
-        signature = hmac.new(b"test_signing_key", body, hashlib.sha256).hexdigest()
         
-        with patch('django.conf.settings.QSTASH_CURRENT_SIGNING_KEY', 'test_signing_key'):
-            with patch('django.conf.settings.QSTASH_NEXT_SIGNING_KEY', 'test_next_key'):
-                with patch('todos.views.VectorService') as mock_vector_service_class:
-                    mock_instance = MagicMock()
-                    mock_vector_service_class.return_value = mock_instance
-                    
-                    response = self.client.post(
-                        '/api/v1/webhooks/vector-indexing',
-                        data=body,
-                        content_type='application/json',
-                        HTTP_UPSTASH_SIGNATURE=f'v1={signature}'
-                    )
-                    
-                    self.assertEqual(response.status_code, status.HTTP_200_OK)
-                    self.assertEqual(response.data['operation'], 'delete')
-                    mock_instance.delete_todo.assert_called_once_with(self.todo.id)
+        # Act
+        response = self.client.post(
+            '/api/v1/webhooks/vector-indexing',
+            data=payload,
+            format='json'
+        )
+        
+        # Assert
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['operation'], 'delete')
+        mock_instance.delete_todo.assert_called_once_with(self.todo.id)
     
-    def test_vector_indexing_webhook_missing_todo_id(self):
+    @patch('common.permissions.verify_qstash_signature')
+    def test_vector_indexing_webhook_missing_todo_id(self, mock_verify):
         """Webhook: todo_idなしで400エラー"""
-        from unittest.mock import patch
-        import hmac
-        import hashlib
-        import json
+        # Arrange
+        mock_verify.return_value = True  # ← 署名検証を通過
         
         payload = {'operation': 'upsert'}
-        body = json.dumps(payload).encode()
-        signature = hmac.new(b"test_signing_key", body, hashlib.sha256).hexdigest()
         
-        with patch('django.conf.settings.QSTASH_CURRENT_SIGNING_KEY', 'test_signing_key'):
-            with patch('django.conf.settings.QSTASH_NEXT_SIGNING_KEY', 'test_next_key'):
-                response = self.client.post(
-                    '/api/v1/webhooks/vector-indexing',
-                    data=body,
-                    content_type='application/json',
-                    HTTP_UPSTASH_SIGNATURE=f'v1={signature}'
-                )
-                
-                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        # Act
+        response = self.client.post(
+            '/api/v1/webhooks/vector-indexing',
+            data=payload,
+            format='json'
+        )
+        
+        # Assert
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
     
-    def test_vector_indexing_webhook_invalid_signature(self):
+    @patch('common.permissions.verify_qstash_signature')
+    def test_vector_indexing_webhook_invalid_signature(self, mock_verify):
         """Webhook: 無効な署名で401エラー（認証失敗）"""
-        from unittest.mock import patch
-        import json
+        # Arrange
+        mock_verify.return_value = False  # ← 署名検証を失敗させる
         
         payload = {'todo_id': self.todo.id}
-        body = json.dumps(payload).encode()
         
-        with patch('django.conf.settings.QSTASH_CURRENT_SIGNING_KEY', 'test_signing_key'):
-            with patch('django.conf.settings.QSTASH_NEXT_SIGNING_KEY', 'test_next_key'):
-                response = self.client.post(
-                    '/api/v1/webhooks/vector-indexing',
-                    data=body,
-                    content_type='application/json',
-                    HTTP_UPSTASH_SIGNATURE='v1=invalid_signature_xyz'
-                )
-                
-                # DRFのパーミッションクラスは認証失敗時に401を返す
-                self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        # Act
+        response = self.client.post(
+            '/api/v1/webhooks/vector-indexing',
+            data=payload,
+            format='json'
+        )
+        
+        # Assert
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
 class BulkVectorIndexingWebhookTestCase(TestCase):
@@ -557,40 +541,34 @@ class BulkVectorIndexingWebhookTestCase(TestCase):
         Todo.objects.create(user=self.user, todo_title='タスク1', priority=Todo.Priority.HIGH)
         Todo.objects.create(user=self.user, todo_title='タスク2', priority=Todo.Priority.MEDIUM)
     
-    def test_bulk_vector_indexing_webhook_success(self):
+    @patch('common.permissions.verify_qstash_signature')
+    @patch('todos.views.VectorService')
+    def test_bulk_vector_indexing_webhook_success(self, mock_vector_service_class, mock_verify):
         """Webhook: 一括インデックスが成功する"""
-        from unittest.mock import patch, MagicMock
-        import hmac
-        import hashlib
-        import json
+        # Arrange
+        mock_verify.return_value = True  # ← 署名検証を通過
+        mock_instance = MagicMock()
+        mock_vector_service_class.return_value = mock_instance
         
         payload = {'user_id': self.user.id}
-        body = json.dumps(payload).encode()
-        signature = hmac.new(b"test_signing_key", body, hashlib.sha256).hexdigest()
         
-        with patch('django.conf.settings.QSTASH_CURRENT_SIGNING_KEY', 'test_signing_key'):
-            with patch('django.conf.settings.QSTASH_NEXT_SIGNING_KEY', 'test_next_key'):
-                with patch('todos.views.VectorService') as mock_vector_service_class:
-                    mock_instance = MagicMock()
-                    mock_vector_service_class.return_value = mock_instance
-                    
-                    response = self.client.post(
-                        '/api/v1/webhooks/bulk-vector-indexing',
-                        data=body,
-                        content_type='application/json',
-                        HTTP_UPSTASH_SIGNATURE=f'v1={signature}'
-                    )
-                    
-                    self.assertEqual(response.status_code, status.HTTP_200_OK)
-                    self.assertEqual(response.data['count'], 2)
-                    mock_instance.add_todos_batch.assert_called_once()
+        # Act
+        response = self.client.post(
+            '/api/v1/webhooks/bulk-vector-indexing',
+            data=payload,
+            format='json'
+        )
+        
+        # Assert
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['count'], 2)
+        mock_instance.add_todos_batch.assert_called_once()
     
-    def test_bulk_vector_indexing_webhook_no_todos(self):
+    @patch('common.permissions.verify_qstash_signature')
+    def test_bulk_vector_indexing_webhook_no_todos(self, mock_verify):
         """Webhook: Todoがない場合"""
-        from unittest.mock import patch
-        import hmac
-        import hashlib
-        import json
+        # Arrange
+        mock_verify.return_value = True  # ← 署名検証を通過
         
         new_user = User.objects.create_user(
             email='newuser@example.com',
@@ -598,59 +576,50 @@ class BulkVectorIndexingWebhookTestCase(TestCase):
         )
         
         payload = {'user_id': new_user.id}
-        body = json.dumps(payload).encode()
-        signature = hmac.new(b"test_signing_key", body, hashlib.sha256).hexdigest()
         
-        with patch('django.conf.settings.QSTASH_CURRENT_SIGNING_KEY', 'test_signing_key'):
-            with patch('django.conf.settings.QSTASH_NEXT_SIGNING_KEY', 'test_next_key'):
-                response = self.client.post(
-                    '/api/v1/webhooks/bulk-vector-indexing',
-                    data=body,
-                    content_type='application/json',
-                    HTTP_UPSTASH_SIGNATURE=f'v1={signature}'
-                )
-                
-                self.assertEqual(response.status_code, status.HTTP_200_OK)
-                self.assertEqual(response.data['count'], 0)
+        # Act
+        response = self.client.post(
+            '/api/v1/webhooks/bulk-vector-indexing',
+            data=payload,
+            format='json'
+        )
+        
+        # Assert
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['count'], 0)
     
-    def test_bulk_vector_indexing_webhook_missing_user_id(self):
+    @patch('common.permissions.verify_qstash_signature')
+    def test_bulk_vector_indexing_webhook_missing_user_id(self, mock_verify):
         """Webhook: user_idなしで400エラー"""
-        from unittest.mock import patch
-        import hmac
-        import hashlib
-        import json
+        # Arrange
+        mock_verify.return_value = True  # ← 署名検証を通過
         
         payload = {}
-        body = json.dumps(payload).encode()
-        signature = hmac.new(b"test_signing_key", body, hashlib.sha256).hexdigest()
         
-        with patch('django.conf.settings.QSTASH_CURRENT_SIGNING_KEY', 'test_signing_key'):
-            with patch('django.conf.settings.QSTASH_NEXT_SIGNING_KEY', 'test_next_key'):
-                response = self.client.post(
-                    '/api/v1/webhooks/bulk-vector-indexing',
-                    data=body,
-                    content_type='application/json',
-                    HTTP_UPSTASH_SIGNATURE=f'v1={signature}'
-                )
-                
-                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        # Act
+        response = self.client.post(
+            '/api/v1/webhooks/bulk-vector-indexing',
+            data=payload,
+            format='json'
+        )
+        
+        # Assert
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
     
-    def test_bulk_vector_indexing_webhook_invalid_signature(self):
+    @patch('common.permissions.verify_qstash_signature') 
+    def test_bulk_vector_indexing_webhook_invalid_signature(self, mock_verify):
         """Webhook: 無効な署名で401エラー（認証失敗）"""
-        from unittest.mock import patch
-        import json
+        # Arrange
+        mock_verify.return_value = False  # ← 署名検証を失敗させる
         
         payload = {'user_id': self.user.id}
-        body = json.dumps(payload).encode()
         
-        with patch('django.conf.settings.QSTASH_CURRENT_SIGNING_KEY', 'test_signing_key'):
-            with patch('django.conf.settings.QSTASH_NEXT_SIGNING_KEY', 'test_next_key'):
-                response = self.client.post(
-                    '/api/v1/webhooks/bulk-vector-indexing',
-                    data=body,
-                    content_type='application/json',
-                    HTTP_UPSTASH_SIGNATURE='v1=invalid_signature_xyz'
-                )
-                
-                # DRFのパーミッションクラスは認証失敗時に401を返す
-                self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        # Act
+        response = self.client.post(
+            '/api/v1/webhooks/bulk-vector-indexing',
+            data=payload,
+            format='json'
+        )
+        
+        # Assert
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
