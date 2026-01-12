@@ -53,7 +53,11 @@ class TodoService:
             # QStash送信失敗でもTodo作成は成功
             logger.error(f"Failed to queue vector indexing: {e}")
 
-        TodoAnalyticsService.log_todo_create(user=user, todo=todo)
+        # 分析ログ
+        try:
+            TodoAnalyticsService.log_todo_create(user=user, todo=todo)
+        except Exception as e:
+            logger.error(f"Failed to log analytics: {e}")
         
         return todo
 
@@ -103,12 +107,16 @@ class TodoService:
             logger.error(f"Failed to queue vector indexing: {e}")
         
         # 完了イベントの検出
-        if old_values["progress"] < 100 and todo.progress == 100:
-            # 完了イベント
-            TodoAnalyticsService.log_todo_complete(user=user, todo=todo)
-        elif changed_fields:
-            # 通常の更新イベント（変更がある場合のみ）
-            TodoAnalyticsService.log_todo_update(user=user, todo=todo, changed_fields=changed_fields)
+        # 分析ログ
+        try:
+            if old_values["progress"] < 100 and todo.progress == 100:
+                # 完了イベント
+                TodoAnalyticsService.log_todo_complete(user=user, todo=todo)
+            elif changed_fields:
+                # 通常の更新イベント（変更がある場合のみ）
+                TodoAnalyticsService.log_todo_update(user=user, todo=todo, changed_fields=changed_fields)
+        except Exception as e:
+            logger.error(f"Failed to log analytics: {e}")
         
         return todo
 
@@ -139,7 +147,10 @@ class TodoService:
         deletion_reason = "completed" if todo.progress == 100 else "cancelled"
         
         # 分析ログ記録（削除前に実行）
-        TodoAnalyticsService.log_todo_delete(user=user, todo=todo, deletion_reason=deletion_reason)
+        try:
+            TodoAnalyticsService.log_todo_delete(user=user, todo=todo, deletion_reason=deletion_reason)
+        except Exception as e:
+            logger.error(f"Failed to log analytics: {e}")
         
         todo.delete()
         TodoService._invalidate_stats_cache(user.id)

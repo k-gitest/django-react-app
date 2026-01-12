@@ -10,6 +10,7 @@ from rest_framework.test import APIRequestFactory
 
 from common.infrastructure.qstash_client import QStashClient
 from common.infrastructure.email_client import EmailClient
+from common.infrastructure.motherduck_client import MotherDuckClient
 from common.security import verify_qstash_signature
 from common.permissions import IsQStashAuthenticated
 
@@ -299,171 +300,191 @@ class InfrastructureIntegrationTestCase(TestCase):
         mock_qstash_post.assert_called_once()
         mock_email_send.assert_called_once()
 
+    @override_settings(
+        MOTHERDUCK_TOKEN="test_motherduck_token",
+    )
+    @patch("common.infrastructure.motherduck_client.duckdb.connect")
+    @patch.object(MotherDuckClient, '_setup_schema')
+    def test_auth_event_logging_workflow(self, mock_setup_schema, mock_connect):
+        """Test typical workflow: Auth event is logged to MotherDuck"""
+        # Arrange
+        mock_conn = MagicMock()
+        mock_connect.return_value = mock_conn
+        
+        MotherDuckClient._instance = None
+        MotherDuckClient._conn = None
+        
+        motherduck_client = MotherDuckClient()
+        
+        # Act
+        result = motherduck_client.insert_auth_event({
+            "user_id": 1,
+            "email": "test@example.com",
+            "event_type": "login",
+            "ip_address": "192.168.1.1",
+            "user_agent": "Chrome/120.0",
+            "success": True,
+        })
+        
+        # Assert
+        self.assertTrue(result)
+        self.assertEqual(mock_conn.execute.call_count, 1)  # INSERT文のみ
+        
+        call_args = mock_conn.execute.call_args[0][0]
+        self.assertIn("INSERT INTO django_react_app.logs.auth_events", call_args)
+
+    @override_settings(
+        MOTHERDUCK_TOKEN="test_motherduck_token",
+    )
+    @patch("common.infrastructure.motherduck_client.duckdb.connect")
+    @patch.object(MotherDuckClient, '_setup_schema')
+    def test_todo_event_logging_workflow(self, mock_setup_schema, mock_connect):
+        """Test typical workflow: Todo event is logged to MotherDuck"""
+        # Arrange
+        mock_conn = MagicMock()
+        mock_connect.return_value = mock_conn
+        
+        MotherDuckClient._instance = None
+        MotherDuckClient._conn = None
+        
+        motherduck_client = MotherDuckClient()
+        
+        # Act
+        result = motherduck_client.insert_todo_event({
+            "user_id": 1,
+            "todo_id": 5,
+            "event_type": "create",
+            "todo_title": "New Task",
+            "priority": "MEDIUM",
+            "progress": 0,
+            "is_completed": False,
+        })
+        
+        # Assert
+        self.assertTrue(result)
+        self.assertEqual(mock_conn.execute.call_count, 1)  # INSERT文のみ
+        
+        call_args = mock_conn.execute.call_args[0][0]
+        self.assertIn("INSERT INTO django_react_app.logs.todo_events", call_args)
+
 
 class QStashSecurityTestCase(TestCase):
-    """Tests for QStash signature verification"""
+    """Tests for QStash signature verification using official Receiver"""
 
     def setUp(self):
         self.factory = RequestFactory()
 
     @override_settings(
-        QSTASH_CURRENT_SIGNING_KEY="current_secret_key",
-        QSTASH_NEXT_SIGNING_KEY="next_secret_key",
+        QSTASH_CURRENT_SIGNING_KEY="sig_test_current",
+        QSTASH_NEXT_SIGNING_KEY="sig_test_next",
+        WEBHOOK_BASE_URL="https://test-backend.example.com",
     )
-    def test_verify_signature_with_current_key(self):
-        """Test signature verification with current signing key"""
+    @patch("common.security.Receiver")
+    def test_verify_signature_success(self, mock_receiver_class):
+        """Test signature verification succeeds with valid signature"""
         # Arrange
+        mock_receiver = MagicMock()
+        mock_receiver.verify.return_value = None
+        mock_receiver_class.return_value = mock_receiver
+        
         body = b'{"test": "data"}'
-        signature = hmac.new(
-            b"current_secret_key", body, hashlib.sha256
-        ).hexdigest()
-
         request = self.factory.post(
-            "/webhook",
+            "/api/v1/webhooks/test",
             data=body,
             content_type="application/json",
-            HTTP_UPSTASH_SIGNATURE=f"v1={signature}",
+            HTTP_UPSTASH_SIGNATURE="v1=valid_signature_from_qstash",
         )
-
+        
         # Act
         result = verify_qstash_signature(request)
-
+        
         # Assert
         self.assertTrue(result)
+        mock_receiver_class.assert_called_once_with(
+            current_signing_key="sig_test_current",
+            next_signing_key="sig_test_next",
+        )
+        mock_receiver.verify.assert_called_once()
+        
+        # Verify arguments
+        call_kwargs = mock_receiver.verify.call_args[1]
+        self.assertEqual(call_kwargs["body"], '{"test": "data"}')
+        self.assertEqual(call_kwargs["signature"], "v1=valid_signature_from_qstash")
+        # URLは環境依存なので、存在確認のみ
+        self.assertIn("/api/v1/webhooks/test", call_kwargs["url"])
 
     @override_settings(
-        QSTASH_CURRENT_SIGNING_KEY="current_secret_key",
-        QSTASH_NEXT_SIGNING_KEY="next_secret_key",
+        QSTASH_CURRENT_SIGNING_KEY="sig_test_current",
+        QSTASH_NEXT_SIGNING_KEY="sig_test_next",
+        WEBHOOK_BASE_URL="https://test-backend.example.com",
     )
-    def test_verify_signature_with_next_key(self):
-        """Test signature verification with next signing key (key rotation)"""
+    @patch("common.security.Receiver")
+    def test_verify_signature_failure(self, mock_receiver_class):
+        """Test signature verification fails with invalid signature"""
         # Arrange
+        mock_receiver = MagicMock()
+        mock_receiver.verify.side_effect = Exception("Invalid signature")
+        mock_receiver_class.return_value = mock_receiver
+        
         body = b'{"test": "data"}'
-        signature = hmac.new(
-            b"next_secret_key", body, hashlib.sha256
-        ).hexdigest()
-
         request = self.factory.post(
-            "/webhook",
+            "/api/v1/webhooks/test",
             data=body,
             content_type="application/json",
-            HTTP_UPSTASH_SIGNATURE=f"v1={signature}",
+            HTTP_UPSTASH_SIGNATURE="v1=invalid_signature",
         )
-
+        
         # Act
         result = verify_qstash_signature(request)
-
-        # Assert
-        self.assertTrue(result)
-
-    @override_settings(
-        QSTASH_CURRENT_SIGNING_KEY="current_secret_key",
-        QSTASH_NEXT_SIGNING_KEY="next_secret_key",
-    )
-    def test_verify_signature_invalid(self):
-        """Test signature verification with invalid signature"""
-        # Arrange
-        body = b'{"test": "data"}'
-        invalid_signature = "invalid_signature_12345"
-
-        request = self.factory.post(
-            "/webhook",
-            data=body,
-            content_type="application/json",
-            HTTP_UPSTASH_SIGNATURE=f"v1={invalid_signature}",
-        )
-
-        # Act
-        result = verify_qstash_signature(request)
-
+        
         # Assert
         self.assertFalse(result)
 
     def test_verify_signature_missing_header(self):
-        """Test signature verification with missing signature header"""
+        """Test signature verification fails with missing signature header"""
         # Arrange
         body = b'{"test": "data"}'
         request = self.factory.post(
-            "/webhook", data=body, content_type="application/json"
+            "/api/v1/webhooks/test",
+            data=body,
+            content_type="application/json"
         )
-
+        
         # Act
         result = verify_qstash_signature(request)
-
+        
         # Assert
         self.assertFalse(result)
 
     @override_settings(
-        QSTASH_CURRENT_SIGNING_KEY="current_secret_key",
-        QSTASH_NEXT_SIGNING_KEY="next_secret_key",
+        QSTASH_CURRENT_SIGNING_KEY="sig_test_current",
+        QSTASH_NEXT_SIGNING_KEY="sig_test_next",
+        WEBHOOK_BASE_URL="http://test.app.github.dev",
     )
-    def test_verify_signature_malformed_format(self):
-        """Test signature verification with malformed signature format"""
+    @patch("common.security.Receiver")
+    def test_verify_signature_url_normalization(self, mock_receiver_class):
+        """Test URL normalization for GitHub Codespaces"""
         # Arrange
+        mock_receiver = MagicMock()
+        mock_receiver.verify.return_value = None
+        mock_receiver_class.return_value = mock_receiver
+        
         body = b'{"test": "data"}'
         request = self.factory.post(
-            "/webhook",
+            "/api/v1/webhooks/test",
             data=body,
             content_type="application/json",
-            HTTP_UPSTASH_SIGNATURE="malformed_signature_no_equals",
+            HTTP_UPSTASH_SIGNATURE="v1=valid",
         )
-
+        
         # Act
         result = verify_qstash_signature(request)
-
-        # Assert
-        self.assertFalse(result)
-
-    @override_settings(
-        QSTASH_CURRENT_SIGNING_KEY="current_secret_key",
-        QSTASH_NEXT_SIGNING_KEY="next_secret_key",
-    )
-    def test_verify_signature_multiple_signatures(self):
-        """Test signature verification with multiple signatures in header"""
-        # Arrange
-        body = b'{"test": "data"}'
-        valid_signature = hmac.new(
-            b"current_secret_key", body, hashlib.sha256
-        ).hexdigest()
-        invalid_signature = "invalid123"
-
-        request = self.factory.post(
-            "/webhook",
-            data=body,
-            content_type="application/json",
-            HTTP_UPSTASH_SIGNATURE=f"v1={invalid_signature},v1={valid_signature}",
-        )
-
-        # Act
-        result = verify_qstash_signature(request)
-
-        # Assert
-        self.assertTrue(result)  # Should succeed with valid signature
-
-    @override_settings(
-        QSTASH_CURRENT_SIGNING_KEY="current_secret_key",
-        QSTASH_NEXT_SIGNING_KEY="next_secret_key",
-    )
-    def test_verify_signature_empty_body(self):
-        """Test signature verification with empty request body"""
-        # Arrange
-        body = b""
-        signature = hmac.new(
-            b"current_secret_key", body, hashlib.sha256
-        ).hexdigest()
-
-        request = self.factory.post(
-            "/webhook",
-            data=body,
-            content_type="application/json",
-            HTTP_UPSTASH_SIGNATURE=f"v1={signature}",
-        )
-
-        # Act
-        result = verify_qstash_signature(request)
-
+        
         # Assert
         self.assertTrue(result)
+        call_kwargs = mock_receiver.verify.call_args[1]
+        # Codespaces環境ではhttpsに正規化される
+        self.assertTrue(call_kwargs["url"].startswith("https://"))
 
 
 class IsQStashAuthenticatedTestCase(TestCase):
@@ -474,62 +495,70 @@ class IsQStashAuthenticatedTestCase(TestCase):
         self.permission = IsQStashAuthenticated()
 
     @override_settings(
-        QSTASH_CURRENT_SIGNING_KEY="current_secret_key",
-        QSTASH_NEXT_SIGNING_KEY="next_secret_key",
+        QSTASH_CURRENT_SIGNING_KEY="sig_test_current",
+        QSTASH_NEXT_SIGNING_KEY="sig_test_next",
+        WEBHOOK_BASE_URL="https://test-backend.example.com",
     )
-    def test_permission_granted_valid_signature(self):
+    @patch("common.permissions.verify_qstash_signature")  # ← permissions内のimportをモック
+    def test_permission_granted_valid_signature(self, mock_verify):
         """Test permission is granted with valid QStash signature"""
         # Arrange
+        mock_verify.return_value = True
+        
         body = b'{"test": "data"}'
-        signature = hmac.new(
-            b"current_secret_key", body, hashlib.sha256
-        ).hexdigest()
-
         request = self.factory.post(
             "/webhook",
             data=body,
             content_type="application/json",
-            HTTP_UPSTASH_SIGNATURE=f"v1={signature}",
+            HTTP_UPSTASH_SIGNATURE="v1=valid",
         )
-
+        
         # Act
         has_permission = self.permission.has_permission(request, None)
-
+        
         # Assert
         self.assertTrue(has_permission)
+        mock_verify.assert_called_once_with(request)
 
     @override_settings(
-        QSTASH_CURRENT_SIGNING_KEY="current_secret_key",
-        QSTASH_NEXT_SIGNING_KEY="next_secret_key",
+        QSTASH_CURRENT_SIGNING_KEY="sig_test_current",
+        QSTASH_NEXT_SIGNING_KEY="sig_test_next",
+        WEBHOOK_BASE_URL="https://test-backend.example.com",
     )
-    def test_permission_denied_invalid_signature(self):
+    @patch("common.security.verify_qstash_signature")
+    def test_permission_denied_invalid_signature(self, mock_verify):
         """Test permission is denied with invalid QStash signature"""
         # Arrange
+        mock_verify.return_value = False
+        
         body = b'{"test": "data"}'
         request = self.factory.post(
             "/webhook",
             data=body,
             content_type="application/json",
-            HTTP_UPSTASH_SIGNATURE="v1=invalid_signature",
+            HTTP_UPSTASH_SIGNATURE="v1=invalid",
         )
-
+        
         # Act
         has_permission = self.permission.has_permission(request, None)
-
+        
         # Assert
         self.assertFalse(has_permission)
 
-    def test_permission_denied_missing_signature(self):
+    @patch("common.security.verify_qstash_signature")
+    def test_permission_denied_missing_signature(self, mock_verify):
         """Test permission is denied when signature is missing"""
         # Arrange
+        mock_verify.return_value = False
+        
         body = b'{"test": "data"}'
         request = self.factory.post(
             "/webhook", data=body, content_type="application/json"
         )
-
+        
         # Act
         has_permission = self.permission.has_permission(request, None)
-
+        
         # Assert
         self.assertFalse(has_permission)
 
@@ -538,27 +567,179 @@ class IsQStashAuthenticatedTestCase(TestCase):
         # Assert
         self.assertEqual(self.permission.message, "Invalid QStash signature")
 
+class MotherDuckClientTestCase(TestCase):
+    """Tests for MotherDuckClient"""
+
     @override_settings(
-        QSTASH_CURRENT_SIGNING_KEY="current_secret_key",
-        QSTASH_NEXT_SIGNING_KEY="next_secret_key",
+        MOTHERDUCK_TOKEN="test_motherduck_token",
     )
-    def test_permission_with_key_rotation(self):
-        """Test permission works during key rotation (next key)"""
+    @patch("common.infrastructure.motherduck_client.duckdb.connect")
+    @patch.object(MotherDuckClient, '_setup_schema')  # ← スキーマセットアップをスキップ
+    def test_insert_auth_event_success(self, mock_setup_schema, mock_connect):
+        """Test successful auth event insertion"""
         # Arrange
-        body = b'{"test": "data"}'
-        signature = hmac.new(
-            b"next_secret_key", body, hashlib.sha256
-        ).hexdigest()
-
-        request = self.factory.post(
-            "/webhook",
-            data=body,
-            content_type="application/json",
-            HTTP_UPSTASH_SIGNATURE=f"v1={signature}",
-        )
-
+        mock_conn = MagicMock()
+        mock_connect.return_value = mock_conn
+        
+        MotherDuckClient._instance = None
+        MotherDuckClient._conn = None
+        
+        client = MotherDuckClient()
+        
+        event_data = {
+            "user_id": 1,
+            "email": "test@example.com",
+            "event_type": "login",
+            "ip_address": "127.0.0.1",
+            "user_agent": "Mozilla/5.0",
+            "success": True,
+        }
+        
         # Act
-        has_permission = self.permission.has_permission(request, None)
-
+        result = client.insert_auth_event(event_data)
+        
         # Assert
-        self.assertTrue(has_permission)
+        self.assertTrue(result)
+        
+        # Verify SQL call (INSERT文のみ)
+        self.assertEqual(mock_conn.execute.call_count, 1)
+        call_args = mock_conn.execute.call_args[0][0]
+        self.assertIn("INSERT INTO django_react_app.logs.auth_events", call_args)
+
+    @override_settings(
+        MOTHERDUCK_TOKEN="test_motherduck_token",
+    )
+    @patch("common.infrastructure.motherduck_client.duckdb.connect")
+    @patch.object(MotherDuckClient, '_setup_schema')
+    def test_insert_todo_event_success(self, mock_setup_schema, mock_connect):
+        """Test successful todo event insertion"""
+        # Arrange
+        mock_conn = MagicMock()
+        mock_connect.return_value = mock_conn
+        
+        MotherDuckClient._instance = None
+        MotherDuckClient._conn = None
+        
+        client = MotherDuckClient()
+        
+        event_data = {
+            "user_id": 1,
+            "todo_id": 10,
+            "event_type": "create",
+            "todo_title": "Test Todo",
+            "priority": "HIGH",
+            "progress": 0,
+            "is_completed": False,
+        }
+        
+        # Act
+        result = client.insert_todo_event(event_data)
+        
+        # Assert
+        self.assertTrue(result)
+        
+        self.assertEqual(mock_conn.execute.call_count, 1)
+        call_args = mock_conn.execute.call_args[0][0]
+        self.assertIn("INSERT INTO django_react_app.logs.todo_events", call_args)
+
+    @override_settings(
+        MOTHERDUCK_TOKEN="test_motherduck_token",
+    )
+    @patch("common.infrastructure.motherduck_client.duckdb.connect")
+    @patch.object(MotherDuckClient, '_setup_schema')
+    def test_insert_auth_event_execution_error(self, mock_setup_schema, mock_connect):
+        """Test auth event insertion with SQL execution error"""
+        # Arrange
+        mock_conn = MagicMock()
+        mock_conn.execute.side_effect = Exception("SQL error")
+        mock_connect.return_value = mock_conn
+        
+        MotherDuckClient._instance = None
+        MotherDuckClient._conn = None
+        
+        client = MotherDuckClient()
+        
+        event_data = {
+            "user_id": 1,
+            "email": "test@example.com",
+            "event_type": "login",
+            "success": True,
+        }
+        
+        # Act
+        result = client.insert_auth_event(event_data)
+        
+        # Assert
+        self.assertFalse(result)
+
+    @override_settings(
+        MOTHERDUCK_TOKEN="test_motherduck_token",
+    )
+    @patch("common.infrastructure.motherduck_client.duckdb.connect")
+    @patch.object(MotherDuckClient, '_setup_schema')
+    def test_insert_todo_event_execution_error(self, mock_setup_schema, mock_connect):
+        """Test todo event insertion with SQL execution error"""
+        # Arrange
+        mock_conn = MagicMock()
+        mock_conn.execute.side_effect = Exception("SQL error")
+        mock_connect.return_value = mock_conn
+        
+        MotherDuckClient._instance = None
+        MotherDuckClient._conn = None
+        
+        client = MotherDuckClient()
+        
+        event_data = {
+            "user_id": 1,
+            "todo_id": 10,
+            "event_type": "create",
+            "todo_title": "Test",
+            "priority": "HIGH",
+            "progress": 0,
+            "is_completed": False,
+        }
+        
+        # Act
+        result = client.insert_todo_event(event_data)
+        
+        # Assert
+        self.assertFalse(result)
+
+    @override_settings(MOTHERDUCK_TOKEN="")
+    @patch("common.infrastructure.motherduck_client.duckdb.connect")
+    def test_insert_with_missing_token(self, mock_connect):
+        """Test insertion with missing MotherDuck token"""
+        # Arrange
+        MotherDuckClient._instance = None
+        MotherDuckClient._conn = None
+        
+        # Act & Assert
+        with self.assertRaises(ValueError):
+            client = MotherDuckClient()
+
+    @override_settings(
+        MOTHERDUCK_TOKEN="test_motherduck_token",
+    )
+    @patch("common.infrastructure.motherduck_client.duckdb.connect")
+    def test_connection_string_format(self, mock_connect):
+        """Test MotherDuck connection string format"""
+        # Arrange
+        mock_conn = MagicMock()
+        mock_connect.return_value = mock_conn
+        
+        MotherDuckClient._instance = None
+        MotherDuckClient._conn = None
+        
+        # Act
+        # __init__ は _setup_schema を呼ぶが、それも検証の一部
+        client = MotherDuckClient()
+        
+        # Assert
+        mock_connect.assert_called_once()
+        connection_string = mock_connect.call_args[0][0]
+        self.assertEqual(connection_string, "md:?motherduck_token=test_motherduck_token")
+
+    def tearDown(self):
+        """テスト後にシングルトンをリセット"""
+        MotherDuckClient._instance = None
+        MotherDuckClient._conn = None
