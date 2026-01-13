@@ -1,21 +1,11 @@
 from datetime import timedelta
-from os import getenv
 from pathlib import Path
-
 from decouple import config
-from dotenv import load_dotenv
 
-load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
-# SECRET_KEY = "django-insecure-h6r^b$7t39=-1p%q_6vxnsq2zzbb#qa5wf*5cu7&uskbs#)_-="
 SECRET_KEY = config("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
@@ -44,10 +34,11 @@ INSTALLED_APPS = [
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
-    "common",
-    "users",
-    "todos",
-    'webhooks',
+    "apps.common",
+    "apps.users",
+    "apps.todos",
+    'apps.webhooks',
+    "apps.analytics",
 ]
 
 MIDDLEWARE = [
@@ -87,11 +78,11 @@ WSGI_APPLICATION = "config.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": getenv("PGDATABASE"),
-        "USER": getenv("PGUSER"),
-        "PASSWORD": getenv("PGPASSWORD"),
-        "HOST": getenv("PGHOST"),
-        "PORT": getenv("PGPORT", 5432),
+        "NAME": config("PGDATABASE", default=""),
+        "USER": config("PGUSER", default=""),
+        "PASSWORD": config("PGPASSWORD", default=""),
+        "HOST": config("PGHOST", default=""),
+        "PORT": config("PGPORT", default=5432, cast=int),
         "OPTIONS": {
             "sslmode": "require",
         },
@@ -144,12 +135,15 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# フロントエンドURL
+FRONTEND_URL = config("FRONT_URL", default="http://localhost:3000")
+
 # 開発環境で、特定のオリジンからのアクセスを許可
 # React の開発サーバーが動いているポート 3000 を許可します
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",  # 127.0.0.1 も念のため追加しておくのが安全
-    getenv("FRONT_URL"),
+    FRONTEND_URL,
 ]
 
 # 本番環境では False に設定し、CORS_ALLOWED_ORIGINS または CORS_ALLOWED_HOSTS を厳密に定義すべき
@@ -172,7 +166,7 @@ REST_FRAMEWORK = {
         # 'rest_framework.permissions.IsAuthenticated',
         "rest_framework.permissions.AllowAny",
     ),
-    "EXCEPTION_HANDLER": "users.exceptions.custom_exception_handler",
+    "EXCEPTION_HANDLER": "apps.users.exceptions.custom_exception_handler",
 }
 
 # dj-rest-authの設定
@@ -188,8 +182,8 @@ REST_AUTH = {
     "REGISTER_SERIALIZER": "dj_rest_auth.registration.serializers.RegisterSerializer",
     "TOKEN_MODEL": None,
     # カスタムシリアライザ
-    "USER_DETAILS_SERIALIZER": "users.serializers.CustomUserSerializer",  # ユーザー情報取得用
-    "REGISTER_SERIALIZER": "users.serializers.CustomRegisterSerializer",  # ユーザー登録用
+    "USER_DETAILS_SERIALIZER": "apps.users.serializers.CustomUserSerializer",  # ユーザー情報取得用
+    "REGISTER_SERIALIZER": "apps.users.serializers.CustomRegisterSerializer",  # ユーザー登録用
 }
 
 # Simple JWT の設定
@@ -223,10 +217,10 @@ USER_MODEL_USERNAME_FIELD = None
 
 # AWS S3 / Backblaze B2設定
 # django-storagesが以下の環境変数を自動的に読み込む
-AWS_ACCESS_KEY_ID = getenv("AWS_ACCESS_KEY_ID")  # Backblaze Key ID
-AWS_SECRET_ACCESS_KEY = getenv("AWS_SECRET_ACCESS_KEY")  # Backblaze Key
-AWS_STORAGE_BUCKET_NAME = getenv("AWS_STORAGE_BUCKET_NAME")
-AWS_S3_ENDPOINT_URL = getenv("AWS_S3_ENDPOINT_URL")  # Backblaze エンドポイント
+AWS_ACCESS_KEY_ID = config("AWS_ACCESS_KEY_ID", default=None)  # Backblaze Key ID
+AWS_SECRET_ACCESS_KEY = config("AWS_SECRET_ACCESS_KEY", default=None)  # Backblaze Key
+AWS_STORAGE_BUCKET_NAME = config("AWS_STORAGE_BUCKET_NAME", default=None)
+AWS_S3_ENDPOINT_URL = config("AWS_S3_ENDPOINT_URL", default=None)  # Backblaze エンドポイント
 AWS_S3_REGION_NAME = "us-west-004"  # Backblaze リージョン
 
 # S3互換設定
@@ -265,10 +259,12 @@ else:
     MEDIA_ROOT = BASE_DIR / "media"
 
 # キャッシュ設定
+REDIS_URL = config("REDIS_URL", default="redis://127.0.0.1:6379/1")
+
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": getenv("REDIS_URL"),
+        "LOCATION": REDIS_URL,
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
             # UpstashはSSL必須。証明書検証でエラーが出る場合は以下を指定
@@ -293,22 +289,19 @@ SESSION_SAVE_EVERY_REQUEST = (
 )
 
 # qstash設定
-QSTASH_TOKEN = getenv("QSTASH_TOKEN")
-QSTASH_CURRENT_SIGNING_KEY = getenv("QSTASH_CURRENT_SIGNING_KEY")
-QSTASH_NEXT_SIGNING_KEY = getenv("QSTASH_NEXT_SIGNING_KEY")
+QSTASH_TOKEN = config("QSTASH_TOKEN", default=None)
+QSTASH_CURRENT_SIGNING_KEY = config("QSTASH_CURRENT_SIGNING_KEY", default=None)
+QSTASH_NEXT_SIGNING_KEY = config("QSTASH_NEXT_SIGNING_KEY", default=None)
 
 # resend設定
-RESEND_API_KEY = getenv("RESEND_API_KEY")
-WEBHOOK_BASE_URL = getenv("WEBHOOK_BASE_URL", "http://localhost:8000")
-DEFAULT_FROM_EMAIL = getenv("DEFAULT_FROM_EMAIL", "noreply@example.com")
-
-# フロントエンドURL
-FRONTEND_URL = config("FRONT_URL", default="http://localhost:3000")
+RESEND_API_KEY = config("RESEND_API_KEY", default=None)
+WEBHOOK_BASE_URL = config("WEBHOOK_BASE_URL", "http://localhost:8000")
+DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", "noreply@example.com")
 
 # Vector Search & Embeddings
-GOOGLE_API_KEY = getenv("GOOGLE_API_KEY")
-UPSTASH_VECTOR_REST_URL = getenv("UPSTASH_VECTOR_REST_URL")
-UPSTASH_VECTOR_REST_TOKEN = getenv("UPSTASH_VECTOR_REST_TOKEN")
+GOOGLE_API_KEY = config("GOOGLE_API_KEY", default="")
+UPSTASH_VECTOR_REST_URL = config("UPSTASH_VECTOR_REST_URL", default="")
+UPSTASH_VECTOR_REST_TOKEN = config("UPSTASH_VECTOR_REST_TOKEN", default="")
 
 # ===== MotherDuck =====
-MOTHERDUCK_TOKEN = config('MOTHERDUCK_TOKEN', default='')
+MOTHERDUCK_TOKEN = config("MOTHERDUCK_TOKEN", default="")
