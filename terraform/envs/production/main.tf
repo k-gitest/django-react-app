@@ -122,4 +122,8 @@ module "github_secrets" {
   # E2Eテスト用認証情報
   e2e_test_email    = var.e2e_test_email
   e2e_test_password = random_password.e2e_test_password.result
+
+  # Cloudflare デプロイ用に追加
+  cloudflare_project_name = module.cloudflare.pages_project_name
+  cloudflare_account_id   = var.cloudflare_account_id
 }

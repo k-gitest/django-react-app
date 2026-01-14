@@ -131,7 +131,7 @@ jobs:
           fi
       
       - name: Upload build artifacts
-        if: inputs.environment == 'production'
+        if: inputs.environment == 'production' || inputs.environment == 'staging'
         uses: actions/upload-artifact@v4
         with:
           name: frontend-${{ inputs.environment }}-build-${{ github.sha }}

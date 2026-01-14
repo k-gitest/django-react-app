@@ -40,7 +40,7 @@ resource "github_actions_environment_variable" "vite_storage_url" {
   value         = var.storage_url
 }
 
-# バックエンド用 - DEBUG設定
+# バックエンド用 - DEBUG設定(基本的にはsettings埋め込みを使用する)
 resource "github_actions_environment_variable" "debug" {
   repository    = var.repository_name
   environment   = github_repository_environment.main.environment
@@ -70,6 +70,22 @@ resource "github_actions_environment_variable" "aws_s3_endpoint_url" {
   environment   = github_repository_environment.main.environment
   variable_name = "AWS_S3_ENDPOINT_URL"
   value         = var.s3_endpoint_url
+}
+
+# Cloudflare プロジェクト名 (wranglerデプロイ用)
+resource "github_actions_environment_variable" "cloudflare_project_name" {
+  repository    = var.repository_name
+  environment   = github_repository_environment.main.environment
+  variable_name = "CLOUDFLARE_PROJECT_NAME"
+  value         = var.cloudflare_project_name
+}
+
+# Cloudflare アカウントID (wranglerデプロイ用)
+resource "github_actions_environment_variable" "cloudflare_account_id" {
+  repository    = var.repository_name
+  environment   = github_repository_environment.main.environment
+  variable_name = "CLOUDFLARE_ACCOUNT_ID"
+  value         = var.cloudflare_account_id
 }
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

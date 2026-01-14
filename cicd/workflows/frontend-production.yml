@@ -30,6 +30,13 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      # ビルド成果物をダウンロード
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-production-build-${{ github.sha }}
+          path: frontend/dist
       
       - name: Setup Node.js
         uses: ./.github/actions/setup-node
@@ -73,10 +80,34 @@ jobs:
           path: frontend/playwright-report/
           retention-days: 30
 
+  # cloudflare オートデプロイtrueの場合
+  deploy:
+    name: Deploy to Cloudflare
+    runs-on: ubuntu-latest
+    needs: e2e
+    environment: production
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-production-build-${{ github.sha }}
+          path: frontend/dist
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy frontend/dist --project-name=${{ vars.CLOUDFLARE_PROJECT_NAME }} --branch=main
+
   deploy-notification:
     name: Deployment Notification
     runs-on: ubuntu-latest
-    needs: [test, e2e]
+    needs: [test, e2e, deploy]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment: production
     
