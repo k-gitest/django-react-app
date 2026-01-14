@@ -18,7 +18,9 @@ COPY . .
 
 # 静的ファイル収集 (プロダクションデプロイメントの標準的なステップ)
 # settings.pyでSTATIC_ROOTが定義されている必要あり
-RUN python manage.py collectstatic --noinput
+# production設定を指定することで、DB接続なしで静的ファイルだけを集める設定（WhiteNoise等）が正しく動く
+RUN DJANGO_SETTINGS_MODULE=config.settings.production python manage.py collectstatic --noinput
+# RUN python manage.py collectstatic --noinput
 
 # --- 2. 最終ステージ (実行環境) ---
 FROM python:3.12-slim AS final
@@ -30,8 +32,6 @@ WORKDIR /workspace/backend
 # RUN useradd --no-create-home django_user # 開発用
 RUN useradd --no-create-home --shell /usr/sbin/nologin django_user # 本番用
 ENV HOME=/home/django_user
-# ✅ 本番環境では非rootユーザーで実行
-USER django_user
 
 # ビルドステージから必要なものをコピー
 # 依存関係（インストールされたライブラリ）とコードをコピー
@@ -42,10 +42,13 @@ COPY --from=builder /workspace/backend /workspace/backend
 # アプリケーションファイルの所有権を変更
 RUN chown -R django_user:django_user /workspace/backend
 
+# ✅ 本番環境では非rootユーザーで実行
+USER django_user
+
 # 環境変数（必要に応じて設定）
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
-ENV DJANGO_SETTINGS_MODULE config.settings 
+ENV DJANGO_SETTINGS_MODULE config.settings.production
 # 本番環境であることを明示（settings.pyで活用）
 ENV DJANGO_ENV production 
 

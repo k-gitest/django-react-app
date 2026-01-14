@@ -60,6 +60,11 @@ Django/React モノレポベースのSPAアプリケーション
 ├── backend/                    # Djangoバックエンド
 │   ├── config/                # プロジェクト設定
 │   │   ├── settings.py        # 環境設定
+│   │   ├── settings/
+│   │   │   ├── base.py
+│   │   │   ├── local.py
+│   │   │   ├── production.py
+│   │   │   └── test.py
 │   │   ├── urls.py            # ルートURLルーティング
 │   │   ├── wsgi.py / asgi.py  # サーバーインターフェース
 │   │   └── __init__.py

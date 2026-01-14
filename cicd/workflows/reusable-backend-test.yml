@@ -7,11 +7,13 @@ on:
         description: Environment name (staging/production)
         required: true
         type: string
+      """
       debug-mode:
         description: Django DEBUG setting
         required: false
         type: string
         default: 'True'
+      """
       strict-mode:
         description: Fail on linting errors
         required: false
@@ -68,8 +70,8 @@ jobs:
       PGPORT: 5432
       
       # Django設定
-      DJANGO_SETTINGS_MODULE: config.settings_test
-      DEBUG: ${{ inputs.debug-mode }}
+      DJANGO_SETTINGS_MODULE: config.settings.test
+      # DEBUG: ${{ inputs.debug-mode }}
       SECRET_KEY: test-secret-key-for-ci
       ENVIRONMENT: ${{ inputs.environment }}
       
@@ -84,7 +86,7 @@ jobs:
     
     services:
       postgres:
-        image: postgres:16
+        image: postgres:17
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres

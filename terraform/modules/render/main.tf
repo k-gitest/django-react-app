@@ -59,7 +59,8 @@ resource "render_web_service" "backend" {
         value = "True"
       }
       "DJANGO_SETTINGS_MODULE" = {
-        value = "config.settings"
+        # Stagingも本番設定を使う（DBやストレージ接続先は環境変数で分ける）
+        value = "config.settings.production"
       }
       "PYTHONUNBUFFERED" = {
         value = "1"

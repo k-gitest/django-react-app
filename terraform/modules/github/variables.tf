@@ -128,3 +128,15 @@ variable "e2e_test_password" {
   type        = string
   sensitive   = true
 }
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# CloudFlareデプロイ用
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+variable "cloudflare_project_name" {
+  type = string
+}
+
+variable "cloudflare_account_id" {
+  type = string
+}
