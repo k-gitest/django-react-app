@@ -85,7 +85,27 @@ module "render" {
     "AWS_SECRET_ACCESS_KEY"   = module.backblaze.application_key
     "AWS_STORAGE_BUCKET_NAME" = module.backblaze.bucket_name
     "AWS_S3_ENDPOINT_URL"     = module.backblaze.s3_endpoint
+    # Upstash Redis
+    "UPSTASH_REDIS_REST_URL"   = module.upstash.redis_rest_url
+    "UPSTASH_REDIS_REST_TOKEN" = module.upstash.redis_rest_token
+    # Upstash Vector
+    "UPSTASH_VECTOR_REST_URL"   = module.upstash.vector_endpoint
+    "UPSTASH_VECTOR_REST_TOKEN" = module.upstash.vector_token
+    # QStash
+    "QSTASH_TOKEN"      = module.upstash.qstash_token
+    "QSTASH_TOPIC_NAME" = module.upstash.qstash_topic_name
+    # API Keys
+    "GEMINI_API_KEY"           = var.gemini_api_key
+    "RESEND_API_KEY"           = var.resend_api_key
+    # Django Secret Key (random_password から取得)
+    "SECRET_KEY"               = random_password.django_secret_key.result
   }
+}
+
+# --- Cache & Vector (Upstash) ---
+module "upstash" {
+  source      = "../../modules/upstash"
+  environment = local.environment
 }
 
 # --- GitHub Secrets/Variables ---
@@ -126,4 +146,18 @@ module "github_secrets" {
   # Cloudflare デプロイ用に追加
   cloudflare_project_name = module.cloudflare.pages_project_name
   cloudflare_account_id   = var.cloudflare_account_id
+
+  # Gemini
+  gemini_api_key    = var.gemini_api_key
+
+  # Resend
+  resend_api_key    = var.resend_api_key
+
+  # Upstash
+  upstash_redis_rest_url   = module.upstash.redis_rest_url
+  upstash_redis_rest_token = module.upstash.redis_rest_token
+  upstash_vector_endpoint  = module.upstash.vector_endpoint
+  upstash_vector_token     = module.upstash.vector_token
+  upstash_qstash_token      = module.upstash.qstash_token
+  upstash_qstash_topic_name = module.upstash.qstash_topic_name
 }

@@ -165,3 +165,63 @@ resource "github_actions_environment_secret" "e2e_test_password" {
   secret_name     = "E2E_TEST_PASSWORD"
   plaintext_value = var.e2e_test_password
 }
+
+# resend用の認証情報
+resource "github_actions_environment_secret" "resend_key" {
+  repository      = var.repository_name
+  environment     = github_repository_environment.main.environment
+  secret_name     = "RESEND_API_KEY"
+  plaintext_value = var.resend_api_key
+}
+
+# gemini api用の認証情報
+resource "github_actions_environment_secret" "gemini_key" {
+  repository      = var.repository_name
+  environment     = github_repository_environment.main.environment
+  secret_name     = "GEMINI_API_KEY"
+  plaintext_value = var.gemini_api_key
+}
+
+# upstash用の認証情報
+
+resource "github_actions_environment_secret" "upstash_redis_url" {
+  repository       = var.repository_name
+  environment      = github_repository_environment.main.environment
+  secret_name      = "UPSTASH_REDIS_REST_URL"
+  plaintext_value  = var.upstash_redis_rest_url
+}
+
+resource "github_actions_environment_secret" "upstash_redis_token" {
+  repository       = var.repository_name
+  environment      = github_repository_environment.main.environment
+  secret_name      = "UPSTASH_REDIS_REST_TOKEN"
+  plaintext_value  = var.upstash_redis_rest_token
+}
+
+resource "github_actions_environment_secret" "upstash_vector_url" {
+  repository       = var.repository_name
+  environment      = github_repository_environment.main.environment
+  secret_name      = "UPSTASH_VECTOR_REST_URL"
+  plaintext_value  = var.upstash_vector_endpoint
+}
+
+resource "github_actions_environment_secret" "upstash_vector_token" {
+  repository       = var.repository_name
+  environment      = github_repository_environment.main.environment
+  secret_name      = "UPSTASH_VECTOR_REST_TOKEN"
+  plaintext_value  = var.upstash_vector_token
+}
+
+resource "github_actions_environment_secret" "upstash_qstash_token" {
+  repository       = var.repository_name
+  environment      = github_repository_environment.main.environment
+  secret_name      = "QSTASH_TOKEN"
+  plaintext_value  = var.upstash_qstash_token
+}
+
+resource "github_actions_environment_variable" "upstash_qstash_topic" {
+  repository    = var.repository_name
+  environment   = github_repository_environment.main.environment
+  variable_name = "QSTASH_TOPIC_NAME"
+  value         = var.upstash_qstash_topic_name
+}

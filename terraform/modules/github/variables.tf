@@ -140,3 +140,52 @@ variable "cloudflare_project_name" {
 variable "cloudflare_account_id" {
   type = string
 }
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Gemini Api用
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+variable "gemini_api_key" { 
+  type = string 
+}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Resend用
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+variable "resend_api_key" {
+  type = string 
+}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Upstash 接続情報
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+variable "upstash_redis_rest_url" {
+  type      = string
+  sensitive = true
+}
+
+variable "upstash_redis_rest_token" {
+  type      = string
+  sensitive = true
+}
+
+variable "upstash_vector_endpoint" {
+  type      = string
+  sensitive = true
+}
+
+variable "upstash_vector_token" {
+  type      = string
+  sensitive = true
+}
+
+variable "upstash_qstash_token" {
+  type      = string
+  sensitive = true
+}
+
+variable "upstash_qstash_topic_name" {
+  type = string
+}
