@@ -40,6 +40,16 @@ variable "github_repo_url" {
   type        = string
 }
 
+variable "resend_api_key" { 
+  type = string; 
+  sensitive = true 
+}
+
+variable "gemini_api_key" { 
+  type = string; 
+  sensitive = true 
+}
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # E2Eテスト用設定
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

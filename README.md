@@ -184,8 +184,9 @@ Django/React モノレポベースのSPAアプリケーション
 │   │   │   └── variables.tf
 │   │   ├── neon/
 │   │   ├── render/
-│   │   └── backblaze/
-│   │   └── github/
+│   │   ├── backblaze/
+│   │   ├── github/
+│   │   └── upstash/
 │   └── envs/                  # 環境ごとの定義
 │       ├── production/              # 本番環境
 │       │   ├── main.tf        # 各moduleを呼び出し、本番用変数を渡す
