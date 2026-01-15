@@ -19,7 +19,7 @@ COPY . .
 # 静的ファイル収集 (プロダクションデプロイメントの標準的なステップ)
 # settings.pyでSTATIC_ROOTが定義されている必要あり
 # production設定を指定することで、DB接続なしで静的ファイルだけを集める設定（WhiteNoise等）が正しく動く
-RUN DJANGO_SETTINGS_MODULE=config.settings.production python manage.py collectstatic --noinput
+# RUN DJANGO_SETTINGS_MODULE=config.settings.production python manage.py collectstatic --noinput
 # RUN python manage.py collectstatic --noinput
 
 # --- 2. 最終ステージ (実行環境) ---
@@ -55,6 +55,6 @@ ENV DJANGO_ENV production
 # Gunicornがリッスンするポート
 EXPOSE 8000
 
-# コンテナ起動時にGunicornでDjangoを実行
+# コンテナ起動時に静的ファイル収集とサーバー起動をセットで行う
 # configはプロジェクト名、wsgiはWSGIモジュール
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000"]
+CMD ["sh", "-c", "python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000"]
