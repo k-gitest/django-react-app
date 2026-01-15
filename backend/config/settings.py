@@ -166,7 +166,7 @@ REST_FRAMEWORK = {
         # 'rest_framework.permissions.IsAuthenticated',
         "rest_framework.permissions.AllowAny",
     ),
-    "EXCEPTION_HANDLER": "apps.users.exceptions.custom_exception_handler",
+    "EXCEPTION_HANDLER": "apps.common.error_handlers.custom_exception_handler",
 }
 
 # dj-rest-authの設定

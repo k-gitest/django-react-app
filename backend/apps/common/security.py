@@ -35,7 +35,8 @@ def verify_qstash_signature(request) -> bool:
     # 検証に使用するURLの動的構築
     # QStash側の署名は「送信先フルURL」を材料に含めるため、
     # プロキシ環境（Codespaces等）でのhttp/httpsの不一致やドメインの相違を補正します。
-    base_url = os.getenv("WEBHOOK_BASE_URL")
+    # base_url = os.getenv("WEBHOOK_BASE_URL")
+    base_url = getattr(settings, "WEBHOOK_BASE_URL", "")
     path = request.get_full_path()
     url = f"{base_url}{path}"
 

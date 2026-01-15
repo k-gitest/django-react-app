@@ -56,7 +56,7 @@ const handleApiError = (error: ApiError): void => {
   // 401: 認証エラー → ログアウト処理
   if (error.isAuthError) {
     const authStore = useAuthStore.getState();
-    
+
     // 既にログアウト済みでない場合のみログアウト
     if (authStore.user !== null) {
       authStore.logout();
@@ -83,6 +83,11 @@ const handleApiError = (error: ApiError): void => {
     // ここでは汎用的なメッセージのみ表示
     const firstError = Object.values(error.fieldErrors)[0]?.[0];
     toast.error(firstError || '入力内容に誤りがあります。');
+    return;
+  }
+
+  if (error.status === 429) {
+    toast.error(error.serverMessage || 'リクエスト制限にかかりました。');
     return;
   }
 
@@ -128,7 +133,7 @@ const logErrorToService = (error: Error): void => {
 
   // Sentry, LogRocket, Datadog などへのエラー送信
   // 例: Sentry.captureException(error);
-  
+
   // 未実装の場合は console に出力（本番では無効化推奨）
   if (import.meta.env.DEV) {
     console.info('📤 Error would be logged to service:', error);
