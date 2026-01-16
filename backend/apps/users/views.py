@@ -1,10 +1,11 @@
-import hashlib
-import hmac
 import logging
 import subprocess
 
 from apps.common.infrastructure.motherduck_client import MotherDuckClient
 from apps.common.permissions import IsQStashAuthenticated
+from apps.common.error_decorators import log_webhook_call
+from apps.common.exceptions import EmailDeliveryError, AnalyticsError
+
 from dj_rest_auth.registration.views import RegisterView
 from dj_rest_auth.views import LoginView, LogoutView
 from django.conf import settings
@@ -15,17 +16,10 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .analytics_service import AnalyticsService
 from .email_service import UserEmailService
-from .qstash_service import UserQStashService
+from .user_service import UserAuthService
 
 logger = logging.getLogger(__name__)
-
-
-# テスト環境かどうかをチェック
-def is_testing():
-    """テスト環境かどうかを判定"""
-    return getattr(settings, "TESTING", False)
 
 
 # レート制限デコレーター（テスト時は無効化）
@@ -33,7 +27,7 @@ def apply_ratelimit(**kwargs):
     """テスト環境ではレート制限をスキップ"""
 
     def decorator(func):
-        if is_testing():
+        if getattr(settings, "TESTING", False):
             return func
         return ratelimit(**kwargs)(func)
 
@@ -55,27 +49,30 @@ class CustomLoginView(LoginView):
     def post(self, request, *args, **kwargs):
         response = super().post(request, *args, **kwargs)
 
-        # ログイン成功時のみ記録
+        # ログイン成功時のみ分析ログ記録
         if response.status_code == 200:
-            try:
-                # ユーザーオブジェクトを取得
-                user = None
-                if hasattr(self, "user") and self.user:
-                    user = self.user
-                elif response.data.get("user"):
-                    from django.contrib.auth import get_user_model
-
-                    User = get_user_model()
-                    user = User.objects.get(pk=response.data["user"]["pk"])
-
-                if user:
-                    AnalyticsService.log_auth_event(
-                        user=user, event_type="login", request=request, success=True
-                    )
-            except Exception as e:
-                logger.error(f"Failed to log auth event: {e}")
+            # ユーザーオブジェクトを取得
+            user = self._get_user_from_response(response)
+            if user:
+                UserAuthService.handle_login_success(user, request)
 
         return response
+
+    def _get_user_from_response(self, response):
+        # self.userがある場合
+        if hasattr(self, "user") and self.user:
+            return self.user
+
+        # self.userが無い場合
+        # レスポンスデータからPKを安全に抽出（初期値は空オブジェクト、欠損時はエラーではなくNoneにする）
+        user_pk = response.data.get("user", {}).get("pk")
+        # PKがあればDBから取得（filter().first() で安全に）
+        if user_pk:
+            from django.contrib.auth import get_user_model
+            # pkなしでもnoneを返す
+            return get_user_model().objects.filter(pk=user_pk).first()
+
+        return None
 
 
 @method_decorator(
@@ -91,6 +88,14 @@ class CustomRegisterView(RegisterView):
     - 分析ログ記録（MotherDuck）
     """
 
+    def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
+
+        if hasattr(self, "access_token") and hasattr(self, "refresh_token"):
+            self._set_jwt_cookies(response, self.access_token, self.refresh_token)
+
+        return response
+        
     def perform_create(self, serializer):
         user = serializer.save(self.request)
         self.user = user
@@ -99,30 +104,7 @@ class CustomRegisterView(RegisterView):
         self.access_token = str(refresh.access_token)
         self.refresh_token = str(refresh)
 
-        # テスト環境ではメール送信をスキップ
-        if not is_testing():
-            UserQStashService.send_welcome_email_async(
-                email=user.email, first_name=user.first_name or "User"
-            )
-
         return user
-
-    def create(self, request, *args, **kwargs):
-        response = super().create(request, *args, **kwargs)
-
-        if hasattr(self, "access_token") and hasattr(self, "refresh_token"):
-            self._set_jwt_cookies(response, self.access_token, self.refresh_token)
-
-        # 登録成功時のみ記録
-        if response.status_code == 201:
-            try:
-                AnalyticsService.log_auth_event(
-                    user=self.user, event_type="register", request=request, success=True
-                )
-            except Exception as e:
-                logger.error(f"Failed to log auth event: {e}")
-
-        return response
 
     def _set_jwt_cookies(self, response, access_token, refresh_token):
         """JWTトークンをCookieに設定"""
@@ -154,14 +136,17 @@ class CustomLogoutView(LogoutView):
         user = getattr(request, "user", None)
         if user and user.is_authenticated:
             # 引数から use_async=True を削除して呼び出す
-            AnalyticsService.log_auth_event(
-                user=user, event_type="logout", request=request, success=True
-            )
+            UserAuthService.handle_logout(request)
         return super().logout(request)
 
 
+# ============================================================================
+# Webhook エンドポイント
+# ============================================================================
+
 @api_view(["POST"])
 @permission_classes([IsQStashAuthenticated])
+@log_webhook_call(webhook_name="send_welcome_email")
 def send_welcome_email_webhook(request):
     """
     QStashから呼び出されるWebhook
@@ -172,24 +157,35 @@ def send_welcome_email_webhook(request):
 
     if not email or not first_name:
         return Response(
-            {"error": "Missing required fields"}, status=status.HTTP_400_BAD_REQUEST
+            {
+                "error": "validation_error",
+                "detail": "email と first_name は必須です"
+            },
+            status=status.HTTP_400_BAD_REQUEST
         )
 
-    result = UserEmailService.send_welcome_email(email, first_name)
-
-    if result["success"]:
+    try:
+        result = UserEmailService.send_welcome_email(email, first_name)
+        
+        if not result["success"]:
+            raise EmailDeliveryError(
+                message=result.get('error', 'Unknown error'),
+                email=email
+            )
+        
         return Response(
             {"message": "Email sent successfully", "id": result["id"]},
-            status=status.HTTP_200_OK,
+            status=status.HTTP_200_OK
         )
-    else:
-        return Response(
-            {"error": result["error"]}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        
+    except EmailDeliveryError:
+        # デコレーターがログ済み、DRFエラーハンドラーへ委譲
+        raise
 
 
 @api_view(["POST"])
 @permission_classes([IsQStashAuthenticated])
+@log_webhook_call(webhook_name="analytics_event")
 def analytics_event_webhook(request):
     """
     QStashから呼ばれる分析イベントWebhook
@@ -200,7 +196,13 @@ def analytics_event_webhook(request):
     event_data = request.data.get("event_data")
 
     if not event_type or not event_data:
-        return Response({"error": "event_type and event_data are required"}, status=400)
+        return Response(
+            {
+                "error": "validation_error",
+                "detail": "event_type と event_data は必須です"
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
     try:
         client = MotherDuckClient()
@@ -208,29 +210,31 @@ def analytics_event_webhook(request):
         if event_type == "auth_event":
             client.insert_auth_event(event_data)
         else:
-            return Response({"error": f"Unknown event_type: {event_type}"}, status=400)
+            return Response(
+                {
+                    "error": "validation_error",
+                    "detail": f"Unknown event_type: {event_type}"
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         return Response(
             {"message": "Event logged successfully", "event_type": event_type}
         )
 
     except Exception as e:
-        logger.error(f"Analytics webhook error: {e}")
-        return Response({"error": str(e)}, status=500)
+        raise AnalyticsError(message=str(e))
 
 
 @api_view(["POST"])
 @permission_classes([IsQStashAuthenticated])
+@log_webhook_call(webhook_name="dlt_pipeline")
 def dlt_pipeline_webhook(request):
     """
     QStashから呼ばれるdltパイプライン実行Webhook
 
     15分ごとにQStashから呼ばれ、PostgreSQL → MotherDuck 同期を実行
     """
-    logger.info("=" * 60)
-    logger.info("dlt pipeline webhook called")
-    logger.info(f"Request from: {request.META.get('REMOTE_ADDR')}")
-    logger.info("=" * 60)
 
     try:
         # dltパイプラインを実行
@@ -261,7 +265,7 @@ def dlt_pipeline_webhook(request):
                     "message": "Pipeline execution failed",
                     "error": result.stderr[-500:],
                 },
-                status=500,
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
     except subprocess.TimeoutExpired:
@@ -269,10 +273,9 @@ def dlt_pipeline_webhook(request):
 
         return Response(
             {"status": "error", "message": "Pipeline execution timeout (5 minutes)"},
-            status=500,
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
     except Exception as e:
-        logger.error(f"dlt pipeline error: {e}")
-
-        return Response({"status": "error", "message": str(e)}, status=500)
+        logger.exception("dlt pipeline error")
+        raise

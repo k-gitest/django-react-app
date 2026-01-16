@@ -18,7 +18,12 @@ def service_error_handler(func):
     """
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        service_name = args[0].__class__.__name__ if args else "UnknownService"
+        # 可能な限りクラス名を取得。取れない場合はモジュール名や "Function" を設定
+        if args and hasattr(args[0], '__class__') and not isinstance(args[0], (str, dict, list)):
+            service_name = args[0].__class__.__name__
+        else:
+            service_name = "ServiceFunction"
+
         operation = func.__name__
         
         try:
@@ -62,3 +67,28 @@ def service_error_handler(func):
             raise
             
     return wrapper
+
+def log_webhook_call(webhook_name: str):
+    """Webhook呼び出しのロギング"""
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(request, *args, **kwargs):
+            logger.info(
+                f"Webhook START: {webhook_name}",
+                extra={
+                    'webhook': webhook_name,
+                    'remote_addr': request.META.get('REMOTE_ADDR'),
+                }
+            )
+
+            try:
+                response = func(request, *args, **kwargs)
+                # 終了時もログ出力（ステータスコード付き）
+                logger.info(f"Webhook END: {webhook_name} Status: {response.status_code}")
+                return response
+            except Exception as e:
+                # 失敗時もログ出力
+                logger.error(f"Webhook FAILED: {webhook_name} Error: {str(e)}")
+                raise
+        return wrapper
+    return decorator

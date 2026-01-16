@@ -73,3 +73,10 @@ class QStashError(ExternalServiceError):
         super().__init__("QStash", message)
         if endpoint:
             self.data["endpoint"] = endpoint
+
+
+class AnalyticsError(ExternalServiceError):
+    """分析サービスエラー（MotherDuck等）"""
+    def __init__(self, message: str):
+        super().__init__("Analytics", message)
+        self.code = "analytics_error"
