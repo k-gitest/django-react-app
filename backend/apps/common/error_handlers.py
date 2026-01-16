@@ -20,7 +20,7 @@ def custom_exception_handler(exc, context):
     {
         "error": "エラーコード",      // ApiError での判定用
         "detail": "エラーメッセージ",  // ApiError.serverMessage
-        "data": {...}                  // ApiError.data
+        "data": {...}                  // ApiError.data（オプション）
     }
     """
     
@@ -29,8 +29,8 @@ def custom_exception_handler(exc, context):
         logger.warning(
             "Rate limit exceeded",
             extra={
-                'view': context.get('view').__class__.__name__,
-                'path': context.get('request').path
+                'view': context.get('view').__class__.__name__ if context.get('view') else 'Unknown',
+                'path': context.get('request').path if context.get('request') else 'Unknown'
             }
         )
         return Response(
@@ -48,6 +48,7 @@ def custom_exception_handler(exc, context):
             "detail": exc.message
         }
         
+        # dataがあれば追加
         if exc.data:
             response_data["data"] = exc.data
         
@@ -62,7 +63,7 @@ def custom_exception_handler(exc, context):
             f"Unhandled exception: {exc}",
             exc_info=True,
             extra={
-                'view': context.get('view').__class__.__name__,
+                'view': context.get('view').__class__.__name__ if context.get('view') else 'Unknown',
                 'exception_type': exc.__class__.__name__
             }
         )
@@ -74,17 +75,33 @@ def custom_exception_handler(exc, context):
             status=http_status.HTTP_500_INTERNAL_SERVER_ERROR
         )
     
-    # DRFの標準レスポンスを統一形式に変換
-    if isinstance(response.data, dict):
-        if "detail" not in response.data:
-            response.data = {
-                "error": "unknown_error",
-                "detail": str(response.data)
-            }
-        else:
-            response.data = {
-                "error": response.data.get("detail", "unknown_error"),
-                "detail": response.data.get("detail", "エラーが発生しました")
-            }
+    # 5. DRFの標準レスポンスを統一形式に変換
+    if response.status_code >= 400:
+        # DRFのエラーレスポンスを統一形式に
+        if isinstance(response.data, dict):
+            # すでに "detail" キーがある場合
+            if "detail" in response.data:
+                error_code = "validation_error" if response.status_code == 400 else "error"
+                response.data = {
+                    "error": error_code,
+                    "detail": response.data["detail"]
+                }
+            # フィールドエラー（{"email": ["error"]}) の場合
+            elif any(isinstance(v, list) for v in response.data.values()):
+                # 最初のエラーメッセージを取得
+                first_error = next(
+                    (v[0] for v in response.data.values() if isinstance(v, list) and v),
+                    "入力内容に誤りがあります"
+                )
+                response.data = {
+                    "error": "validation_error",
+                    "detail": first_error,
+                    "data": {"fields": response.data}  # 元のフィールドエラーも保持
+                }
+            else:
+                response.data = {
+                    "error": "unknown_error",
+                    "detail": str(response.data)
+                }
     
     return response

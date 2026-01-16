@@ -3,6 +3,8 @@ from dj_rest_auth.serializers import LoginSerializer as DefaultLoginSerializer
 from rest_framework import serializers
 from django.db import IntegrityError
 
+from apps.common.exceptions import UserAlreadyExistsError, ValidationError
+
 from .models import CustomUser
 from .user_service import UserQueryService, UserRegistrationService
 
@@ -63,23 +65,28 @@ class CustomRegisterSerializer(RegisterSerializer):
         """
         ユーザーを保存
         サービス層経由でユーザーを作成
+
+        Note: サービス層のエラーは自動的にDRFハンドラーへ伝播
         """
         cleaned_data = self.get_cleaned_data()
         
         try:
+            # サービス層のデコレーターがエラーを変換
             user = self.registration_service.register_user(
                 request=request,
                 user_data=cleaned_data
             )
-        except ValueError as e:
-            # サービス層からのバリデーションエラー
+        except UserAlreadyExistsError as e:
+            # サービス層からのエラーをDRF ValidationError に変換
+            # UserAlreadyExistsErrorだとステータス500になるのでserializers.ValidationErrorでステータス400を返す
             raise serializers.ValidationError({
-                'email': [str(e)]
+                'email': [e.message]
             })
-        except IntegrityError:
-            # データベース制約エラー
+        except ValidationError as e:
+            # 汎用バリデーションエラー
+            field = e.data.get('field', 'non_field_errors')
             raise serializers.ValidationError({
-                'email': ['A user is already registered with this e-mail address.']
+                field: [e.message]
             })
         
         return user

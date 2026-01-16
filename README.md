@@ -80,6 +80,9 @@ Django/React モノレポベースのSPAアプリケーション
 │   │   │   │   ├── email_client.py
 │   │   │   │   ├── qstash_client.py
 │   │   │   │   └── motherduck_client.py
+│   │   │   ├── exceptions.py
+│   │   │   ├── error_handlers.py
+│   │   │   ├── error_decorators.py
 │   │   │   ├── security.py
 │   │   │   └── permissions.py
 │   │   │
@@ -209,192 +212,40 @@ Django/React モノレポベースのSPAアプリケーション
 
 ## セットアップ
 
-### 前提条件
+### クイックスタート
 
-- Docker & Docker Compose
-- Node.js 18+ (ローカル開発の場合)
-- Python 3.11+ (ローカル開発の場合)
-- Visual Studio Code + Dev Containers拡張機能 (devcontainer使用の場合)
+このプロジェクトは4つの開発環境をサポートしています：
 
-### 開発環境の選択肢
+| 環境 | 特徴 |
+|------|------|
+| **GitHub Codespaces** | クラウド上で即座に開発開始、設定不要 |
+| **Dev Container** | ローカルで自動セットアップ、VS Code統合 |
+| **Docker Compose** | 柔軟な制御、CLI中心の開発 |
+| **ローカル環境** | 完全な制御、環境構築の手間あり |
 
-このプロジェクトは以下の開発環境をサポートしています：
+### 最速で始める
 
-1. **GitHub Codespaces**: クラウド上の開発環境
-2. **Dev Container（ローカル）**: VS Codeでの自動セットアップ
-3. **Docker Compose**: コンテナベースの開発環境
-4. **ローカル環境**: 直接マシンにインストール
-
----
-
-### 方法1: GitHub Codespaces を使用
-
-クラウド上で即座に開発環境が構築されます。
-
+#### GitHub Codespaces の場合
 ```bash
-# 1. GitHubリポジトリページから
-#    "Code" → "Codespaces" → "Create codespace on main"
-
-# 2. Codespace起動後、以下のコマンドを実行
+# 1. GitHubリポジトリページから "Code" → "Codespaces" → "Create codespace"
+# 2. Codespace起動後
 docker compose up -d
-
-# 3. フロントエンドの依存関係インストールと開発サーバー起動
-cd frontend
-npm install
-npm run dev
-
-# 4. バックエンドのマイグレーション
-docker compose exec backend python manage.py migrate
-
-# 5. スーパーユーザーの作成
-docker compose exec backend python manage.py createsuperuser
+cd frontend && npm install && npm run dev
 ```
 
-**使用設定**: `.devcontainer/devcontainer.json`
-
-**アクセス**:
-- Codespacesが自動でポートフォワーディングを設定
-- "PORTS"タブから各サービスにアクセス
-
----
-
-### 方法2: Dev Container（ローカル）を使用
-
-ローカルのVS Codeで開発環境をセットアップする方法です。
-
-#### パターンA: Compose統合型（自動起動）
-
-`.devcontainer/devcontainer-compose.json`を使用
-
+#### Dev Container の場合
 ```bash
-# 1. リポジトリをクローン
 git clone <repository-url>
 cd django-react-app
-
-# 2. 設定ファイルを切り替え（初回のみ）
-mv .devcontainer/devcontainer.json .devcontainer/devcontainer.manual.json
-mv .devcontainer/devcontainer-compose.json .devcontainer/devcontainer.json
-
-# 3. VS Codeで開く
-code .
-
-# 4. コマンドパレット（Ctrl+Shift+P / Cmd+Shift+P）から
-#    "Dev Containers: Reopen in Container" を選択
+code .  # VS Codeで開く
+# → "Reopen in Container" を選択
+# → 自動セットアップ完了後、フロントエンド開発サーバーを起動
+cd frontend && npm run dev
 ```
 
-初回起動後、以下が**自動実行**されます：
-- Docker Composeによる全サービス起動
-- ルート・フロントエンドの依存パッケージインストール
-- バックエンドの開発サーバー起動（Django）
-- ポートフォワーディング設定（8000, 3000）
+### 詳細なセットアップ手順
 
-**注意**: フロントエンドの開発サーバー（`npm run dev`）は、postCreateCommandでバックグラウンド起動してもdevcontainer構築完了後に終了するため、手動起動が必要です。
-
-```bash
-# devcontainer起動後、フロントエンド開発サーバーを起動
-cd frontend
-npm run dev
-```
-
-**アクセス**:
-- フロントエンド: http://localhost:3000
-- バックエンドAPI: http://localhost:8000/api/v1/
-- Django Admin: http://localhost:8000/admin/
-
-#### パターンB: 手動起動型
-
-`.devcontainer/devcontainer.json`を使用（デフォルト設定）
-
-```bash
-# 1-3. パターンAと同じ（設定ファイル切り替えは不要）
-
-# 4. devcontainer起動後、手動でCompose起動
-docker compose up -d
-
-# 5. フロントエンド開発サーバー起動
-cd frontend
-npm install
-npm run dev
-```
-
-このパターンは、Composeの起動/停止を柔軟に制御したい場合に適しています。
-
-**補足**: どちらのパターンでも、マイグレーションとスーパーユーザー作成は手動実行が必要です。
-```bash
-docker compose exec backend python manage.py migrate
-docker compose exec backend python manage.py createsuperuser
-```
-
----
-
-### 方法3: Docker Compose を使用
-
-devcontainerを使わず、直接Docker Composeで開発する場合。
-
-1. **リポジトリのクローン**
-   ```bash
-   git clone <repository-url>
-   cd django-react-app
-   ```
-
-2. **環境変数の設定**
-   ```bash
-   # バックエンド
-   cp backend/.env.example backend/.env
-   # 必要な環境変数を編集
-   
-   # フロントエンド
-   cp frontend/.env.example frontend/.env
-   # 必要な環境変数を編集
-   ```
-
-3. **コンテナの起動**
-   ```bash
-   docker compose up -d
-   ```
-
-4. **データベースのマイグレーション**
-   ```bash
-   docker compose exec backend python manage.py migrate
-   ```
-
-5. **スーパーユーザーの作成**
-   ```bash
-   docker compose exec backend python manage.py createsuperuser
-   ```
-
-6. **アクセス**
-   - フロントエンド: http://localhost:3000
-   - バックエンドAPI: http://localhost:8000/api/v1/
-   - Django Admin: http://localhost:8000/admin/
-
----
-
-### 方法4: ローカル環境（Docker なし）
-
-<details>
-<summary>詳細を表示</summary>
-
-#### バックエンド
-
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-python manage.py migrate
-python manage.py runserver
-```
-
-#### フロントエンド
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-</details>
+各環境の詳細な手順、トラブルシューティング、環境変数の設定については、**[docs/setup.md](docs/setup.md)** を参照してください。
 
 ---
 
