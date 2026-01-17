@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework import status as http_status
 from django_ratelimit.exceptions import Ratelimited
 from .exceptions import BaseAppError
+from .error_reporting import capture_exception_with_context
 import logging
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,23 @@ def custom_exception_handler(exc, context):
     
     # 2. アプリケーション独自例外
     if isinstance(exc, BaseAppError):
+        # ビジネスエラーは基本的にSentryに送信しない
+        # ただし、500エラーは送信する
+        if exc.status_code >= 500:
+            capture_exception_with_context(
+                exception=exc,
+                level='error',
+                extra={
+                    'error_code': exc.code,
+                    'status_code': exc.status_code,
+                    'view': context.get('view').__class__.__name__ if context.get('view') else 'Unknown'
+                },
+                tags={
+                    'component': 'api',
+                    'error_type': exc.code
+                }
+            )
+
         response_data = {
             "error": exc.code,
             "detail": exc.message
@@ -67,6 +85,34 @@ def custom_exception_handler(exc, context):
                 'exception_type': exc.__class__.__name__
             }
         )
+        
+        # 未ハンドリングの例外は必ずSentryに送信
+        request = context.get('request')
+        user = getattr(request, 'user', None) if request else None
+        
+        user_info = None
+        if user and hasattr(user, 'id') and user.is_authenticated:
+            user_info = {
+                'id': user.id,
+                'email': getattr(user, 'email', None)
+            }
+        
+        capture_exception_with_context(
+            exception=exc,
+            level='error',
+            extra={
+                'view': context.get('view').__class__.__name__ if context.get('view') else 'Unknown',
+                'path': request.path if request else 'Unknown',
+                'method': request.method if request else 'Unknown'
+            },
+            tags={
+                'component': 'api',
+                'critical': 'true',
+                'unhandled': 'true'
+            },
+            user_info=user_info
+        )
+
         return Response(
             {
                 "error": "internal_server_error",

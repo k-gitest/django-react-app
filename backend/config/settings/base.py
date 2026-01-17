@@ -1,7 +1,11 @@
 from datetime import timedelta
 from pathlib import Path
 from decouple import config
-
+import sentry_sdk
+from sentry_sdk.integrations.django import DjangoIntegration
+from sentry_sdk.integrations.logging import LoggingIntegration
+from apps.common.error_reporting import before_send_sentry
+import logging
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 SECRET_KEY = config("SECRET_KEY")
@@ -269,3 +273,42 @@ UPSTASH_VECTOR_REST_TOKEN = config("UPSTASH_VECTOR_REST_TOKEN", default="")
 
 # ===== MotherDuck =====
 MOTHERDUCK_TOKEN = config("MOTHERDUCK_TOKEN", default="")
+
+DEBUG = False
+
+# Sentry設定
+if not DEBUG or config('SENTRY_ENABLED', default=False, cast=bool):
+    sentry_sdk.init(
+        dsn=config('SENTRY_DSN'),
+        integrations=[
+            DjangoIntegration(),
+            LoggingIntegration(
+                level=logging.INFO,        # ログレベル INFO以上をSentryに送信
+                event_level=logging.ERROR  # ERROR以上はイベントとして記録
+            ),
+        ],
+        
+        # パフォーマンス監視
+        traces_sample_rate=config('SENTRY_TRACES_SAMPLE_RATE', default=0.1, cast=float),
+        
+        # プロファイリング
+        profiles_sample_rate=config('SENTRY_PROFILES_SAMPLE_RATE', default=0.1, cast=float),
+        
+        # 環境設定
+        environment=config('ENVIRONMENT', default='development'),
+        
+        # リリース情報（Git commit hashなど）
+        release=config('RELEASE', default='unknown'),
+        
+        # エラーサンプリング（本番環境で全エラーを送信すると課金が大きくなる）
+        sample_rate=1.0,  # 100%のエラーを送信（小規模なら問題ない）
+        
+        # 機密情報のフィルタリング
+        send_default_pii=False,  # 個人情報を送信しない
+        
+        # パフォーマンス
+        max_breadcrumbs=50,
+        
+        # エラーの前処理
+        before_send=before_send_sentry,
+    )
