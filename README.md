@@ -83,6 +83,7 @@ Django/React モノレポベースのSPAアプリケーション
 │   │   │   ├── exceptions.py
 │   │   │   ├── error_handlers.py
 │   │   │   ├── error_decorators.py
+│   │   │   ├── error_reporting.py
 │   │   │   ├── security.py
 │   │   │   └── permissions.py
 │   │   │
