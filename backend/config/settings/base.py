@@ -4,7 +4,7 @@ from decouple import config
 import sentry_sdk
 from sentry_sdk.integrations.django import DjangoIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration
-from apps.common.error_reporting import before_send_sentry
+from apps.common.error_reporting import before_send
 import logging
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -310,5 +310,5 @@ if not DEBUG or config('SENTRY_ENABLED', default=False, cast=bool):
         max_breadcrumbs=50,
         
         # エラーの前処理
-        before_send=before_send_sentry,
+        before_send=before_send,
     )

@@ -1,11 +1,11 @@
 """
-共通デコレーター（シンプル版）
+共通デコレーター
 """
 import functools
 import logging
 from django.db import IntegrityError
 from .exceptions import BaseAppError, UserAlreadyExistsError
-from .error_reporting import capture_exception_with_context
+from .error_reporting import ErrorMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -53,21 +53,23 @@ def service_error_handler(func):
             # その他のIntegrityError（予期しないDB制約違反）
             logger.error(
                 f"{service_name}.{operation}: Database integrity error",
-                exc_info=True
+                exc_info=False
             )
             # Sentryに送信（予期しないエラー）
-            capture_exception_with_context(
+            ErrorMonitor.log_error(
                 exception=e,
-                level='error',
-                extra={
+                context={
                     'service': service_name,
                     'operation': operation,
                     'error_type': 'database_integrity'
                 },
                 tags={
                     'component': 'database',
+                    'error_category': 'unexpected',
+                    'severity': 'high',
                     'service': service_name
-                }
+                },
+                fingerprint=[service_name, operation, 'database']
             )
             raise BaseAppError(
                 "データベース制約エラーが発生しました",
@@ -81,19 +83,20 @@ def service_error_handler(func):
                 extra={'service': service_name, 'operation': operation}
             )
             # Sentryに送信（予期しないエラーは必ず送信）
-            capture_exception_with_context(
+            ErrorMonitor.log_error(
                 exception=e,
-                level='error',
-                extra={
+                context={
                     'service': service_name,
                     'operation': operation,
                     'error_type': 'unexpected'
                 },
                 tags={
                     'component': 'service',
-                    'service': service_name,
-                    'critical': 'true'
-                }
+                    'error_category': 'unexpected',
+                    'severity': 'critical',
+                    'service': service_name
+                },
+                fingerprint=None  # 予期しないエラーはグループ化しない
             )
             raise
             
@@ -121,17 +124,19 @@ def log_webhook_call(webhook_name: str):
                 # 失敗時もログ出力
                 logger.error(f"Webhook FAILED: {webhook_name} Error: {str(e)}")
                 # Webhook失敗はSentryに送信（外部からのトリガー）
-                capture_exception_with_context(
+                ErrorMonitor.log_error(
                     exception=e,
-                    level='error',
-                    extra={
+                    context={
                         'webhook': webhook_name,
                         'remote_addr': request.META.get('REMOTE_ADDR'),
                     },
                     tags={
                         'component': 'webhook',
+                        'error_category': 'external',
+                        'severity': 'high',
                         'webhook_name': webhook_name
-                    }
+                    },
+                    fingerprint=['WebhookHandler', webhook_name, 'webhook']
                 )
                 raise
         return wrapper

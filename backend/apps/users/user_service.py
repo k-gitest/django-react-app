@@ -5,6 +5,7 @@ import logging
 
 from apps.common.error_decorators import service_error_handler
 from apps.common.exceptions import UserAlreadyExistsError, AnalyticsError, QStashError
+from apps.common.error_reporting import ErrorMonitor, ErrorProfiles
 
 from .models import CustomUser
 from .qstash_service import UserQStashService
@@ -260,41 +261,37 @@ class UserRegistrationService:
     @staticmethod
     def _send_welcome_email_safely(user: CustomUser):
         """ウェルカムメール送信を安全に実行（失敗してもエラーを投げない）"""
-        try:
+        with ErrorMonitor.capture_and_continue(
+            component='qstash',
+            operation='send_welcome_email',
+            service='UserRegistrationService',
+            expected_errors=(QStashError,),
+            profile=ErrorProfiles.INFRASTRUCTURE_MEDIUM,
+            user=user,
+            context={'email': user.email}  # オプション
+        ):
             UserQStashService.send_welcome_email_async(
                 email=user.email,
                 first_name=user.first_name or "User"
-            )
-        except QStashError as e:
-            logger.warning(
-                f"Failed to queue welcome email: {e.message}",
-                extra={'user_id': user.id, 'email': user.email}
-            )
-        except Exception as e:
-            logger.error(
-                f"Unexpected error queuing welcome email: {e}",
-                extra={'user_id': user.id}
             )
     
     @staticmethod
     def _log_registration_safely(user: CustomUser, request):
         """登録イベントログを安全に実行（失敗してもエラーを投げない）"""
-        try:
+        with ErrorMonitor.capture_and_continue(
+            component='analytics',
+            operation='log_auth_event',
+            service='UserRegistrationService',
+            expected_errors=(AnalyticsError,),
+            profile=ErrorProfiles.MONITORING_LOW,
+            user=user,
+            context={'event_type': 'register'}
+        ):
             AnalyticsService.log_auth_event(
                 user=user,
                 event_type="register",
                 request=request,
                 success=True
-            )
-        except AnalyticsError as e:
-            logger.warning(
-                f"Failed to log registration event: {e.message}",
-                extra={'user_id': user.id}
-            )
-        except Exception as e:
-            logger.error(
-                f"Unexpected error in analytics: {e}",
-                extra={'user_id': user.id}
             )
 
 # ============================================================================
@@ -335,26 +332,18 @@ class UserAuthService:
         if getattr(settings, "TESTING", False):
             return
 
-        try:
+        with ErrorMonitor.capture_and_continue(
+            component='analytics',
+            operation='log_auth_event',
+            service='UserAuthService',
+            expected_errors=(AnalyticsError,),
+            profile=ErrorProfiles.MONITORING_LOW,
+            user=user,
+            context={'event_type': event_type}
+        ):
             AnalyticsService.log_auth_event(
                 user=user,
                 event_type=event_type,
                 request=request,
                 success=True
-            )
-        except AnalyticsError as e:
-            logger.warning(
-                f"Analytics logging failed: {e.message}",
-                extra={
-                    'event_type': event_type,
-                    'user_id': getattr(user, 'id', None)
-                }
-            )
-        except Exception as e:
-            logger.error(
-                f"Unexpected error in analytics: {e}",
-                extra={
-                    'event_type': event_type,
-                    'user_id': getattr(user, 'id', None)
-                }
             )
