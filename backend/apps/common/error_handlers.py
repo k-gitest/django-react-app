@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework import status as http_status
 from django_ratelimit.exceptions import Ratelimited
 from .exceptions import BaseAppError
-from .error_reporting import capture_exception_with_context
+from .error_reporting import ErrorMonitor
 import logging
 
 logger = logging.getLogger(__name__)
@@ -47,18 +47,23 @@ def custom_exception_handler(exc, context):
         # ビジネスエラーは基本的にSentryに送信しない
         # ただし、500エラーは送信する
         if exc.status_code >= 500:
-            capture_exception_with_context(
+            view_name = context.get('view').__class__.__name__ if context.get('view') else 'Unknown'
+
+            ErrorMonitor.log_error(
                 exception=exc,
-                level='error',
-                extra={
+                context={
                     'error_code': exc.code,
                     'status_code': exc.status_code,
-                    'view': context.get('view').__class__.__name__ if context.get('view') else 'Unknown'
+                    'view': view_name
                 },
                 tags={
                     'component': 'api',
-                    'error_type': exc.code
-                }
+                    'error_category': 'application',
+                    'severity': 'high',
+                    'error_type': exc.code,
+                    'view': view_name
+                },
+                fingerprint=['APIHandler', view_name, 'api']
             )
 
         response_data = {
@@ -77,40 +82,38 @@ def custom_exception_handler(exc, context):
     
     # 4. 未ハンドリングの例外（500エラー）
     if response is None:
+        view_name = context.get('view').__class__.__name__ if context.get('view') else 'Unknown'
+
         logger.critical(
             f"Unhandled exception: {exc}",
             exc_info=True,
             extra={
-                'view': context.get('view').__class__.__name__ if context.get('view') else 'Unknown',
+                'view': view_name,
                 'exception_type': exc.__class__.__name__
             }
         )
         
-        # 未ハンドリングの例外は必ずSentryに送信
+        # ユーザー情報の取得
         request = context.get('request')
         user = getattr(request, 'user', None) if request else None
         
-        user_info = None
-        if user and hasattr(user, 'id') and user.is_authenticated:
-            user_info = {
-                'id': user.id,
-                'email': getattr(user, 'email', None)
-            }
-        
-        capture_exception_with_context(
+        # 未ハンドリングの例外は必ずSentryに送信
+        ErrorMonitor.log_error(
             exception=exc,
-            level='error',
-            extra={
-                'view': context.get('view').__class__.__name__ if context.get('view') else 'Unknown',
+            context={
+                'view': view_name,
                 'path': request.path if request else 'Unknown',
                 'method': request.method if request else 'Unknown'
             },
             tags={
                 'component': 'api',
-                'critical': 'true',
-                'unhandled': 'true'
+                'error_category': 'unexpected',
+                'severity': 'critical',
+                'unhandled': 'true',
+                'view': view_name
             },
-            user_info=user_info
+            user=user,
+            fingerprint=None  # 予期しないエラーはグループ化しない
         )
 
         return Response(
