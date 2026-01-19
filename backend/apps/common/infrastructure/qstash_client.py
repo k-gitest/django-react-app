@@ -16,7 +16,7 @@ class QStashClient:
     BASE_URL = "https://qstash.upstash.io/v2"
     
     @staticmethod
-    def publish(endpoint_path: str, payload: dict, delay_seconds: int = 0) -> dict:
+    def publish(endpoint_path: str, payload: dict, delay_seconds: int = 0) -> str:
         """
         QStashにメッセージを送信
         
@@ -42,28 +42,32 @@ class QStashClient:
         if delay_seconds > 0:
             headers["Upstash-Delay"] = f"{delay_seconds}s"
         
-        try:
-            response = requests.post(
-                f"{QStashClient.BASE_URL}/publish/{webhook_url}",
-                headers=headers,
-                json=payload,
-                timeout=10
-            )
-            response.raise_for_status()
+        # try:
+        response = requests.post(
+            f"{QStashClient.BASE_URL}/publish/{webhook_url}",
+            headers=headers,
+            json=payload,
+            timeout=10
+        )
+        response.raise_for_status()
+        return response.json()["messageId"]
+        """
+        message_id = response.json().get("messageId")
+        logger.info(f"QStash message published to {endpoint_path}, ID: {message_id}")
+        
+        return {
+            "success": True,
+            "message_id": message_id,
+            "error": None
+        }
+        """
             
-            message_id = response.json().get("messageId")
-            logger.info(f"QStash message published to {endpoint_path}, ID: {message_id}")
-            
-            return {
-                "success": True,
-                "message_id": message_id,
-                "error": None
-            }
-            
+        """
         except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to publish QStash message: {e}")
+            # logger.error(f"Failed to publish QStash message: {e}")
             return {
                 "success": False,
                 "message_id": None,
                 "error": str(e)
             }
+        """

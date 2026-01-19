@@ -15,7 +15,7 @@ class UserQStashService:
 
     @staticmethod
     @service_error_handler
-    def send_welcome_email_async(email: str, first_name: str) -> dict:
+    def send_welcome_email_async(email: str, first_name: str) -> str:
         """
         ウェルカムメール送信をQStash経由で非同期実行
 
@@ -28,6 +28,20 @@ class UserQStashService:
             
         Raises:
             QStashError: QStash送信失敗時
+        """
+
+        try:
+            result = BaseQStashService.publish(
+                endpoint_path="/api/v1/webhooks/send-welcome-email",
+                payload={"email": email, "first_name": first_name},
+            )
+            return result.get("messageId")
+        except Exception as e:
+            raise QStashError(
+                message=f"Failed to queue welcome email: {str(e)}",
+                endpoint="/api/v1/webhooks/send-welcome-email"
+            ) from e
+            
         """
         result = BaseQStashService.publish(
             endpoint_path="/api/v1/webhooks/send-welcome-email",
@@ -42,3 +56,4 @@ class UserQStashService:
             )
             
         return result
+        """

@@ -40,15 +40,14 @@ class CustomRegisterSerializer(RegisterSerializer):
         self.query_service = UserQueryService()
         self.registration_service = UserRegistrationService()
 
+    """ サービス層でチェック
     def validate_email(self, email):
-        """
-        メールアドレスの重複をチェック
-        """
         if self.query_service.email_exists(email):
             raise serializers.ValidationError(
                 "A user is already registered with this e-mail address."
             )
         return email
+    """
 
     def get_cleaned_data(self):
         """
@@ -70,6 +69,13 @@ class CustomRegisterSerializer(RegisterSerializer):
         """
         cleaned_data = self.get_cleaned_data()
         
+        # サービス層を呼び出すだけ（エラー処理は上位に委譲）
+        user = self.registration_service.register_user(
+            request=request,
+            user_data=cleaned_data
+        )
+        
+        """
         try:
             # サービス層のデコレーターがエラーを変換
             user = self.registration_service.register_user(
@@ -88,6 +94,7 @@ class CustomRegisterSerializer(RegisterSerializer):
             raise serializers.ValidationError({
                 field: [e.message]
             })
+        """
         
         return user
 

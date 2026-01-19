@@ -1,3 +1,4 @@
+from email import message
 import logging
 
 from apps.common.infrastructure.email_client import EmailClient
@@ -19,7 +20,7 @@ class UserEmailService:
         self.email_client = EmailClient()
 
     @service_error_handler
-    def send_welcome_email(self, email: str, first_name: str) -> dict:
+    def send_welcome_email(self, email: str, first_name: str) -> str:
         """
         ウェルカムメール送信
 
@@ -68,6 +69,7 @@ class UserEmailService:
         </html>
         """
 
+        """
         result = self.email_client.send(
             to_email=email,
             subject=subject,
@@ -83,6 +85,21 @@ class UserEmailService:
 
         logger.info(f"Welcome email sent to {email}")
         return result
+        """
+        try:
+            message_id = self.email_client.send(
+                to_email=email,
+                subject=subject,
+                html_content=html_content
+            )
+            logger.info(f"Welcome email sent to {email}, message_id={message_id}")
+            return message_id
+        except Exception as e:
+            # インフラエラーをビジネス例外に変換
+            raise EmailDeliveryError(
+                message=f"Failed to send welcome email: {str(e)}",
+                email=email
+            ) from e
 
     @service_error_handler
     def send_password_reset_email(self, email: str, reset_token: str) -> dict:
