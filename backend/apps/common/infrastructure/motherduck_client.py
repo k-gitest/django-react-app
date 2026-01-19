@@ -38,7 +38,7 @@ class MotherDuckClient:
                 self._setup_schema()
                 logger.info("MotherDuck connection established")
             except Exception as e:
-                logger.error(f"Failed to connect to MotherDuck: {e}")
+                # logger.error(f"Failed to connect to MotherDuck: {e}")
                 raise
     
     def _setup_schema(self):
@@ -108,10 +108,10 @@ class MotherDuckClient:
             
             logger.info("MotherDuck schema initialized successfully")
         except Exception as e:
-            logger.error(f"Failed to setup MotherDuck schema: {e}")
+            # logger.error(f"Failed to setup MotherDuck schema: {e}")
             raise
     
-    def insert_auth_event(self, event_data: dict) -> bool:
+    def insert_auth_event(self, event_data: dict) -> None:
         """
         認証イベントをMotherDuckに挿入
         
@@ -129,28 +129,31 @@ class MotherDuckClient:
         Returns:
             bool: 成功/失敗
         """
-        try:
-            self._conn.execute("""
-                INSERT INTO django_react_app.logs.auth_events 
-                (user_id, email, event_type, ip_address, user_agent, success, error_message)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, [
-                event_data.get("user_id"),
-                event_data.get("email"),
-                event_data.get("event_type"),
-                event_data.get("ip_address"),
-                event_data.get("user_agent", ""),
-                event_data.get("success", True),
-                event_data.get("error_message"),
-            ])
+        #try:
+
+        self._conn.execute("""
+            INSERT INTO django_react_app.logs.auth_events 
+            (user_id, email, event_type, ip_address, user_agent, success, error_message)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, [
+            event_data.get("user_id"),
+            event_data.get("email"),
+            event_data.get("event_type"),
+            event_data.get("ip_address"),
+            event_data.get("user_agent", ""),
+            event_data.get("success", True),
+            event_data.get("error_message"),
+        ])
             
+        """
             logger.info(f"Auth event inserted: {event_data.get('event_type')} for user {event_data.get('user_id')}")
             return True
         except Exception as e:
-            logger.error(f"Failed to insert auth event: {e}")
+            # logger.error(f"Failed to insert auth event: {e}")
             return False
+        """
 
-    def insert_todo_event(self, event_data: dict) -> bool:
+    def insert_todo_event(self, event_data: dict) -> None:
         """
         TodoイベントをMotherDuckに挿入
         
@@ -170,29 +173,32 @@ class MotherDuckClient:
         Returns:
             bool: 成功/失敗
         """
-        try:
-            self._conn.execute("""
-                INSERT INTO django_react_app.logs.todo_events 
-                (user_id, todo_id, event_type, todo_title, 
-                priority, progress, is_completed, changed_fields, deletion_reason)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, [
-                event_data.get("user_id"),
-                event_data.get("todo_id"),
-                event_data.get("event_type"),
-                event_data.get("todo_title"),
-                event_data.get("priority"),
-                event_data.get("progress"),
-                event_data.get("is_completed"),
-                event_data.get("changed_fields"),
-                event_data.get("deletion_reason"),
-            ])
+        # try:
+
+        self._conn.execute("""
+            INSERT INTO django_react_app.logs.todo_events 
+            (user_id, todo_id, event_type, todo_title, 
+            priority, progress, is_completed, changed_fields, deletion_reason)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, [
+            event_data.get("user_id"),
+            event_data.get("todo_id"),
+            event_data.get("event_type"),
+            event_data.get("todo_title"),
+            event_data.get("priority"),
+            event_data.get("progress"),
+            event_data.get("is_completed"),
+            event_data.get("changed_fields"),
+            event_data.get("deletion_reason"),
+        ])
             
+        """
             logger.info(f"Todo event inserted: {event_data.get('event_type')} for todo {event_data.get('todo_id')}")
             return True
         except Exception as e:
-            logger.error(f"Failed to insert todo event: {e}")
+            # logger.error(f"Failed to insert todo event: {e}")
             return False
+        """
     
     def query(self, sql: str):
         """
@@ -208,7 +214,7 @@ class MotherDuckClient:
             result = self._conn.execute(sql).fetchall()
             return result
         except Exception as e:
-            logger.error(f"Query failed: {e}")
+            # logger.error(f"Query failed: {e}")
             return None
     
     def close(self):

@@ -104,7 +104,7 @@ class ErrorProfiles:
         error_category='infrastructure',
         severity='medium',
         user_impact='low',
-        business_critical='false'
+        business_critical='false',
         use_fingerprint=True  # インフラエラーはグループ化
     )
     

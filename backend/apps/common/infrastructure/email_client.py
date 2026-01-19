@@ -1,3 +1,4 @@
+from urllib import response
 import resend
 from django.conf import settings
 import logging
@@ -16,7 +17,7 @@ class EmailClient:
         resend.api_key = settings.RESEND_API_KEY
     
     def send(self, to_email: str, subject: str, html_content: str, 
-             from_email: str = None) -> dict:
+             from_email: str = None) -> str:
         """
         メールを送信
         
@@ -28,33 +29,45 @@ class EmailClient:
         
         Returns:
             dict: {"success": bool, "id": str or None, "error": str or None}
+
+        Raises:
+            Exception: Resend APIのエラーがそのまま伝播
         """
-        try:
-            params = {
-                "from": from_email or settings.DEFAULT_FROM_EMAIL,
-                "to": [to_email],
-                "subject": subject,
-                "html": html_content
-            }
-            
-            response = resend.Emails.send(params)
-            logger.info(f"Email sent to {to_email}, ID: {response['id']}")
-            
-            return {
-                "success": True,
-                "id": response["id"],
-                "error": None
-            }
-            
+        # try:
+
+        params = {
+            "from": from_email or settings.DEFAULT_FROM_EMAIL,
+            "to": [to_email],
+            "subject": subject,
+            "html": html_content
+        }
+        
+        # response = resend.Emails.send(params)
+        # logger.info(f"Email sent to {to_email}, ID: {response['id']}")
+
+        # try-exceptせず、エラーは上位に任せる
+        response = resend.Emails.send(params)
+        return response["id"]
+
+        """
+        return {
+            "success": True,
+            "id": response["id"],
+            "error": None
+        }
+        """
+        
+        """
         except Exception as e:
-            logger.error(f"Failed to send email to {to_email}: {e}")
+            # logger.error(f"Failed to send email to {to_email}: {e}")
             return {
                 "success": False,
                 "id": None,
                 "error": str(e)
             }
+        """
     
-    def send_batch(self, emails: list[dict]) -> list[dict]:
+    def send_batch(self, emails: list[dict]) -> list[str]:
         """
         複数のメールを一括送信
         
@@ -64,12 +77,12 @@ class EmailClient:
         Returns:
             list[dict]: 各メールの送信結果
         """
-        results = []
+        message_ids = []
         for email_data in emails:
-            result = self.send(
+            message_id = self.send(
                 to_email=email_data["to"],
                 subject=email_data["subject"],
                 html_content=email_data["html"]
             )
-            results.append(result)
-        return results
+            message_ids.append(message_id)
+        return message_ids

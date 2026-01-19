@@ -22,7 +22,7 @@ class AnalyticsService:
         request,
         success: bool = True,
         error_message: str = None
-    ):
+    ) -> None:
         """
         認証イベントをMotherDuckに記録
 
