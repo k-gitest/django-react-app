@@ -30,6 +30,31 @@ def _before_send(event: Dict, hint: Dict) -> Optional[Dict]:
     
     return event
 
+def _apply_scope_data(
+    scope: sentry_sdk.Scope,
+    level: str,
+    extra: Optional[Dict[str, Any]] = None,
+    tags: Optional[Dict[str, str]] = None,
+    user_info: Optional[Dict[str, Any]] = None,
+    fingerprint: Optional[list] = None
+):
+    """スコープに対して共通のメタデータを一括設定する"""
+    scope.level = level
+    
+    if extra:
+        for key, value in extra.items():
+            scope.set_extra(key, value)
+    
+    if tags:
+        for key, value in tags.items():
+            scope.set_tag(key, value)
+            
+    if user_info:
+        scope.set_user(user_info)
+
+    if fingerprint:
+        scope.fingerprint = fingerprint
+
 
 def _capture_exception_internal(
     exception: Exception,
@@ -58,6 +83,11 @@ def _capture_exception_internal(
             scope.fingerprint = fingerprint
         
         capture_exception(exception)
+    """
+    with sentry_sdk.push_scope() as scope:
+        _apply_scope_data(scope, level, **kwargs)
+        sentry_sdk.capture_exception(exception)
+    """
 
 
 def _capture_message_internal(
@@ -83,7 +113,11 @@ def _capture_message_internal(
             scope.fingerprint = fingerprint
         
         capture_message(message)
-
+    """
+    with sentry_sdk.push_scope() as scope:
+        _apply_scope_data(scope, level, **kwargs)
+        sentry_sdk.capture_message(message)
+    """
 
 @dataclass
 class ErrorProfile:
@@ -142,7 +176,7 @@ class ErrorMonitor:
     外部モニタリングサービスへのエラー報告を抽象化。
     実装の切り替えはこのクラス内部で行う。
     """
-    
+
     @staticmethod
     def log_error(
         exception: Exception,
