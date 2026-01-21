@@ -1,4 +1,4 @@
-from typing import Final
+from typing import Final, Union
 from apps.common.infrastructure.qstash_client import QStashClient
 from apps.common.exceptions import QStashError
 
@@ -18,6 +18,11 @@ class BaseQStashService:
         """
         共通の送信ロジック（エラー変換を担当）
         
+        Args:
+            endpoint_path: Webhook相対パス
+            payload: 送信データ
+            delay_seconds: 遅延実行（秒）
+        
         Returns:
             str: message_id
             
@@ -25,23 +30,20 @@ class BaseQStashService:
             QStashError: 送信失敗時
         """
         try:
-            result = QStashClient.publish(endpoint_path, payload, delay_seconds)
+            message_id = QStashClient.publish(endpoint_path, payload, delay_seconds)
             
-            # Clientが辞書を返す場合のエラー判定
-            if isinstance(result, dict) and not result.get("success"):
+            # QStashClientは成功時に message_id (str) を返す設計
+            if not message_id or not isinstance(message_id, str):
                 raise QStashError(
-                    message=result.get("error", "Unknown error"),
+                    message="Invalid response from QStash client",
                     endpoint=endpoint_path
                 )
             
-            # 成功時はIDを返す
-            return result.get("messageId") if isinstance(result, dict) else result
+            return message_id
             
+        except QStashError:
+            raise
         except Exception as e:
-            # すでにQStashErrorならそのまま投げる
-            if isinstance(e, QStashError):
-                raise
-            # 生の例外を from e で連結して翻訳
             raise QStashError(
                 message=f"QStash operation failed: {str(e)}",
                 endpoint=endpoint_path
