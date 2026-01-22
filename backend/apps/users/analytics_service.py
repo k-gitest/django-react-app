@@ -1,22 +1,21 @@
-import logging
-
-from apps.common.infrastructure.motherduck_client import MotherDuckClient
-from apps.common.exceptions import AnalyticsError
+from apps.common.services.base_analytics import BaseAnalyticsService
 from apps.common.error_decorators import service_error_handler
+import logging
 
 logger = logging.getLogger(__name__)
 
 
-class AnalyticsService:
+class AnalyticsService(BaseAnalyticsService):
     """
-    分析イベント記録サービス
+    認証イベント記録サービス
     
-    MotherDuckに分析データを送信
+    BaseAnalyticsServiceを継承し、認証イベント固有のデータ整形を担当
     """
 
-    @staticmethod
+    @classmethod
     @service_error_handler
     def log_auth_event(
+        cls,
         user,
         event_type: str,
         request,
@@ -34,24 +33,20 @@ class AnalyticsService:
             error_message: エラーメッセージ（失敗時）
             
         Raises:
-            AnalyticsError: MotherDuck接続エラー時
+            AnalyticsError: MotherDuck接続エラー時（Baseが投げる）
         """
+        # イベントデータの整形（ビジネスロジック）
         event_data = {
             "user_id": user.id if user else None,
             "email": user.email if user else None,
             "event_type": event_type,
-            "ip_address": AnalyticsService._get_client_ip(request),
+            "ip_address": cls._get_client_ip(request),
             "user_agent": request.META.get("HTTP_USER_AGENT", "")[:500],
             "success": success,
             "error_message": error_message,
         }
 
-        try:
-            client = MotherDuckClient()
-            client.insert_auth_event(event_data)
-        except Exception as e:
-            # AnalyticsErrorに変換して再送出
-            raise AnalyticsError(message=f"Failed to insert auth event: {str(e)}")
+        cls._safe_insert("auth", event_data)
 
     @staticmethod
     def _get_client_ip(request):
@@ -62,7 +57,5 @@ class AnalyticsService:
         """
         x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
         if x_forwarded_for:
-            # X-Forwarded-For: client, proxy1, proxy2
-            # → 最初のIPがクライアント
             return x_forwarded_for.split(",")[0].strip()
         return request.META.get("REMOTE_ADDR", "")

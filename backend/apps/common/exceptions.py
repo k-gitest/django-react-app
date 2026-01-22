@@ -77,6 +77,24 @@ class QStashError(ExternalServiceError):
 
 class AnalyticsError(ExternalServiceError):
     """分析サービスエラー（MotherDuck等）"""
-    def __init__(self, message: str):
+    def __init__(self, message: str, context: Optional[dict] = None):
         super().__init__("Analytics", message)
         self.code = "analytics_error"
+        if context:
+            self.data.update(context)
+
+class EmbeddingError(ExternalServiceError):
+    """Gemini Embedding API エラー"""
+    def __init__(self, message: str, text: str = None):
+        super().__init__("Gemini", message)
+        self.code = "embedding_error"
+        if text:
+            self.data["text_preview"] = text[:100]  # 最初の100文字のみ
+
+class VectorError(ExternalServiceError):
+    """Upstash Vector エラー"""
+    def __init__(self, message: str, operation: Optional[str] = None):
+        super().__init__("Upstash Vector", message)
+        self.code = "vector_error"
+        if operation:
+            self.data["operation"] = operation

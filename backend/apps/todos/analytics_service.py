@@ -1,27 +1,22 @@
 import json
+from apps.common.services.base_analytics import BaseAnalyticsService
+from apps.common.error_decorators import service_error_handler
 import logging
-
-from apps.common.infrastructure.motherduck_client import MotherDuckClient
 
 logger = logging.getLogger(__name__)
 
 
-class TodoAnalyticsService:
+class TodoAnalyticsService(BaseAnalyticsService):
     """
     Todo分析イベント記録サービス
-
-    MotherDuckにTodoイベントを送信
+    
+    BaseAnalyticsServiceを継承し、Todo固有のイベントデータ整形を担当
     """
 
-    @staticmethod
-    def log_todo_create(user, todo):
-        """
-        Todo作成イベントを記録
-
-        Args:
-            user: Userオブジェクト
-            todo: Todoオブジェクト
-        """
+    @classmethod
+    @service_error_handler
+    def log_todo_create(cls, user, todo):
+        """Todo作成イベントを記録"""
         event_data = {
             "user_id": user.id,
             "todo_id": todo.id,
@@ -33,24 +28,12 @@ class TodoAnalyticsService:
             "changed_fields": None,
             "deletion_reason": None,
         }
+        cls._safe_insert("todo", event_data)
 
-        try:
-            client = MotherDuckClient()
-            client.insert_todo_event(event_data)
-        except Exception as e:
-            logger.error(f"Failed to log todo create event: {e}")
-
-    @staticmethod
-    def log_todo_update(user, todo, changed_fields: dict):
-        """
-        Todo更新イベントを記録
-
-        Args:
-            user: Userオブジェクト
-            todo: Todoオブジェクト（更新後）
-            changed_fields: 変更されたフィールド
-                例: {"priority": ["LOW", "HIGH"], "progress": [0, 50]}
-        """
+    @classmethod
+    @service_error_handler
+    def log_todo_update(cls, user, todo, changed_fields: dict):
+        """Todo更新イベントを記録"""
         event_data = {
             "user_id": user.id,
             "todo_id": todo.id,
@@ -62,27 +45,12 @@ class TodoAnalyticsService:
             "changed_fields": json.dumps(changed_fields) if changed_fields else None,
             "deletion_reason": None,
         }
+        cls._safe_insert("todo", event_data)
 
-        try:
-            client = MotherDuckClient()
-            client.insert_todo_event(event_data)
-        except Exception as e:
-            logger.error(f"Failed to log todo update event: {e}")
-
-    @staticmethod
-    def log_todo_delete(user, todo, deletion_reason: str = "other"):
-        """
-        Todo削除イベントを記録
-
-        Args:
-            user: Userオブジェクト
-            todo: Todoオブジェクト（削除前）
-            deletion_reason: 削除理由
-                - 'completed': 完了したので削除
-                - 'cancelled': キャンセル
-                - 'duplicate': 重複
-                - 'other': その他
-        """
+    @classmethod
+    @service_error_handler
+    def log_todo_delete(cls, user, todo, deletion_reason: str = "other"):
+        """Todo削除イベントを記録"""
         event_data = {
             "user_id": user.id,
             "todo_id": todo.id,
@@ -94,22 +62,12 @@ class TodoAnalyticsService:
             "changed_fields": None,
             "deletion_reason": deletion_reason,
         }
+        cls._safe_insert("todo", event_data)
 
-        try:
-            client = MotherDuckClient()
-            client.insert_todo_event(event_data)
-        except Exception as e:
-            logger.error(f"Failed to log todo delete event: {e}")
-
-    @staticmethod
-    def log_todo_complete(user, todo):
-        """
-        Todo完了イベントを記録
-
-        Args:
-            user: Userオブジェクト
-            todo: Todoオブジェクト（完了後）
-        """
+    @classmethod
+    @service_error_handler
+    def log_todo_complete(cls, user, todo):
+        """Todo完了イベントを記録"""
         event_data = {
             "user_id": user.id,
             "todo_id": todo.id,
@@ -121,9 +79,4 @@ class TodoAnalyticsService:
             "changed_fields": json.dumps({"progress": [todo.progress, 100]}),
             "deletion_reason": None,
         }
-
-        try:
-            client = MotherDuckClient()
-            client.insert_todo_event(event_data)
-        except Exception as e:
-            logger.error(f"Failed to log todo complete event: {e}")
+        cls._safe_insert("todo", event_data)

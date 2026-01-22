@@ -2,35 +2,166 @@ from .models import Todo
 from django.db.models import Count, Case, When
 from django.shortcuts import get_object_or_404
 from django.core.cache import cache
+from django.db import transaction
+from django.conf import settings
+from typing import Optional, Dict, List, Any
+import logging
+
+from apps.common.error_decorators import service_error_handler
+from apps.common.exceptions import (
+    QStashError,
+    AnalyticsError,
+    VectorError,
+    EmbeddingError,
+    BaseAppError
+)
+from apps.common.error_reporting import ErrorMonitor, ErrorProfiles
+
 from .qstash_service import TodoQStashService
 from .analytics_service import TodoAnalyticsService
-import logging
+from .vector_service import VectorService
 
 logger = logging.getLogger(__name__)
 
 
-class TodoService:
+class TodoQueryService:
     """
-    Todoのビジネスロジック層
+    Todo読み取り操作サービス
+    """
     
-    ベクトルインデックスは非同期処理（QStash経由）
-    """
+    @staticmethod
+    @service_error_handler
+    def get_user_todos(user):
+        """
+        ユーザー自身のタスクのみを取得（認可の担保）
+        
+        Args:
+            user: 対象ユーザー
+            
+        Returns:
+            QuerySet[Todo]: ユーザーのTodoリスト
+        """
+        return Todo.objects.filter(user=user)
+    
+    @staticmethod
+    @service_error_handler
+    def get_todo_by_id(todo_id: int, user) -> Optional[Todo]:
+        """
+        IDでTodoを取得（認可チェック付き）
+        
+        Args:
+            todo_id: TodoのID
+            user: リクエストユーザー
+            
+        Returns:
+            Todo or None
+        """
+        return Todo.objects.filter(id=todo_id, user=user).first()
+    
+    @staticmethod
+    @service_error_handler
+    def get_todo_or_404(todo_id: int, user) -> Todo:
+        """
+        IDでTodoを取得、存在しない場合は404
+        
+        Args:
+            todo_id: TodoのID
+            user: リクエストユーザー
+            
+        Returns:
+            Todo
+            
+        Raises:
+            Http404: Todoが存在しないか、他ユーザーのもの
+        """
+        return get_object_or_404(Todo, id=todo_id, user=user)
 
+
+class TodoStatsService:
+    """
+    Todo統計サービス（キャッシュ管理含む）
+    """
+    
     # キャッシュの有効期限（秒）
     CACHE_TIMEOUT = 900
 
     @staticmethod
-    def _get_stats_cache_key(user_id, stats_type):
+    def _get_stats_cache_key(user_id: int, stats_type: str) -> str:
         """キャッシュキーの生成ロジックを一元管理"""
         return f"todo_stats:{user_id}:{stats_type}"
     
     @staticmethod
-    def get_user_todos(user):
-        """ユーザー自身のタスクのみを取得（認可の担保）"""
-        return Todo.objects.filter(user=user)
+    @service_error_handler
+    def get_progress_stats(user) -> Dict[str, int]:
+        """
+        進捗率の分布を集計（20%刻み）
+        
+        Args:
+            user: 対象ユーザー
+            
+        Returns:
+            dict: 進捗率別の件数
+        """
+        cache_key = TodoStatsService._get_stats_cache_key(user.id, "progress")
+        stats = cache.get(cache_key)
+
+        if stats is None:
+            stats = Todo.objects.filter(user=user).aggregate(
+                range_0_20=Count(Case(When(progress__lte=20, then=1))),
+                range_21_40=Count(Case(When(progress__gt=20, progress__lte=40, then=1))),
+                range_41_60=Count(Case(When(progress__gt=40, progress__lte=60, then=1))),
+                range_61_80=Count(Case(When(progress__gt=60, progress__lte=80, then=1))),
+                range_81_100=Count(Case(When(progress__gt=80, then=1))),
+            )
+            cache.set(cache_key, stats, TodoStatsService.CACHE_TIMEOUT)
+        return stats
 
     @staticmethod
-    def create_todo(user, validated_data):
+    @service_error_handler
+    def get_priority_stats(user) -> List[Dict[str, Any]]:
+        """
+        優先度別の統計を取得
+        
+        Args:
+            user: 対象ユーザー
+            
+        Returns:
+            list[dict]: 優先度別の件数
+        """
+        cache_key = TodoStatsService._get_stats_cache_key(user.id, "priority")
+        stats = cache.get(cache_key)
+
+        if stats is None:
+            stats = list(
+                Todo.objects.filter(user=user)
+                .values('priority')
+                .annotate(count=Count('id'))
+                .order_by('priority')
+            )
+            cache.set(cache_key, stats, TodoStatsService.CACHE_TIMEOUT)
+        return stats
+    
+    @staticmethod
+    def invalidate_stats_cache(user_id: int):
+        """
+        指定したユーザーの統計キャッシュをすべて削除
+        
+        Args:
+            user_id: ユーザーID
+        """
+        cache.delete(TodoStatsService._get_stats_cache_key(user_id, "progress"))
+        cache.delete(TodoStatsService._get_stats_cache_key(user_id, "priority"))
+
+
+class TodoCommandService:
+    """
+    Todo作成・更新・削除サービス
+    """
+    
+    @staticmethod
+    @service_error_handler
+    @transaction.atomic
+    def create_todo(user, validated_data: Dict[str, Any]) -> Todo:
         """
         タスクの作成
         
@@ -40,29 +171,31 @@ class TodoService:
         Args:
             user: 作成者
             validated_data: Serializerで検証済みのデータ
+            
+        Returns:
+            Todo: 作成されたTodoインスタンス
         """
+        # Todo作成
         todo = Todo.objects.create(user=user, **validated_data)
-        TodoService._invalidate_stats_cache(user.id)
         
-        # 🔄 非同期でベクトルインデックスに追加
-        try:
-            result = TodoQStashService.queue_vector_indexing(todo.id, operation="upsert")
-            if not result["success"]:
-                logger.warning(f"QStash queue failed: {result['error']}")
-        except Exception as e:
-            # QStash送信失敗でもTodo作成は成功
-            logger.error(f"Failed to queue vector indexing: {e}")
-
-        # 分析ログ
-        try:
-            TodoAnalyticsService.log_todo_create(user=user, todo=todo)
-        except Exception as e:
-            logger.error(f"Failed to log analytics: {e}")
+        # キャッシュ無効化
+        TodoStatsService.invalidate_stats_cache(user.id)
+        
+        # 外部サービス（QStash, Analytics）はon_commitで実行
+        if not getattr(settings, "TESTING", False):
+            transaction.on_commit(
+                lambda: TodoCommandService._queue_vector_indexing_safely(todo.id, "upsert")
+            )
+            transaction.on_commit(
+                lambda: TodoCommandService._log_todo_create_safely(user, todo)
+            )
         
         return todo
-
+    
     @staticmethod
-    def update_todo(todo_id, user, validated_data):
+    @service_error_handler
+    @transaction.atomic
+    def update_todo(todo_id: int, user, validated_data: Dict[str, Any]) -> Todo:
         """
         タスクの更新
         
@@ -73,6 +206,9 @@ class TodoService:
             todo_id: 更新対象のID
             user: リクエストユーザー（認可チェック用）
             validated_data: Serializerで検証済みのデータ
+            
+        Returns:
+            Todo: 更新されたTodoインスタンス
         """
         # 認可チェック: 存在確認 + 本人確認
         todo = get_object_or_404(Todo, id=todo_id, user=user)
@@ -96,32 +232,31 @@ class TodoService:
             if old_value != new_value:
                 changed_fields[key] = [old_value, new_value]
         
-        TodoService._invalidate_stats_cache(user.id)
+        # キャッシュ無効化
+        TodoStatsService.invalidate_stats_cache(user.id)
         
-        # 🔄 非同期でベクトルインデックスを更新
-        try:
-            result = TodoQStashService.queue_vector_indexing(todo.id, operation="upsert")
-            if not result["success"]:
-                logger.warning(f"QStash queue failed: {result['error']}")
-        except Exception as e:
-            logger.error(f"Failed to queue vector indexing: {e}")
-        
-        # 完了イベントの検出
-        # 分析ログ
-        try:
+        # 外部サービス（QStash, Analytics）はon_commitで実行
+        if not getattr(settings, "TESTING", False):
+            transaction.on_commit(
+                lambda: TodoCommandService._queue_vector_indexing_safely(todo.id, "upsert")
+            )
+            
+            # 完了イベントの検出
             if old_values["progress"] < 100 and todo.progress == 100:
-                # 完了イベント
-                TodoAnalyticsService.log_todo_complete(user=user, todo=todo)
+                transaction.on_commit(
+                    lambda: TodoCommandService._log_todo_complete_safely(user, todo)
+                )
             elif changed_fields:
-                # 通常の更新イベント（変更がある場合のみ）
-                TodoAnalyticsService.log_todo_update(user=user, todo=todo, changed_fields=changed_fields)
-        except Exception as e:
-            logger.error(f"Failed to log analytics: {e}")
+                transaction.on_commit(
+                    lambda: TodoCommandService._log_todo_update_safely(user, todo, changed_fields)
+                )
         
         return todo
-
+    
     @staticmethod
-    def delete_todo(todo_id, user):
+    @service_error_handler
+    @transaction.atomic
+    def delete_todo(todo_id: int, user) -> None:
         """
         タスクの削除
         
@@ -135,69 +270,140 @@ class TodoService:
         # 認可チェック: 存在確認 + 本人確認
         todo = get_object_or_404(Todo, id=todo_id, user=user)
         
-        # 🔄 非同期でベクトルインデックスから削除
-        try:
-            result = TodoQStashService.queue_vector_indexing(todo_id, operation="delete")
-            if not result["success"]:
-                logger.warning(f"QStash queue failed: {result['error']}")
-        except Exception as e:
-            logger.error(f"Failed to queue vector deletion: {e}")
-
         # 削除理由を判定
         deletion_reason = "completed" if todo.progress == 100 else "cancelled"
         
-        # 分析ログ記録（削除前に実行）
-        try:
-            TodoAnalyticsService.log_todo_delete(user=user, todo=todo, deletion_reason=deletion_reason)
-        except Exception as e:
-            logger.error(f"Failed to log analytics: {e}")
+        # 外部サービス（QStash, Analytics）はon_commitで実行
+        if not getattr(settings, "TESTING", False):
+            transaction.on_commit(
+                lambda: TodoCommandService._queue_vector_deletion_safely(todo_id)
+            )
+            transaction.on_commit(
+                lambda: TodoCommandService._log_todo_delete_safely(user, todo, deletion_reason)
+            )
         
+        # Todo削除
         todo.delete()
-        TodoService._invalidate_stats_cache(user.id)
-
+        
+        # キャッシュ無効化
+        TodoStatsService.invalidate_stats_cache(user.id)
+    
+    # ===== 安全な外部サービス呼び出し =====
+    
     @staticmethod
-    def get_progress_stats(user):
-        cache_key = TodoService._get_stats_cache_key(user.id, "progress")
-        stats = cache.get(cache_key)
-
-        if stats is None:
-            """進捗率の分布を集計（20%刻み）"""
-            stats = Todo.objects.filter(user=user).aggregate(
-                range_0_20=Count(Case(When(progress__lte=20, then=1))),
-                range_21_40=Count(Case(When(progress__gt=20, progress__lte=40, then=1))),
-                range_41_60=Count(Case(When(progress__gt=40, progress__lte=60, then=1))),
-                range_61_80=Count(Case(When(progress__gt=60, progress__lte=80, then=1))),
-                range_81_100=Count(Case(When(progress__gt=80, then=1))),
+    def _queue_vector_indexing_safely(todo_id: int, operation: str):
+        """ベクトルインデックス登録を安全に実行（失敗してもエラーを投げない）"""
+        with ErrorMonitor.capture_and_continue(
+            component='qstash',
+            operation='queue_vector_indexing',
+            service='TodoCommandService',
+            expected_errors=(QStashError,),
+            profile=ErrorProfiles.INFRASTRUCTURE_MEDIUM,
+            context={'todo_id': todo_id, 'operation': operation}
+        ):
+            result = TodoQStashService.queue_vector_indexing(todo_id, operation=operation)
+            if not result["success"]:
+                raise QStashError(
+                    message=f"Failed to queue vector indexing: {result.get('error')}",
+                    endpoint="vector_indexing"
+                )
+    
+    @staticmethod
+    def _queue_vector_deletion_safely(todo_id: int):
+        """ベクトルインデックス削除を安全に実行（失敗してもエラーを投げない）"""
+        with ErrorMonitor.capture_and_continue(
+            component='qstash',
+            operation='queue_vector_deletion',
+            service='TodoCommandService',
+            expected_errors=(QStashError,),
+            profile=ErrorProfiles.INFRASTRUCTURE_MEDIUM,
+            context={'todo_id': todo_id}
+        ):
+            result = TodoQStashService.queue_vector_indexing(todo_id, operation="delete")
+            if not result["success"]:
+                raise QStashError(
+                    message=f"Failed to queue vector deletion: {result.get('error')}",
+                    endpoint="vector_deletion"
+                )
+    
+    @staticmethod
+    def _log_todo_create_safely(user, todo: Todo):
+        """Todo作成ログを安全に実行（失敗してもエラーを投げない）"""
+        with ErrorMonitor.capture_and_continue(
+            component='analytics',
+            operation='log_todo_create',
+            service='TodoCommandService',
+            expected_errors=(AnalyticsError,),
+            profile=ErrorProfiles.MONITORING_LOW,
+            user=user,
+            context={'todo_id': todo.id}
+        ):
+            TodoAnalyticsService.log_todo_create(user=user, todo=todo)
+    
+    @staticmethod
+    def _log_todo_update_safely(user, todo: Todo, changed_fields: Dict):
+        """Todo更新ログを安全に実行（失敗してもエラーを投げない）"""
+        with ErrorMonitor.capture_and_continue(
+            component='analytics',
+            operation='log_todo_update',
+            service='TodoCommandService',
+            expected_errors=(AnalyticsError,),
+            profile=ErrorProfiles.MONITORING_LOW,
+            user=user,
+            context={'todo_id': todo.id, 'changed_fields': list(changed_fields.keys())}
+        ):
+            TodoAnalyticsService.log_todo_update(
+                user=user,
+                todo=todo,
+                changed_fields=changed_fields
             )
-            cache.set(cache_key, stats, TodoService.CACHE_TIMEOUT)
-        return stats
-
+    
     @staticmethod
-    def get_priority_stats(user):
-        cache_key = TodoService._get_stats_cache_key(user.id, "priority")
-        stats = cache.get(cache_key)
-
-        if stats is None:
-            """優先度別の統計を取得"""
-            stats = list(
-                Todo.objects.filter(user=user)
-                .values('priority')
-                .annotate(count=Count('id'))
-                .order_by('priority')
+    def _log_todo_complete_safely(user, todo: Todo):
+        """Todo完了ログを安全に実行（失敗してもエラーを投げない）"""
+        with ErrorMonitor.capture_and_continue(
+            component='analytics',
+            operation='log_todo_complete',
+            service='TodoCommandService',
+            expected_errors=(AnalyticsError,),
+            profile=ErrorProfiles.MONITORING_LOW,
+            user=user,
+            context={'todo_id': todo.id}
+        ):
+            TodoAnalyticsService.log_todo_complete(user=user, todo=todo)
+    
+    @staticmethod
+    def _log_todo_delete_safely(user, todo: Todo, deletion_reason: str):
+        """Todo削除ログを安全に実行（失敗してもエラーを投げない）"""
+        with ErrorMonitor.capture_and_continue(
+            component='analytics',
+            operation='log_todo_delete',
+            service='TodoCommandService',
+            expected_errors=(AnalyticsError,),
+            profile=ErrorProfiles.MONITORING_LOW,
+            user=user,
+            context={'todo_id': todo.id, 'deletion_reason': deletion_reason}
+        ):
+            TodoAnalyticsService.log_todo_delete(
+                user=user,
+                todo=todo,
+                deletion_reason=deletion_reason
             )
-            cache.set(cache_key, stats, TodoService.CACHE_TIMEOUT)
-        return stats
+
+
+class TodoSearchService:
+    """
+    Todoセマンティック検索サービス
+    """
     
     @staticmethod
-    def _invalidate_stats_cache(user_id):
-        """指定したユーザーの統計キャッシュをすべて削除"""
-        cache.delete(TodoService._get_stats_cache_key(user_id, "progress"))
-        cache.delete(TodoService._get_stats_cache_key(user_id, "priority"))
-    
-    # ===== ベクトル検索機能 =====
-    
-    @staticmethod
-    def search_similar_todos(user, query: str, top_k: int = 5, min_score: float = 0.5):
+    @service_error_handler
+    def search_similar_todos(
+        user,
+        query: str,
+        top_k: int = 5,
+        min_score: float = 0.5
+    ) -> List[Dict[str, Any]]:
         """
         セマンティック検索（同期処理）
         
@@ -211,17 +417,29 @@ class TodoService:
         
         Returns:
             list[dict]: 検索結果
+            
+        Raises:
+            VectorError: ベクトル検索エラー
+            EmbeddingError: Embedding生成エラー
         """
-        from .vector_service import VectorService
         try:
-            return VectorService().search_similar(query, user.id, top_k, min_score)
+            vector_service = VectorService()
+            return vector_service.search_similar(query, user.id, top_k, min_score)
+        except (VectorError, EmbeddingError):
+            # 既に適切な例外なので再送出
+            raise
         except Exception as e:
-            logger.error(f"Failed to search similar todos: {e}")
-            # エラー時は空リストを返す
-            return []
+            # 予期しないエラー
+            logger.exception("Unexpected error in search_similar_todos")
+            # VectorError として送出（検索機能のエラーとして扱う）
+            raise VectorError(
+                message=f"検索中に予期しないエラーが発生しました: {str(e)}",
+                operation="search_similar"
+            )
     
     @staticmethod
-    def bulk_index_todos(user):
+    @service_error_handler
+    def bulk_index_todos(user) -> bool:
         """
         ユーザーの全Todoを一括インデックス（非同期版）
         
@@ -232,6 +450,9 @@ class TodoService:
         
         Returns:
             bool: キューイング成功/失敗
+            
+        Raises:
+            QStashError: QStashキューイングエラー
         """
         try:
             result = TodoQStashService.queue_bulk_vector_indexing(user.id)
@@ -239,8 +460,78 @@ class TodoService:
                 logger.info(f"Queued bulk indexing for user {user.id}")
                 return True
             else:
-                logger.error(f"Failed to queue bulk indexing: {result['error']}")
-                return False
-        except Exception as e:
-            logger.error(f"Failed to queue bulk indexing: {e}")
+                raise QStashError(
+                    message=f"Failed to queue bulk indexing: {result.get('error')}",
+                    endpoint="bulk_vector_indexing"
+                )
+        except QStashError:
+            # 既に適切な例外なので再送出
             raise
+        except Exception as e:
+            # 予期しないエラー
+            logger.exception("Unexpected error in bulk_index_todos")
+            raise QStashError(
+                message=f"一括インデックス登録中に予期しないエラーが発生しました: {str(e)}",
+                endpoint="bulk_vector_indexing"
+            )
+
+
+# ============================================================================
+# 後方互換性のためのファサード（移行期間用）
+# ============================================================================
+class TodoService:
+    """
+    後方互換性のための統合ファサード
+    
+    既存コードを段階的に移行するため、古いメソッド名も維持。
+    将来的に削除予定。
+    """
+    
+    # キャッシュの有効期限（秒）
+    CACHE_TIMEOUT = TodoStatsService.CACHE_TIMEOUT
+    
+    # Query
+    @staticmethod
+    def get_user_todos(user):
+        return TodoQueryService.get_user_todos(user)
+    
+    # Command
+    @staticmethod
+    def create_todo(user, validated_data):
+        return TodoCommandService.create_todo(user, validated_data)
+    
+    @staticmethod
+    def update_todo(todo_id, user, validated_data):
+        return TodoCommandService.update_todo(todo_id, user, validated_data)
+    
+    @staticmethod
+    def delete_todo(todo_id, user):
+        return TodoCommandService.delete_todo(todo_id, user)
+    
+    # Stats
+    @staticmethod
+    def get_progress_stats(user):
+        return TodoStatsService.get_progress_stats(user)
+    
+    @staticmethod
+    def get_priority_stats(user):
+        return TodoStatsService.get_priority_stats(user)
+    
+    @staticmethod
+    def _invalidate_stats_cache(user_id):
+        """非推奨: TodoStatsService.invalidate_stats_cache を使用"""
+        TodoStatsService.invalidate_stats_cache(user_id)
+    
+    @staticmethod
+    def _get_stats_cache_key(user_id, stats_type):
+        """非推奨: TodoStatsService._get_stats_cache_key を使用"""
+        return TodoStatsService._get_stats_cache_key(user_id, stats_type)
+    
+    # Search
+    @staticmethod
+    def search_similar_todos(user, query: str, top_k: int = 5, min_score: float = 0.5):
+        return TodoSearchService.search_similar_todos(user, query, top_k, min_score)
+    
+    @staticmethod
+    def bulk_index_todos(user):
+        return TodoSearchService.bulk_index_todos(user)

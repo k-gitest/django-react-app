@@ -1,5 +1,6 @@
 import google.generativeai as genai
 from django.conf import settings
+from apps.common.exceptions import EmbeddingError
 import logging
 import re
 
@@ -69,7 +70,10 @@ class EmbeddingService:
             return result['embedding']
         except Exception as e:
             logger.error(f"Failed to embed text: {e}")
-            raise
+            raise EmbeddingError(
+                message=f"Failed to embed text: {str(e)}",
+                text=text
+            ) from e
     
     def embed_batch(self, texts: list[str], task_type: str = "retrieval_document") -> list[list[float]]:
         """
@@ -94,4 +98,7 @@ class EmbeddingService:
             return [embedding for embedding in result['embedding']]
         except Exception as e:
             logger.error(f"Failed to embed batch: {e}")
-            raise
+            raise EmbeddingError(
+                message=f"Failed to embed batch: {str(e)}",
+                text=f"{len(texts)} texts"
+            ) from e
