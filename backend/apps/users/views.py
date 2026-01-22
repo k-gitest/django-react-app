@@ -1,13 +1,6 @@
 import logging
 import subprocess
 
-from apps.common.infrastructure.motherduck_client import MotherDuckClient
-from apps.common.permissions import IsQStashAuthenticated
-from apps.common.error_decorators import log_webhook_call
-from apps.common.exceptions import EmailDeliveryError, AnalyticsError
-
-from dj_rest_auth.registration.views import RegisterView
-from dj_rest_auth.views import LoginView, LogoutView
 from django.conf import settings
 from django.utils.decorators import method_decorator
 from django_ratelimit.decorators import ratelimit
@@ -16,90 +9,149 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from dj_rest_auth.registration.views import RegisterView
+from dj_rest_auth.views import LoginView, LogoutView
+
+from apps.common.infrastructure.motherduck_client import MotherDuckClient
+from apps.common.permissions import IsQStashAuthenticated
+from apps.common.error_decorators import log_webhook_call
+from apps.common.exceptions import EmailDeliveryError, AnalyticsError
+
 from .email_service import UserEmailService
 from .user_service import UserAuthService
+from .serializers import WelcomeEmailWebhookSerializer, AnalyticsEventWebhookSerializer
 
 logger = logging.getLogger(__name__)
 
 
-# レート制限デコレーター（テスト時は無効化）
+# ============================================================================
+# レート制限ヘルパー
+# ============================================================================
 def apply_ratelimit(**kwargs):
-    """テスト環境ではレート制限をスキップ"""
-
+    """
+    テスト環境ではレート制限をスキップするデコレーター
+    
+    本番環境でのみレート制限を適用し、テスト時は無効化
+    """
     def decorator(func):
         if getattr(settings, "TESTING", False):
             return func
         return ratelimit(**kwargs)(func)
-
     return decorator
 
 
+# ============================================================================
+# 認証ビュー
+# ============================================================================
 @method_decorator(
-    apply_ratelimit(key="ip", rate="5/5m", method="POST", block=True), name="dispatch"
+    apply_ratelimit(key="ip", rate="5/5m", method="POST", block=True),
+    name="dispatch"
 )
 class CustomLoginView(LoginView):
     """
     カスタムログインビュー
-
-    - レート制限（5回/5分）
-    - JWT Cookie自動発行
-    - 分析ログ記録（MotherDuck）
+    
+    機能:
+        - レート制限（5回/5分）
+        - JWT Cookie自動発行
+        - 分析ログ記録（MotherDuck）
+    
+    エラーハンドリング:
+        - 認証エラー: dj-rest-authが処理
+        - 分析ログエラー: ErrorMonitor.capture_and_continueで隔離（UserAuthService内）
     """
 
     def post(self, request, *args, **kwargs):
+        """
+        ログイン処理
+        
+        成功時に分析ログを記録。
+        エラーは統一エラーハンドラーが処理。
+        """
         response = super().post(request, *args, **kwargs)
 
         # ログイン成功時のみ分析ログ記録
         if response.status_code == 200:
-            # ユーザーオブジェクトを取得
             user = self._get_user_from_response(response)
             if user:
+                # 分析ログのエラーは UserAuthService._log_analytics_safely で隔離
                 UserAuthService.handle_login_success(user, request)
 
         return response
 
     def _get_user_from_response(self, response):
-        # self.userがある場合
+        """
+        レスポンスからユーザーオブジェクトを安全に取得
+        
+        Args:
+            response: DRFレスポンスオブジェクト
+        
+        Returns:
+            CustomUser or None
+        """
+        # self.userがある場合（dj-rest-authが設定）
         if hasattr(self, "user") and self.user:
             return self.user
 
-        # self.userが無い場合
-        # レスポンスデータからPKを安全に抽出（初期値は空オブジェクト、欠損時はエラーではなくNoneにする）
+        # self.userが無い場合、レスポンスデータから取得
         user_pk = response.data.get("user", {}).get("pk")
-        # PKがあればDBから取得（filter().first() で安全に）
         if user_pk:
             from django.contrib.auth import get_user_model
-            # pkなしでもnoneを返す
             return get_user_model().objects.filter(pk=user_pk).first()
 
         return None
 
 
 @method_decorator(
-    apply_ratelimit(key="ip", rate="3/1h", method="POST", block=True), name="dispatch"
+    apply_ratelimit(key="ip", rate="3/1h", method="POST", block=True),
+    name="dispatch"
 )
 class CustomRegisterView(RegisterView):
     """
     カスタム登録ビュー
-
-    - レート制限（3回/1時間）
-    - JWT Cookie自動発行
-    - ウェルカムメール送信（QStash経由）
-    - 分析ログ記録（MotherDuck）
+    
+    機能:
+        - レート制限（3回/1時間）
+        - JWT Cookie自動発行
+        - ウェルカムメール送信（QStash経由、非同期）
+        - 分析ログ記録（MotherDuck、非同期）
+    
+    エラーハンドリング:
+        - メールアドレス重複: UserAlreadyExistsError → 統一エラーハンドラーが処理
+        - ウェルカムメール送信エラー: ErrorMonitor.capture_and_continueで隔離
+        - 分析ログエラー: ErrorMonitor.capture_and_continueで隔離
     """
 
     def create(self, request, *args, **kwargs):
+        """
+        ユーザー登録処理
+        
+        JWT Cookieを自動設定。
+        エラーは統一エラーハンドラーが処理。
+        """
         response = super().create(request, *args, **kwargs)
 
+        # JWT Cookieを設定
         if hasattr(self, "access_token") and hasattr(self, "refresh_token"):
             self._set_jwt_cookies(response, self.access_token, self.refresh_token)
 
         return response
         
     def perform_create(self, serializer):
+        """
+        ユーザー作成の実行
+        
+        Serializerのsave()メソッドを呼び出し、
+        JWT トークンを生成。
+        
+        エラーは統一エラーハンドラーが処理するため、try-catchは不要。
+        """
+        # Serializer.save() → UserRegistrationService.register_user()
+        # エラーは統一エラーハンドラーへ伝播
         user = serializer.save(self.request)
         self.user = user
 
+        # JWT トークン生成
         refresh = RefreshToken.for_user(user)
         self.access_token = str(refresh.access_token)
         self.refresh_token = str(refresh)
@@ -107,7 +159,14 @@ class CustomRegisterView(RegisterView):
         return user
 
     def _set_jwt_cookies(self, response, access_token, refresh_token):
-        """JWTトークンをCookieに設定"""
+        """
+        JWTトークンをCookieに設定
+        
+        Args:
+            response: DRFレスポンスオブジェクト
+            access_token: アクセストークン
+            refresh_token: リフレッシュトークン
+        """
         cookie_settings = {
             "httponly": settings.REST_AUTH.get("JWT_AUTH_HTTPONLY", True),
             "secure": settings.REST_AUTH.get("JWT_AUTH_SECURE", False),
@@ -131,12 +190,29 @@ class CustomRegisterView(RegisterView):
 
 
 class CustomLogoutView(LogoutView):
+    """
+    カスタムログアウトビュー
+    
+    機能:
+        - 分析ログ記録（MotherDuck）
+    
+    エラーハンドリング:
+        - 分析ログエラー: ErrorMonitor.capture_and_continueで隔離
+    """
+    
     def logout(self, request):
+        """
+        ログアウト処理
+        
+        ログアウト前にユーザーを特定して分析ログを記録。
+        エラーは統一エラーハンドラーが処理。
+        """
         # ログアウト前にユーザーを特定して記録
         user = getattr(request, "user", None)
         if user and user.is_authenticated:
-            # 引数から use_async=True を削除して呼び出す
+            # 分析ログのエラーは UserAuthService._log_analytics_safely で隔離
             UserAuthService.handle_logout(request)
+        
         return super().logout(request)
 
 
@@ -149,38 +225,47 @@ class CustomLogoutView(LogoutView):
 @log_webhook_call(webhook_name="send_welcome_email")
 def send_welcome_email_webhook(request):
     """
-    QStashから呼び出されるWebhook
-    ウェルカムメールを実際に送信する
+    ウェルカムメール送信Webhook（QStashから呼ばれる）
+    
+    POST /api/v1/webhooks/send-welcome-email
+    
+    署名検証は IsQStashAuthenticated で自動処理。
+    
+    Payload:
+        {
+            "email": "user@example.com",
+            "first_name": "John"
+        }
+    
+    Returns:
+        200: 成功
+        400: バリデーションエラー
+        500: メール送信エラー（QStashが自動リトライ）
+    
+    Raises:
+        ValidationError: バリデーションエラー（統一エラーハンドラーが処理）
+        EmailDeliveryError: メール送信エラー（統一エラーハンドラーが処理）
     """
-    email = request.data.get("email")
-    first_name = request.data.get("first_name")
+    # Serializerでバリデーション
+    serializer = WelcomeEmailWebhookSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    
+    email = serializer.validated_data['email']
+    first_name = serializer.validated_data['first_name']
 
-    if not email or not first_name:
-        return Response(
-            {
-                "error": "validation_error",
-                "detail": "email と first_name は必須です"
-            },
-            status=status.HTTP_400_BAD_REQUEST
+    # メール送信（エラーは統一エラーハンドラーが処理）
+    result = UserEmailService.send_welcome_email(email, first_name)
+    
+    if not result["success"]:
+        raise EmailDeliveryError(
+            message=result.get('error', 'Unknown error'),
+            email=email
         )
-
-    try:
-        result = UserEmailService.send_welcome_email(email, first_name)
-        
-        if not result["success"]:
-            raise EmailDeliveryError(
-                message=result.get('error', 'Unknown error'),
-                email=email
-            )
-        
-        return Response(
-            {"message": "Email sent successfully", "id": result["id"]},
-            status=status.HTTP_200_OK
-        )
-        
-    except EmailDeliveryError:
-        # デコレーターがログ済み、DRFエラーハンドラーへ委譲
-        raise
+    
+    return Response({
+        "message": "Email sent successfully",
+        "id": result["id"]
+    })
 
 
 @api_view(["POST"])
@@ -188,42 +273,57 @@ def send_welcome_email_webhook(request):
 @log_webhook_call(webhook_name="analytics_event")
 def analytics_event_webhook(request):
     """
-    QStashから呼ばれる分析イベントWebhook
-
-    MotherDuckにイベントを記録
+    分析イベントWebhook（QStashから呼ばれる）
+    
+    POST /api/v1/webhooks/analytics-event
+    
+    署名検証は IsQStashAuthenticated で自動処理。
+    MotherDuckにイベントを記録。
+    
+    Payload:
+        {
+            "event_type": "auth_event",
+            "event_data": {
+                "user_id": 123,
+                "event_type": "login",
+                "timestamp": "2024-01-01T00:00:00Z",
+                ...
+            }
+        }
+    
+    Returns:
+        200: 成功
+        400: バリデーションエラー
+        500: 処理エラー（QStashが自動リトライ）
+    
+    Raises:
+        ValidationError: バリデーションエラー（統一エラーハンドラーが処理）
+        AnalyticsError: 分析サービスエラー（統一エラーハンドラーが処理）
     """
-    event_type = request.data.get("event_type")
-    event_data = request.data.get("event_data")
+    # Serializerでバリデーション
+    serializer = AnalyticsEventWebhookSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    
+    event_type = serializer.validated_data['event_type']
+    event_data = serializer.validated_data['event_data']
 
-    if not event_type or not event_data:
-        return Response(
-            {
-                "error": "validation_error",
-                "detail": "event_type と event_data は必須です"
-            },
-            status=status.HTTP_400_BAD_REQUEST
+    # MotherDuckにイベント記録（エラーは統一エラーハンドラーが処理）
+    client = MotherDuckClient()
+    
+    if event_type == "auth_event":
+        client.insert_auth_event(event_data)
+    else:
+        # この分岐は実際には来ない（Serializerでバリデーション済み）
+        # 将来的に新しいイベントタイプが追加された場合のフォールバック
+        raise AnalyticsError(
+            message=f"Unsupported event_type: {event_type}",
+            context={"event_type": event_type}
         )
 
-    try:
-        client = MotherDuckClient()
-
-        if event_type == "auth_event":
-            client.insert_auth_event(event_data)
-        else:
-            return Response(
-                {
-                    "error": "validation_error",
-                    "detail": f"Unknown event_type: {event_type}"
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        return Response(
-            {"message": "Event logged successfully", "event_type": event_type}
-        )
-
-    except Exception as e:
-        raise AnalyticsError(message=str(e))
+    return Response({
+        "message": "Event logged successfully",
+        "event_type": event_type
+    })
 
 
 @api_view(["POST"])
@@ -231,11 +331,20 @@ def analytics_event_webhook(request):
 @log_webhook_call(webhook_name="dlt_pipeline")
 def dlt_pipeline_webhook(request):
     """
-    QStashから呼ばれるdltパイプライン実行Webhook
-
-    15分ごとにQStashから呼ばれ、PostgreSQL → MotherDuck 同期を実行
+    dltパイプライン実行Webhook（QStashから呼ばれる）
+    
+    POST /api/v1/webhooks/dlt-pipeline
+    
+    署名検証は IsQStashAuthenticated で自動処理。
+    15分ごとにQStashから呼ばれ、PostgreSQL → MotherDuck 同期を実行。
+    
+    Returns:
+        200: 成功
+        500: 処理エラー（QStashが自動リトライ）
+    
+    Raises:
+        AnalyticsError: パイプライン実行エラー（統一エラーハンドラーが処理）
     """
-
     try:
         # dltパイプラインを実行
         result = subprocess.run(
@@ -246,36 +355,41 @@ def dlt_pipeline_webhook(request):
         )
 
         if result.returncode == 0:
-            logger.info("dlt pipeline executed successfully")
+            logger.info("✅ dlt pipeline executed successfully")
             logger.info(f"Output: {result.stdout}")
 
-            return Response(
-                {
-                    "status": "success",
-                    "message": "Pipeline executed successfully",
-                    "output": result.stdout[-500:],  # 最後の500文字のみ返す
-                }
-            )
+            return Response({
+                "status": "success",
+                "message": "Pipeline executed successfully",
+                "output": result.stdout[-500:],  # 最後の500文字のみ返す
+            })
         else:
-            logger.error(f"dlt pipeline failed: {result.stderr}")
-
-            return Response(
-                {
-                    "status": "error",
-                    "message": "Pipeline execution failed",
+            # パイプライン実行失敗
+            logger.error(f"❌ dlt pipeline failed: {result.stderr}")
+            raise AnalyticsError(
+                message="Pipeline execution failed",
+                context={
                     "error": result.stderr[-500:],
-                },
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    "returncode": result.returncode
+                }
             )
 
     except subprocess.TimeoutExpired:
-        logger.error("dlt pipeline timeout (5 minutes)")
-
-        return Response(
-            {"status": "error", "message": "Pipeline execution timeout (5 minutes)"},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        # タイムアウト
+        logger.error("❌ dlt pipeline timeout (5 minutes)")
+        raise AnalyticsError(
+            message="Pipeline execution timeout (5 minutes)",
+            context={"timeout": 300}
         )
-
-    except Exception as e:
-        logger.exception("dlt pipeline error")
+    
+    except AnalyticsError:
+        # 既に適切な例外なので再送出
         raise
+    
+    except Exception as e:
+        # 予期しないエラー
+        logger.exception("❌ dlt pipeline unexpected error")
+        raise AnalyticsError(
+            message=f"Unexpected pipeline error: {str(e)}",
+            context={"error_type": type(e).__name__}
+        )

@@ -1,26 +1,22 @@
-from email import message
-import logging
-
-from apps.common.infrastructure.email_client import EmailClient
-from apps.common.exceptions import EmailDeliveryError
+from apps.common.services.base_email import BaseEmailService
 from apps.common.error_decorators import service_error_handler
 from django.conf import settings
+import logging
 
 logger = logging.getLogger(__name__)
 
 
-class UserEmailService:
+class UserEmailService(BaseEmailService):
     """
     ユーザー関連のメール送信サービス（ビジネス層）
     
-    メールの「内容」を担当し、送信は EmailClient に委譲
+    メールの「内容（件名・HTML）」を担当し、
+    送信とエラー変換は BaseEmailService に委譲
     """
 
-    def __init__(self):
-        self.email_client = EmailClient()
-
+    @classmethod
     @service_error_handler
-    def send_welcome_email(self, email: str, first_name: str) -> str:
+    def send_welcome_email(cls, email: str, first_name: str) -> str:
         """
         ウェルカムメール送信
 
@@ -29,13 +25,13 @@ class UserEmailService:
             first_name: ユーザーの名前
 
         Returns:
-            dict: {"success": bool, "id": str or None, "error": str or None}
+            str: message_id
             
         Raises:
-            EmailDeliveryError: メール送信失敗時
+            EmailDeliveryError: メール送信失敗時（Baseが投げる）
         """
         subject = f"Welcome to Django React App, {first_name}!"
-
+        
         html_content = f"""
         <html>
             <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -69,40 +65,11 @@ class UserEmailService:
         </html>
         """
 
-        """
-        result = self.email_client.send(
-            to_email=email,
-            subject=subject,
-            html_content=html_content
-        )
+        return cls._safe_send(email, subject, html_content)
 
-        # 失敗時は例外を投げる（デコレーターがログ処理）
-        if not result["success"]:
-            raise EmailDeliveryError(
-                message=result.get('error', 'Unknown error'),
-                email=email
-            )
-
-        logger.info(f"Welcome email sent to {email}")
-        return result
-        """
-        try:
-            message_id = self.email_client.send(
-                to_email=email,
-                subject=subject,
-                html_content=html_content
-            )
-            logger.info(f"Welcome email sent to {email}, message_id={message_id}")
-            return message_id
-        except Exception as e:
-            # インフラエラーをビジネス例外に変換
-            raise EmailDeliveryError(
-                message=f"Failed to send welcome email: {str(e)}",
-                email=email
-            ) from e
-
+    @classmethod
     @service_error_handler
-    def send_password_reset_email(self, email: str, reset_token: str) -> dict:
+    def send_password_reset_email(cls, email: str, reset_token: str) -> str:
         """
         パスワードリセットメール送信（将来用）
 
@@ -111,14 +78,14 @@ class UserEmailService:
             reset_token: リセットトークン
 
         Returns:
-            dict: 送信結果
+            str: message_id
             
         Raises:
             EmailDeliveryError: メール送信失敗時
         """
         subject = "Password Reset Request"
         reset_url = f"{settings.FRONTEND_URL}/auth/reset-password?token={reset_token}"
-
+        
         html_content = f"""
         <html>
             <body>
@@ -129,17 +96,5 @@ class UserEmailService:
             </body>
         </html>
         """
-
-        result = self.email_client.send(
-            to_email=email,
-            subject=subject,
-            html_content=html_content
-        )
-
-        if not result["success"]:
-            raise EmailDeliveryError(
-                message=result.get('error', 'Unknown error'),
-                email=email
-            )
-
-        return result
+        
+        return cls._safe_send(email, subject, html_content)

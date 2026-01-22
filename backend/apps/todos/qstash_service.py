@@ -1,15 +1,22 @@
-from apps.common.infrastructure.qstash_client import QStashClient as BaseQStashService
+from typing import Final
+from apps.common.services.base_qstash import BaseQStashService
+from apps.common.error_decorators import service_error_handler
 
 
-class TodoQStashService:
+class TodoQStashService(BaseQStashService):
     """
     Todo関連の非同期タスク送信
-
-    common.QStashServiceをラップし、Todos固有のペイロードを構築
+    
+    BaseQStashServiceを継承し、Todos固有のエンドポイントとペイロードを定義
     """
+    
+    # エンドポイントをクラス定数として定義
+    ENDPOINT_VECTOR_INDEXING: Final = "/api/v1/webhooks/vector-indexing"
+    ENDPOINT_BULK_INDEXING: Final = "/api/v1/webhooks/bulk-vector-indexing"
 
-    @staticmethod
-    def queue_vector_indexing(todo_id: int, operation: str = "upsert") -> dict:
+    @classmethod
+    @service_error_handler
+    def queue_vector_indexing(cls, todo_id: int, operation: str = "upsert") -> str:
         """
         Todoのベクトルインデックス処理をキューに追加
 
@@ -18,16 +25,20 @@ class TodoQStashService:
             operation: "upsert" or "delete"
 
         Returns:
-            dict: {"success": bool, "message_id": str or None, "error": str or None}
+            str: message_id
+            
+        Raises:
+            QStashError: QStash送信失敗時（Baseが投げる）
         """
-        return BaseQStashService.publish(
-            endpoint_path="/api/v1/webhooks/vector-indexing",
+        return cls._safe_publish(
+            endpoint_path=cls.ENDPOINT_VECTOR_INDEXING,
             payload={"todo_id": todo_id, "operation": operation},
-            delay_seconds=1,  # DB確定を待つため1秒遅延
+            delay_seconds=1  # DB確定を待つため1秒遅延
         )
 
-    @staticmethod
-    def queue_bulk_vector_indexing(user_id: int) -> dict:
+    @classmethod
+    @service_error_handler
+    def queue_bulk_vector_indexing(cls, user_id: int) -> str:
         """
         ユーザーの全Todoを一括インデックス（非同期）
 
@@ -35,9 +46,12 @@ class TodoQStashService:
             user_id: ユーザーID
 
         Returns:
-            dict: {"success": bool, "message_id": str or None, "error": str or None}
+            str: message_id
+            
+        Raises:
+            QStashError: QStash送信失敗時（Baseが投げる）
         """
-        return BaseQStashService.publish(
-            endpoint_path="/api/v1/webhooks/bulk-vector-indexing",
-            payload={"user_id": user_id},
+        return cls._safe_publish(
+            endpoint_path=cls.ENDPOINT_BULK_INDEXING,
+            payload={"user_id": user_id}
         )
