@@ -71,9 +71,11 @@ Django/React モノレポベースのSPAアプリケーション
 │   │
 │   ├── apps/
 │   │   ├── analytics/
-│   │   │   └── managements/commands
-│   │   │         └──commands/
-│   │   │              └── run_pipeline.py
+│   │   │   ├── managements/commands
+│   │   │   │     └──commands/
+│   │   │   │          └── run_pipeline.py
+│   │   │   ├── tests/
+│   │   │   └── services.py
 │   │   │
 │   │   ├── common/
 │   │   │   ├── infrastructure/

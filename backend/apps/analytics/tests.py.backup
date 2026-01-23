@@ -7,6 +7,7 @@ from unittest.mock import patch, MagicMock, call
 from django.test import TestCase
 from django.core.management import call_command
 from django.contrib.auth import get_user_model
+from apps.analytics.services import DltPipelineService
 
 
 class RunPipelineCommandTestCase(TestCase):
@@ -121,3 +122,9 @@ class RunPipelineCommandTestCase(TestCase):
         # テーブル名が期待通りか確認
         self.assertEqual(User._meta.db_table, "custom_user")
         self.assertEqual(Todo._meta.db_table, "todos_todo")
+
+class DltPipelineServiceTest(TestCase):
+    def test_dry_run(self):
+        result = DltPipelineService.execute_postgres_to_motherduck(dry_run=True)
+        self.assertEqual(result["status"], "dry_run")
+        self.assertIn("custom_user", result["tables"])
