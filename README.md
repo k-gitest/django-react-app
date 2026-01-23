@@ -71,15 +71,23 @@ Django/React モノレポベースのSPAアプリケーション
 │   │
 │   ├── apps/
 │   │   ├── analytics/
-│   │   │   └── managements/commands
-│   │   │         └──commands/
-│   │   │              └── run_pipeline.py
+│   │   │   ├── managements/commands
+│   │   │   │     └──commands/
+│   │   │   │          └── run_pipeline.py
+│   │   │   ├── tests/
+│   │   │   └── services.py
 │   │   │
 │   │   ├── common/
 │   │   │   ├── infrastructure/
 │   │   │   │   ├── email_client.py
 │   │   │   │   ├── qstash_client.py
+│   │   │   │   ├── vector_client.py
 │   │   │   │   └── motherduck_client.py
+│   │   │   ├── services/
+│   │   │   │   ├── base_email.py
+│   │   │   │   ├── base_qstash.py
+│   │   │   │   ├── base_vector.py
+│   │   │   │   └── base_analytics.py
 │   │   │   ├── exceptions.py
 │   │   │   ├── error_handlers.py
 │   │   │   ├── error_decorators.py
@@ -326,139 +334,180 @@ src/features/
 
 ---
 
+## エラーハンドリング戦略
+
+### 概要
+
+本プロジェクトでは、**責務の明確な分離**と**適切な例外の伝播**により、堅牢で保守性の高いエラーハンドリングを実現しています。
+
+```
+【設計原則】
+✅ 各層で処理すべきエラーのみを扱う
+✅ 例外を適切に翻訳・伝播させる
+✅ ユーザーに分かりやすいエラーメッセージを返す
+✅ 重要なエラーを確実にモニタリングする
+```
+
+---
+
+### 4つのコンポーネント
+
+エラーハンドリングは以下の4つのコンポーネントで構成されています。
+
+| コンポーネント | ファイル | 役割 |
+|--------------|---------|------|
+| **1. 独自例外** | `exceptions.py` | エラーの「型」を定義（BaseAppError等） |
+| **2. デコレーター** | `error_decorators.py` | Django例外の自動変換（@service_error_handler） |
+| **3. 統一ハンドラー** | `error_handlers.py` | 最終的なJSON変換（custom_exception_handler） |
+| **4. モニタリング** | `error_reporting.py` | ログサービスへの報告（ErrorMonitor） |
+
+**処理の流れ**:
+```
+例外発生 → @service_error_handler → custom_exception_handler → ErrorMonitor → ログサービス
+           (Django例外を変換)      (JSON形式で返却)        (重要度判定・報告)
+```
+
+---
+
+### 使い分けガイド
+
+| 層 | エラー処理 | 使用するコンポーネント |
+|---|-----------|---------------------|
+| **View** | 行わない（統一ハンドラーに委譲） | なし |
+| **Serializer** | DRF標準バリデーションのみ | なし |
+| **Service（親）** | ビジネスロジックの統合 | @service_error_handler + ErrorMonitor.capture_and_continue |
+| **Service（子）** | ドメインロジック | @service_error_handler |
+| **BaseService** | Client例外 → ドメイン例外に変換 | try-catch（手動） |
+| **Client** | 行わない（例外をそのまま発生） | なし |
+
+---
+
+### 実装例
+
+#### Service層（典型的なパターン）
+
+```python
+@service_error_handler  # Django例外を自動変換
+@transaction.atomic
+def register_user(self, request, user_data: Dict) -> CustomUser:
+    # 1. メインフロー（絶対に成功させる）
+    if self.email_exists(email):
+        raise UserAlreadyExistsError(email)  # 独自例外を送出
+    
+    user = self.create_user(...)
+    
+    # 2. 副作用の隔離（失敗してもメインフローは成功）
+    if not settings.TESTING:
+        transaction.on_commit(lambda: self._send_welcome_email_safely(user))
+
+@staticmethod
+def _send_welcome_email_safely(user: CustomUser):
+    """副作用を安全に実行（失敗してもエラーを投げない）"""
+    with ErrorMonitor.capture_and_continue(
+        component='qstash',
+        operation='send_welcome_email',
+        service='UserRegistrationService',
+        expected_errors=(QStashError,),
+        user=user
+    ):
+        UserQStashService.send_welcome_email_async(...)
+```
+
+#### View層（典型的なパターン）
+
+```python
+def post(self, request, *args, **kwargs):
+    # エラー処理は書かない（統一ハンドラーに委譲）
+    response = super().post(request, *args, **kwargs)
+    
+    if response.status_code == 200:
+        user = self._get_user_from_response(response)
+        if user:
+            UserAuthService.handle_login_success(user, request)
+    
+    return response
+```
+
+---
+
+### レスポンス形式
+
+統一エラーハンドラーは、すべての例外を以下の形式で返却します。
+
+```json
+{
+  "error": "user_already_exists",
+  "detail": "メールアドレス user@example.com は既に登録されています",
+  "data": {
+    "field": "email"
+  }
+}
+```
+
+**フロントエンドでの処理**:
+```typescript
+try {
+  await registerUser(data);
+} catch (error) {
+  if (error instanceof ApiError) {
+    if (error.code === 'user_already_exists') {
+      toast.error(error.serverMessage);
+    }
+  }
+}
+```
+
+---
+
+### 詳細ドキュメント
+
+エラーハンドリングの詳細については、以下のドキュメントを参照してください。
+
+- **[docs/error-handling.md](docs/error-handling.md)** - 全体の設計と実装ガイド
+  - 階層構造の詳細
+  - 各コンポーネントの詳細説明
+  - BaseService層での例外変換パターン
+  - エラープロファイルの使い方
+  - フロントエンド連携の詳細
+  - ベストプラクティス集
+
+---
+
 ## 認証システム
 
 ### 概要
 
 **dj-rest-auth + djangorestframework-simplejwt**によるJWT Cookie認証を採用しています。
 
-### 設計変更の経緯：djoserからdj-rest-authへの移行
-
-当初はdjoserによるヘッダー認証（Bearer）を採用していましたが、以下の理由からdj-rest-authのCookie認証方式に移行しました。
-
-#### 移行の理由
-
-**1. XSS攻撃への対策を最優先**
-
-旧方式（djoser）では、Access TokenをクライアントサイドのlocalStorageやsessionStorageに保存する必要がありました。この方法は、XSS（Cross-Site Scripting）攻撃によってトークンが漏洩するリスクが非常に高いと判断しました。
-
-dj-rest-authのHttpOnly Cookie方式では、JavaScriptからのアクセスを完全に遮断できるため、Webアプリケーションのセキュリティを大幅に向上させることができます。
-
-**2. 自作実装のリスク回避**
-
-HttpOnly Cookie認証を自作で実装することも検討しましたが、以下の懸念から見送りました：
-
-- **セキュリティリスク**: 認証という極めて重要な機能での実装ミスは致命的
-- **保守コスト**: コード量の増加と、将来的なメンテナンス負担
-- **開発時間**: 実績のあるライブラリを使えば、同等の時間で堅牢な実装が可能
-
-**3. SPA認証に特化した設計思想**
-
-Djangoの標準的なセッション認証は、クロスオリジン（SPA）環境での認証フローに適していません。dj-rest-authは、SPA用に最適化された設計思想を持つため、本プロジェクトの要件に最適と判断しました。
+```
+【主な特徴】
+✅ HttpOnly Cookie による XSS 対策
+✅ JWT トークンローテーション（リプレイ攻撃対策）
+✅ emailベース認証（username不要）
+✅ 自動トークンリフレッシュ
+```
 
 ---
 
-### 認証方式の比較
+### 認証方式の選定理由
 
-| 項目 | 旧設計（djoser） | 新設計（dj-rest-auth） |
+| 項目 | djoser（旧）| dj-rest-auth（採用）|
 |---|---|---|
 | **方式** | JWT（Bearer認証） | JWT（Cookie認証） |
 | **トークン格納先** | localStorage / sessionStorage | HttpOnly Cookie |
-| **セキュリティ上の懸念** | XSS攻撃 | CSRF攻撃（Djangoミドルウェアで対応） |
-| **設計判断の理由** | APIの利便性 | Web SPAにおけるXSSリスク回避を最優先 |
-| **クライアント側の責務** | トークン管理が必要 | トークン管理不要（サーバー側に委譲） |
+| **セキュリティ上の懸念** | XSS攻撃 | CSRF攻撃（Djangoで対応） |
+| **クライアント側の責務** | トークン管理が必要 | トークン管理不要 |
+
+**採用理由**: WebアプリケーションではXSS攻撃のリスクが高いため、JavaScriptからアクセスできないHttpOnly Cookie方式を採用しました。
 
 ---
-
-### カスタムユーザーモデル
-
-`AbstractUser`と`BaseUserManager`を継承し、**emailベースの認証**を実装しています。
-
-**設計判断の理由**:
-
-| 要件 | 採用した手法 |
-|---|---|
-| Django標準の認証機能を活用 | `AbstractUser`を継承 |
-| username → email に変更 | `username = None`で無効化 |
-| メールアドレスの大文字小文字問題 | `get_by_natural_key()`で`__iexact`検索 |
-| createsuperuser対応 | `BaseUserManager`を継承してオーバーライド |
-
-### Simple JWT設定
-
-```python
-SIMPLE_JWT = {
-    # アクセストークンは短命に設定
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=5),
-    
-    # リフレッシュトークンは1日間有効
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
-    
-    # トークンローテーション: refresh使用時に新しいrefreshを発行
-    "ROTATE_REFRESH_TOKENS": True,
-    
-    # ローテーション後、古いrefreshトークンをブラックリストに追加
-    "BLACKLIST_AFTER_ROTATION": True,
-    
-    # 標準のBearer認証スキームを使用（RFC 6750準拠）
-    "AUTH_HEADER_TYPES": ("Bearer",),
-}
-```
-
-**重要な設定**:
-
-| 設定 | 値 | 理由 |
-|---|---|---|
-| `ACCESS_TOKEN_LIFETIME` | 5分 | 短命にしてセキュリティリスクを低減 |
-| `REFRESH_TOKEN_LIFETIME` | 1日 | ユーザビリティとセキュリティのバランス |
-| `ROTATE_REFRESH_TOKENS` | True | refresh使用時に新しいrefreshを発行 |
-| `BLACKLIST_AFTER_ROTATION` | True | 古いrefreshを無効化（リプレイ攻撃対策） |
-| `AUTH_HEADER_TYPES` | Bearer | 業界標準（RFC 6750）に準拠 |
-
-### dj-rest-auth Cookie設定
-
-```python
-REST_AUTH = {
-    'USE_JWT': True,
-    'SESSION_LOGIN': False,
-    
-    # Cookie設定
-    'JWT_AUTH_COOKIE': 'access-token',
-    'JWT_AUTH_REFRESH_COOKIE': 'refresh-token',
-    'JWT_AUTH_HTTPONLY': True,  # XSS対策の要
-    'JWT_AUTH_SAMESITE': 'None',
-    'JWT_AUTH_SECURE': True,
-    # 'JWT_AUTH_SAMESITE': 'Lax',  # 開発環境がhttpの場合
-    # 'JWT_AUTH_SECURE': False,    # 開発環境がhttpの場合
-}
-```
-
-**セキュリティ設定の詳細**:
-
-| 設定 | 値 | セキュリティ上の意義 |
-|---|---|---|
-| `JWT_AUTH_HTTPONLY` | True | **JavaScriptからのアクセスを完全遮断**（XSS対策の核心） |
-| `JWT_AUTH_SECURE` | True（本番） | HTTPS接続でのみCookie送信を許可 |
-| `SESSION_LOGIN` | False | JWT認証に一元化し、アーキテクチャの一貫性を確保 |
-
----
-
-### CSRF対策
-
-Cookie認証では、CSRF（Cross-Site Request Forgery）攻撃への対策が必須です。
-
-```python
-CSRF_COOKIE_HTTPONLY = False  # フロントエンドがCSRFトークンを読み取り可能に
-CSRF_COOKIE_SAMESITE = 'None'  # クロスオリジンリクエストの制御
-CSRF_COOKIE_SECURE = True     # 開発環境がhttpの場合はFalse
-CORS_ALLOW_CREDENTIALS = True  # Cookie送信を許可
-```
-
-**重要**: `CSRF_COOKIE_HTTPONLY = False`の理由は、React（SPA）がCSRFトークンを読み取り、リクエストヘッダーに含める必要があるためです。これはSPAとCookie認証を組み合わせる際の標準的な設定です。
 
 ### 認証フロー
+
 ```
-1. 登録     → POST /api/v1/auth/registration/
+1. 新規登録  → POST /api/v1/auth/registration/
               ↓ HttpOnly Cookieでaccess-token, refresh-token発行
+              ↓ JWT自動設定により、ログイン不要でダッシュボードへ
               
 2. ログイン  → POST /api/v1/auth/login/
               ↓ HttpOnly Cookieでaccess-token, refresh-token発行
@@ -466,7 +515,7 @@ CORS_ALLOW_CREDENTIALS = True  # Cookie送信を許可
 3. API呼び出し → Cookie自動送信（フロントエンドでのトークン操作不要）
 
 4. トークン更新 → POST /api/v1/auth/token/refresh/
-                 ↓ refresh-token Cookieが自動送信される
+                 ↓ refresh-token Cookieが自動送信
                  ↓ 新しいaccess-tokenとrefresh-tokenを発行
                  
 5. ログアウト  → POST /api/v1/auth/logout/
@@ -474,10 +523,9 @@ CORS_ALLOW_CREDENTIALS = True  # Cookie送信を許可
                 ↓ Cookieを削除
 ```
 
-#### 🔧 新規登録プロセスの最適化（CustomRegisterView）
-dj-rest-authの標準RegisterViewは、ユーザー作成後に自動でJWT Cookieを発行しません。本プロジェクトではCustomRegisterViewを実装し、登録成功時に即座にaccess-tokenを発行・Cookieへセットするように拡張しています。これにより、ユーザーは登録後にログイン操作をすることなく、シームレスにダッシュボードへ遷移可能です。
+---
 
-### APIエンドポイント
+### 主要APIエンドポイント
 
 | 機能 | Method | エンドポイント | 認証 |
 |---|---|---|---|
@@ -485,61 +533,97 @@ dj-rest-authの標準RegisterViewは、ユーザー作成後に自動でJWT Cook
 | **ログイン** | POST | `/api/v1/auth/login/` | 不要 |
 | **ログアウト** | POST | `/api/v1/auth/logout/` | Cookie自動送信 |
 | **ユーザー情報取得** | GET | `/api/v1/auth/user/` | Cookie自動送信 |
-| **ユーザー情報更新** | PUT/PATCH | `/api/v1/auth/user/` | Cookie自動送信 |
 | **トークンリフレッシュ** | POST | `/api/v1/auth/token/refresh/` | refresh-token Cookie |
 | **パスワード変更** | POST | `/api/v1/auth/password/change/` | Cookie自動送信 |
-
-### ⚠️ 重要な注意点
-
-1. **トークンはHttpOnly Cookieで管理**
-   - クライアントサイド（JavaScript）からトークンにアクセスできない
-   - XSS攻撃からの防御を実現
-
-2. **フロントエンドでのトークン管理は不要**
-   - localStorage/sessionStorageへの保存は不要
-   - ブラウザが自動的にCookieを送信
-   - セキュリティリスクとコード量を同時に削減
-
-3. **トークンの自動更新**
-   - `ROTATE_REFRESH_TOKENS=True`により、refresh token使用時に新しいrefresh tokenが発行される
-   - 古いrefresh tokenは自動的にブラックリストに追加され、再利用できなくなる（リプレイ攻撃対策）
-
-4. **本番環境での設定変更**
-  - 開発環境をhttpで行っていた場合、本番環境で設定の変更が必要です
-   ```python
-   # 本番環境では以下に変更
-   CSRF_COOKIE_SECURE = True
-   CSRF_COOKIE_SAMESITE = 'None'
-   JWT_AUTH_SECURE = True
-   JWT_AUTH_SAMESITE = 'None'
-   ```
 
 ---
 
 ### フロントエンド実装の簡素化
 
-Cookie認証への移行により、フロントエンド側のトークン管理が大幅に簡素化されました：
+Cookie認証により、フロントエンド側のトークン管理が大幅に簡素化されました：
 
-**不要になったコード:**
-- localStorage/sessionStorageへのトークン保存
-- Authorization ヘッダーの手動設定
-- トークン期限の監視とリフレッシュロジック
+**不要になったコード**:
+- ❌ localStorage/sessionStorageへのトークン保存
+- ❌ Authorization ヘッダーの手動設定
+- ❌ トークン期限の監視とリフレッシュロジック
 
-**残った責務:**
-- 認証エラー（401）の最終的なハンドリング
-- ログインページへのリダイレクト
+**残った責務**:
+- ✅ 認証エラー（401）の最終的なハンドリング
+- ✅ ログインページへのリダイレクト
 
-この設計により、セキュリティを向上させながら、コードの保守性と可読性も同時に向上させることができました。
+---
 
+### セキュリティ設定
 
-#### ⚡ TanStack Query による認証状態の同期
+#### JWT設定
+
+```python
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=5),   # 短命で安全
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    "ROTATE_REFRESH_TOKENS": True,                   # トークンローテーション
+    "BLACKLIST_AFTER_ROTATION": True,                # リプレイ攻撃対策
+}
+```
+
+#### Cookie設定
+
+```python
+REST_AUTH = {
+    'USE_JWT': True,
+    'JWT_AUTH_COOKIE': 'access-token',
+    'JWT_AUTH_REFRESH_COOKIE': 'refresh-token',
+    'JWT_AUTH_HTTPONLY': True,      # XSS対策の要
+    'JWT_AUTH_SECURE': True,         # HTTPS必須（本番）
+    'JWT_AUTH_SAMESITE': 'None',     # クロスオリジン対応
+}
+```
+
+---
+
+### TanStack Query による認証状態の同期
+
 認証状態の管理を従来のuseEffectからTanStack Query (useQuery)へ移行し、Zustandと組み合わせることで以下の課題を解決しました。
 
-**競合状態（Race Condition）の解消**: ログイン直後のリダイレクトとfetchMeのタイミングをsetQueryDataによって明示的に同期。AuthGuardにおいて「認証済みにもかかわらず一瞬ログイン画面が表示される」というUX上のチラつきを完全に解消しました。
+**解決した課題**:
 
-**キャッシュの一貫性と即時性**: queryClient.invalidateQueriesは非同期の再取得を伴うため、認証状態の反映にラグが生じる場合があります。本プロジェクトでは、APIレスポンスから得られたユーザー情報を直接StoreおよびQueryキャッシュに書き込むことで、通信を待たずに即座にガードを通過させる設計を採用しています。
+| 課題 | 解決方法 |
+|------|---------|
+| **競合状態（Race Condition）** | setQueryDataによる明示的な同期 |
+| **UXのチラつき** | キャッシュの即時更新でガード通過を高速化 |
+| **不要なリクエスト** | サーバー状態のキャッシュ管理 |
 
-**不要なネットワークリクエストの削減**: サーバー状態（認証情報）をキャッシュ管理することで、コンポーネントの再レンダリングに伴う重複した API 呼び出しを最小限に抑えています。
+```typescript
+// ログイン成功時
+const loginMutation = useMutation({
+  mutationFn: authService.login,
+  onSuccess: (userData) => {
+    // 1. Zustand Storeを即座に更新
+    setUser(userData);
+    
+    // 2. TanStack Query キャッシュも同期
+    queryClient.setQueryData(['auth', 'me'], userData);
+    
+    // 3. リダイレクト（キャッシュがあるので即座にガード通過）
+    navigate('/dashboard');
+  }
+});
+```
+
+---
+
+### 詳細ドキュメント
+
+認証システムの詳細については、以下のドキュメントを参照してください。
+
+- **[docs/authentication.md](docs/authentication.md)** - 認証システム詳細ガイド
+  - 設計変更の経緯（djoserからの移行理由）
+  - カスタムユーザーモデルの実装
+  - CustomRegisterViewの実装詳細
+  - CSRF対策の詳細
+  - 本番環境での設定変更
+  - TanStack Query統合の詳細
+  - トラブルシューティング
 
 ---
 
@@ -733,11 +817,14 @@ def get_user_todos(user):
 
 Google Gemini APIとUpstash Vectorを使用した**セマンティック検索**機能を実装。自然言語でTodoを検索できます。
 
-**例**:
+**検索例**:
 - "明日の会議関連のタスク" → 会議資料作成、プレゼン準備など
 - "プログラミングの勉強" → Python学習、React練習など
 
+---
+
 ### アーキテクチャ
+
 ```
 Todo作成/更新
     ↓
@@ -750,6 +837,13 @@ Gemini API でベクトル化（768次元）
 Upstash Vector に保存
 ```
 
+**非同期処理のメリット**:
+- ⚡ Todo作成が高速（50-100ms、3-5倍高速化）
+- 🔄 QStashの自動リトライ（最大3回）
+- 🐳 Renderのスリープ対応
+
+---
+
 ### 使用技術
 
 | サービス | 用途 | 選定理由 |
@@ -757,6 +851,8 @@ Upstash Vector に保存
 | **Google Gemini API** | テキストのベクトル化 | 永久無料枠（1,500リクエスト/日）、高品質 |
 | **Upstash Vector** | ベクトルデータベース | サーバーレス課金、既存Upstashアカウント統合 |
 | **QStash** | 非同期処理キュー | 自動リトライ、Todo CRUD操作を高速化 |
+
+**コスト**: $0/月（無料枠のみ使用）
 
 ---
 
@@ -772,258 +868,10 @@ Upstash Vector に保存
 
 ---
 
-### 技術的特徴
-
-#### バックエンド（Django）
-
-**実装構成**:
-```
-backend/todos/
-├── service.py                # TodoService（ベクトル化をQStashにキューイング）
-├── qstash_service.py         # TodoQStashService（QStash送信ラッパー）
-├── embedding_service.py      # EmbeddingService（Gemini API呼び出し）
-├── vector_service.py         # VectorService（Upstash Vector操作）
-├── views.py                  # Webhook（vector_indexing_webhook, bulk_vector_indexing_webhook）
-└── urls.py                   # APIエンドポイント
-
-backend/webhooks/
-└── urls.py                   # Webhook統合ルーティング
-
-backend/common/
-├── infrastructure/
-│   ├── email_client.py       # EmailClient（Resend実処理）
-│   └── qstash_client.py      # QStashClient（QStash実処理）
-├── security.py               # QStash署名検証
-└── permissions.py            # IsQStashAuthenticated
-```
-
-**データフロー（非同期）**:
-```python
-# 1. Todo作成（同期処理）
-todo = Todo.objects.create(user=user, **validated_data)
-# → PostgreSQLに保存（50ms）
-
-# 2. ベクトル化をキューに追加（非同期処理）
-TodoQStashService.queue_vector_indexing(todo.id, operation="upsert")
-# → QStashにメッセージ送信（1-2ms）
-# → 即座にレスポンス返却 ⚡
-
-# --- バックグラウンド ---
-# 3. QStash → Webhook呼び出し（1秒後）
-# 4. Gemini APIでベクトル化（100-300ms）
-# 5. Upstash Vectorに保存（50ms）
-```
-
-**APIエンドポイント**:
-
-| エンドポイント | Method | 説明 | 認証 |
-|--------------|--------|-----|------|
-| `/api/v1/todos/search/?q={query}` | GET | セマンティック検索 | 必須 |
-| `/api/v1/todos/bulk-index/` | POST | 一括インデックス | 必須 |
-| `/api/v1/webhooks/vector-indexing` | POST | ベクトル化Webhook | QStash |
-| `/api/v1/webhooks/bulk-vector-indexing` | POST | 一括ベクトル化Webhook | QStash |
-
----
-
-#### Gemini API 設定
-
-**モデル**: `text-embedding-004`
-- **次元数**: 768
-- **無料枠**: 1,500リクエスト/日、1M トークン/日
-- **多言語対応**: 100+言語（日本語含む）
-
-**テキスト準備**:
-```python
-def prepare_text(todo) -> str:
-    # タイトル + 優先度 + 進捗を結合
-    text = f"{todo.todo_title} 優先度:{todo.get_priority_display()} 進捗:{todo.progress}%"
-    return text.strip()
-```
-
-**タスクタイプ**:
-- `retrieval_document`: Todo保存時（検索される側）
-- `retrieval_query`: 検索クエリ（検索する側）
-
----
-
-#### Upstash Vector 設定
-
-**データベース設定**:
-- **Type**: Dense（密なベクトル）
-- **Dimensions**: 768（Gemini text-embedding-004）
-- **Similarity Function**: COSINE（コサイン類似度）
-- **Region**: us-west-1（Renderと同じ）
-
-**メタデータ保存**:
-```python
-{
-  "title": "会議資料の作成",
-  "user_id": 1,
-  "priority": "HIGH",
-  "progress": 50,
-  "created_at": "2025-01-06T10:00:00Z"
-}
-```
-
-**ユーザー分離**:
-```python
-# 検索時に user_id でフィルタリング
-results = index.query(
-    vector=query_embedding,
-    top_k=5,
-    filter=f"user_id = {user.id}"  # 他人のTodoは検索されない
-)
-```
-
----
-
-### 非同期処理の実装
-
-#### なぜ非同期か？
-
-| 処理 | 同期（変更前） | 非同期（変更後） | 改善 |
-|------|--------------|----------------|------|
-| **Todo作成** | 300-500ms | 50-100ms | **3-5倍高速** ⚡ |
-| **Todo更新** | 300-500ms | 50-100ms | **3-5倍高速** ⚡ |
-| **Todo削除** | 100-200ms | 50-100ms | **1-2倍高速** ⚡ |
-| **検索** | 100-300ms | 100-300ms | 同じ（同期処理） |
-
-**メリット**:
-- ✅ ユーザーがベクトル化を待つ必要がない
-- ✅ QStashの自動リトライ（最大3回）
-- ✅ Renderのスリープ対応
-
----
-
-#### QStash Service（共通基盤）
-```python
-# backend/common/infrastructure/qstash_client.py
-class QStashClient:
-    """
-    QStashを使った非同期タスク送信（汎用版）
-    
-    Users（メール送信）とTodos（ベクトル化）で共通利用
-    """
-    
-    @staticmethod
-    def publish(endpoint_path: str, payload: dict, delay_seconds: int = 0):
-        """QStashにメッセージを送信"""
-        webhook_url = f"{settings.WEBHOOK_BASE_URL}{endpoint_path}"
-        
-        response = requests.post(
-            f"https://qstash.upstash.io/v2/publish/{webhook_url}",
-            headers={
-                "Authorization": f"Bearer {settings.QSTASH_TOKEN}",
-                "Content-Type": "application/json",
-            },
-            json=payload
-        )
-        return response.json()
-```
-
----
-
-#### Todo Service（ビジネス層）
-```python
-# backend/todos/service.py
-class TodoService:
-    @staticmethod
-    def create_todo(user, validated_data):
-        # 1. Todoを作成（同期）
-        todo = Todo.objects.create(user=user, **validated_data)
-        
-        # 2. ベクトル化をキューに追加（非同期）
-        try:
-            TodoQStashService.queue_vector_indexing(todo.id, operation="upsert")
-        except Exception as e:
-            logger.error(f"Failed to queue vector indexing: {e}")
-            # エラーでもTodo作成は成功
-        
-        return todo
-```
-
----
-
-#### Webhook Endpoint
-```python
-# backend/todos/views.py
-@api_view(['POST'])
-@permission_classes([IsQStashAuthenticated])  # QStash署名検証
-def vector_indexing_webhook(request):
-    """
-    QStashから呼ばれるWebhook
-    
-    実際のベクトル化処理を実行
-    """
-    todo_id = request.data.get("todo_id")
-    operation = request.data.get("operation")
-    
-    vector_service = VectorService()
-    
-    if operation == "delete":
-        vector_service.delete_todo(todo_id)
-    else:
-        todo = get_object_or_404(Todo, id=todo_id)
-        vector_service.add_todo(todo)
-    
-    return Response({"message": "Vector indexing completed"})
-```
-
----
-
-### セキュリティ
-
-| 機能 | 実装 |
-|-----|------|
-| **QStash署名検証** | HMAC-SHA256で検証（common/security.py） |
-| **ユーザー分離** | vector_service.py で user_id フィルタ |
-| **認証必須** | 検索・一括インデックスは認証必須 |
-
----
-
-### 環境変数
-```bash
-# backend/.env
-
-# ===== Google Gemini API (Embedding) =====
-GOOGLE_API_KEY=AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXX
-
-# ===== Upstash Vector (Vector Database) =====
-UPSTASH_VECTOR_REST_URL=https://xxx-xxx.upstash.io
-UPSTASH_VECTOR_REST_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-# ===== QStash (既存) =====
-QSTASH_TOKEN=your_qstash_token
-QSTASH_CURRENT_SIGNING_KEY=sig_xxxxxxxxxxxxx
-QSTASH_NEXT_SIGNING_KEY=sig_xxxxxxxxxxxxx
-WEBHOOK_BASE_URL=https://your-backend.onrender.com
-```
-
----
-
-### 初期データのインデックス
-
-既存のTodoをベクトルインデックスに追加：
-```bash
-# 方法1: APIエンドポイント
-POST /api/v1/todos/bulk-index/
-Authorization: Bearer <access-token>
-
-# レスポンス
-{
-  "message": "インデックス処理をバックグラウンドで開始しました",
-  "status": "queued"
-}
-
-# 方法2: 管理コマンド（将来実装）
-docker compose exec backend python manage.py reindex_todos
-```
-
----
-
 ### 使用例
 
 #### セマンティック検索
+
 ```bash
 # 基本的な検索
 GET /api/v1/todos/search/?q=明日の会議関連
@@ -1031,7 +879,6 @@ Authorization: Bearer <access-token>
 
 # パラメータ指定
 GET /api/v1/todos/search/?q=プログラミング&top_k=10&min_score=0.6
-Authorization: Bearer <access-token>
 
 # レスポンス例
 {
@@ -1043,483 +890,93 @@ Authorization: Bearer <access-token>
       "title": "会議資料の作成",
       "priority": "HIGH",
       "progress": 50
-    },
-    {
-      "id": 23,
-      "score": 0.75,
-      "title": "プレゼン準備",
-      "priority": "MEDIUM",
-      "progress": 30
     }
   ],
-  "count": 2
+  "count": 1
+}
+```
+
+#### 初期データのインデックス
+
+```bash
+# 既存のTodoをベクトルインデックスに追加
+POST /api/v1/todos/bulk-index/
+Authorization: Bearer <access-token>
+
+# レスポンス
+{
+  "message": "インデックス処理をバックグラウンドで開始しました",
+  "status": "queued"
 }
 ```
 
 ---
 
-### パフォーマンス最適化
+### 環境変数
 
-#### 1. 非同期処理によるレスポンス高速化
-
-**変更前**（同期処理）:
-```
-Todo作成 → ベクトル化 → レスポンス
-(50ms)     (250ms)      (300ms合計)
-```
-
-**変更後**（非同期処理）:
-```
-Todo作成 → QStash → レスポンス
-(50ms)     (1ms)     (51ms合計) ⚡
-
---- バックグラウンド ---
-QStash → Webhook → ベクトル化 → Upstash Vector
-(1秒後)   (10ms)     (250ms)     (50ms)
-```
-
----
-
-#### 2. キャッシュの活用
-
-検索結果はTanStack Queryでキャッシュ：
-```typescript
-// frontend/src/features/todo/hooks/useTodoSearch.ts
-export const useTodoSearch = (query: string) => {
-  return useQuery({
-    queryKey: ['todos', 'search', query],
-    queryFn: () => todoService.searchSimilar(query),
-    staleTime: 5 * 60 * 1000,  // 5分間キャッシュ
-    enabled: query.length > 0,
-  });
-};
-```
-
----
-
-### 運用とモニタリング
-
-#### ログ確認
 ```bash
-# ベクトル化の成功/失敗を確認
-docker compose logs -f backend | grep "vector"
+# backend/.env
 
-# 成功例
-✅ Added/Updated todo 15 to vector index (async)
+# Google Gemini API (Embedding)
+GOOGLE_API_KEY=AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXX
 
-# 失敗例
-❌ Vector indexing webhook error: ...
+# Upstash Vector (Vector Database)
+UPSTASH_VECTOR_REST_URL=https://xxx-xxx.upstash.io
+UPSTASH_VECTOR_REST_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# QStash（既存）
+QSTASH_TOKEN=your_qstash_token
+QSTASH_CURRENT_SIGNING_KEY=sig_xxxxxxxxxxxxx
+QSTASH_NEXT_SIGNING_KEY=sig_xxxxxxxxxxxxx
+WEBHOOK_BASE_URL=https://your-backend.onrender.com
 ```
 
 ---
 
-#### QStash Dashboard
+### パフォーマンス比較
+
+| 処理 | 同期（変更前） | 非同期（変更後） | 改善 |
+|------|--------------|----------------|------|
+| **Todo作成** | 300-500ms | 50-100ms | **3-5倍高速** ⚡ |
+| **Todo更新** | 300-500ms | 50-100ms | **3-5倍高速** ⚡ |
+| **Todo削除** | 100-200ms | 50-100ms | **1-2倍高速** ⚡ |
+| **検索** | 100-300ms | 100-300ms | 同じ（同期処理） |
+
+---
+
+### 詳細ドキュメント
+
+ベクトル検索機能の詳細については、以下のドキュメントを参照してください。
+
+- **[docs/vector-search.md](docs/vector-search.md)** - ベクトル検索詳細ガイド
+  - 非同期処理の実装詳細
+  - Gemini API設定
+  - Upstash Vector設定
+  - QStash Service実装
+  - セキュリティ設定
+  - 運用とモニタリング
+  - トラブルシューティング
+  - 将来の拡張計画（チャンク化、Pinecone移行等）
+
+---
+
+## MotherDuck Analytics（データ分析基盤）
+
+### 概要
+
+**MotherDuck**（クラウドDWH）を使用して、アプリケーションのイベントログとDB状態を分析可能にしています。
+
 ```
-1. https://console.upstash.com/qstash にアクセス
-2. "Messages" タブでメッセージ配信状況を確認
-3. リトライ回数、成功/失敗を監視
+【データ分析の目的】
+✅ イベントログ: ユーザー行動のリアルタイム記録
+✅ DB状態同期: データの最終状態を定期的に記録
+✅ 分析基盤: ユーザー行動とデータ状態を包括的に分析
 ```
 
 ---
 
-#### Gemini API 使用量
-```
-1. https://makersuite.google.com/app/apikey にアクセス
-2. 使用量を確認
-3. 無料枠（1,500リクエスト/日）の消費状況を監視
-```
+### アーキテクチャ
 
----
-
-### トラブルシューティング
-
-#### ベクトル化が実行されない
-```bash
-# 確認項目
-1. QStash Webhook が到達しているか
-   → QStash Dashboard で確認
-
-2. 環境変数が正しく設定されているか
-   → GOOGLE_API_KEY
-   → UPSTASH_VECTOR_REST_URL
-   → UPSTASH_VECTOR_REST_TOKEN
-
-3. Webhook署名検証が成功しているか
-   → ログで "Invalid signature" を確認
-```
-
----
-
-#### 検索結果が返らない
-```bash
-# 確認項目
-1. Todoがベクトルインデックスに追加されているか
-   → POST /api/v1/todos/bulk-index/ を実行
-
-2. 類似度スコアが低すぎないか
-   → min_score を 0.3 に下げて再検索
-
-3. user_id フィルタが正しく動作しているか
-   → ログで filter=f"user_id = {user_id}" を確認
-```
-
----
-
-#### Gemini API エラー
-```bash
-# エラー: API Key invalid
-解決策: GOOGLE_API_KEY を再確認
-
-# エラー: Quota exceeded
-解決策:
-  1. 無料枠（1,500リクエスト/日）を超過
-  2. 翌日まで待つ
-  3. または有料プランに移行
-
-# エラー: Rate limit exceeded
-解決策:
-  1. リクエスト頻度を下げる
-  2. delay_seconds を増やす
-```
-
----
-
-### 将来の拡張
-
-#### フェーズ1: MVP（現在）
-- ✅ 基本的なセマンティック検索
-- ✅ 非同期ベクトル化
-- ✅ Google Gemini API（無料枠）
-- ✅ Upstash Vector（無料枠）
-- 現在はTodoの短いテキスト（タイトル + メタデータ）を処理しているためチャンク化は不要
-- **コスト**: $0/月
-
----
-
-#### フェーズ2: エンタープライズ（100K+ ユーザー）
-**長文ドキュメント対応（チャンク化導入）**
-
-将来的に長文ドキュメント（添付ファイル、メモ、プロジェクト説明等）を扱う場合：
-
-| 段階 | チャンク化手法 | 選定理由 |
-|------|--------------|---------|
-| **Phase 1** | LangChain（RecursiveCharacterTextSplitter） | 実績豊富、コミュニティサポート充実 |
-| **Phase 2** | Semantic Chunker（LlamaIndex） | 意味的なまとまりでチャンク分割 |
-| **Phase 3** | カスタムチャンカー | ドメイン固有の最適化 |
-
-**チャンク化が必要になるケース**:
-- Todo に長文メモ機能を追加
-- PDFドキュメントのアップロード対応
-- プロジェクト説明（複数段落）の検索
-
-**技術スタック例**:
-```python
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-
-splitter = RecursiveCharacterTextSplitter(
-    chunk_size=500,        # Gemini の推奨チャンクサイズ
-    chunk_overlap=50,      # 文脈の連続性を保つ
-    separators=["\n\n", "\n", " ", ""]
-)
-
-chunks = splitter.split_text(long_document)
-```
-
-**インフラ構成**:
-- 🚀 Vector DB: **Pinecone**
-  - Namespace機能でユーザー・チャンク管理
-  - メタデータフィルタリング（document_id, chunk_index等）
-- 🚀 Embedding: **Gemini API 維持**（品質・コスト優位）
-- 🚀 Hybrid Search（Dense + Sparse）
-  - セマンティック検索 + キーワード検索の組み合わせ
-- 🚀 リアルタイムインデックス更新
-- **コスト**: $70-200+/月
-
----
-
-## MotherDuck Analytics
-
-このプロジェクトでは、**MotherDuck**（クラウドDWH）を使用して、アプリケーションのイベントログとDB状態を分析可能にしています。
-
----
-
-### アーキテクチャ選定の経緯
-
-データ同期方法として、当初3つのアプローチを検討しました：
-
-1. **CDC（PostgreSQL論理レプリケーション）** - WALをリアルタイムで読み取る真のCDC
-2. **Webhook方式** - CRUD操作ごとに明示的に記録
-3. **dlt バッチETL** - 定期的に増分SELECTで同期
-
-最終的に **Webhook + dlt バッチETL のハイブリッドアプローチ** を採用しました。
-
----
-
-### CDC（論理レプリケーション）を見送った理由
-
-#### 1. 不可逆的な変更
-
-PostgreSQLの論理レプリケーションは、一度有効化すると**元に戻すことが非常に困難**です。
-```sql
--- wal_levelを変更（不可逆）
-ALTER SYSTEM SET wal_level = 'logical';
--- ⚠️ PostgreSQL再起動が必要
--- ⚠️ 一度変更すると戻すのが困難
-
--- 問題が発生した場合
-ALTER SYSTEM SET wal_level = 'replica';
--- ⚠️ また再起動が必要
--- ⚠️ Replication Slotの削除が必要
--- ⚠️ WALが溜まっている場合、ディスク容量圧迫
--- ⚠️ 復旧が非常に困難
-```
-
-**リスク**:
-- 本番DBに影響を与える可能性
-- ダウンタイムが発生する可能性
-- データ損失のリスク
-
----
-
-#### 2. Neonの制約
-```yaml
-Neon（使用中のPostgreSQL）の制限:
-  ❌ wal_level = 'logical' への変更が制限されている
-  ❌ Replication Slotの作成が制限されている
-  ❌ サーバーレス特性と相性が悪い
-```
-
----
-
-#### 3. 常駐プロセスが必要（Render無料枠では不可能）
-
-論理レプリケーションには、24時間365日動作する**CDCコンシューマー**が必要です。
-```python
-# CDCコンシューマー（常駐プロセス）の例
-
-import psycopg2
-from psycopg2.extras import LogicalReplicationConnection
-
-# 無限ループで変更を受信
-while True:
-    msg = cur.read_message()
-    # MotherDuckに書き込み
-    ...
-```
-
-**Renderの問題**:
-```yaml
-無料プラン:
-  ❌ 常駐プロセスを実行できない
-  ❌ リクエストがない時はスリープする
-
-有料プラン（$7/月〜）:
-  ✅ 常駐プロセス可能
-  ⚠️ コストが増加
-```
-
----
-
-#### 4. WALのディスク使用量問題
-```yaml
-WALの肥大化:
-  - wal_level = 'logical' は通常より多くの情報を保存
-  - Replication Slotが読み取るまでWALが削除されない
-  - CDCコンシューマー停止時、WALが無限に増加
-
-リスク:
-  ⚠️ ディスク容量の圧迫
-  ⚠️ パフォーマンス低下
-  ⚠️ DBクラッシュの可能性
-```
-
----
-
-#### 5. インフラの複雑化
-```yaml
-必要なコンポーネント:
-  - Publication/Subscription設定
-  - Replication Slot管理
-  - CDCコンシューマー（常駐プロセス）
-  - エラーハンドリング
-  - 監視・アラート
-  - WALクリーンアップ
-
-学習時間:
-  - 最低でも1〜2週間
-  - 本番運用レベルまで1〜2ヶ月
-```
-
----
-
-### dltはCDCではない
-
-**誤解しやすいポイント**: dltの`sql_database` Sourceは、WALを読み取るCDCではなく、**バッチETL**（増分SELECT）です。
-
-#### dltの実際の動作
-```python
-# dlt sql_database の実際の動作
-
-import dlt
-from dlt.sources.sql_database import sql_database
-
-source = sql_database(
-    credentials={...},
-    table_names=["custom_user", "todos_todo"],
-    incremental=dlt.sources.incremental("updated_at"),  # ← 重要
-)
-
-# 実際に実行されるのは単なるSQLクエリ:
-# SELECT * FROM custom_user WHERE updated_at > '前回実行時刻' ORDER BY updated_at
-# SELECT * FROM todos_todo WHERE updated_at > '前回実行時刻' ORDER BY updated_at
-
-# ❌ WALを読まない
-# ❌ 論理レプリケーション不要
-# ❌ Replication Slot不要
-# ✅ 通常のSELECT文のみ
-```
-
-#### CDCとdltの違い
-
-| 項目 | CDC（論理レプリケーション） | dlt バッチETL |
-|------|----------------------------|-------------|
-| データ取得方法 | WALをリアルタイム読み取り | 定期的にSELECT実行 |
-| リアルタイム性 | 数秒 | 15分 |
-| wal_level変更 | ❌ 必須（不可逆） | ✅ 不要 |
-| Replication Slot | ❌ 必要 | ✅ 不要 |
-| 常駐プロセス | ❌ 必要 | ✅ 不要 |
-| WAL肥大化リスク | ❌ あり | ✅ なし |
-| 実装複雑度 | 非常に複雑 | シンプル |
-| ロールバック | ❌ 困難 | ✅ 簡単 |
-
----
-
-### スケジュール実行方法の比較
-
-dltパイプラインの定期実行方法として、**Render Cron Jobs** と **QStash Schedules** を比較しました。
-
-#### Render Cron Jobs
-```yaml
-コスト:
-  基本料金: $1/月〜
-  実行時間課金: $0.10/時間
-  
-例: 15分ごと実行（1回2分）
-  月間実行時間: 96時間
-  無料枠: 7時間/月
-  超過料金: $8.9/月
-  
-  総コスト: $9.9/月 ❌
-```
-
-#### QStash Schedules（採用）
-```yaml
-コスト:
-  QStash: 無料枠 500リクエスト/日
-  Render: 既存Web Service（追加コストなし）
-  
-例: 15分ごと実行
-  日間実行: 96回 < 500回（無料枠内）
-  
-  総コスト: $0/月 ✅
-
-年間節約: $118.8
-```
-
-**結論**: QStash Schedulesを採用（無料、既存インフラ活用）
-
----
-
-### 最終的な選択：ハイブリッドアプローチ
-```
-┌─────────────────────────────────────────────────────────────┐
-│         ハイブリッドアプローチ                               │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  【Webhook方式】（同期処理、10-50ms）                        │
-│    目的: イベントログの記録                                  │
-│    利点: リアルタイム、シンプル                              │
-│                                                             │
-│    Django View                                              │
-│      └─ AnalyticsService.log_auth_event()                  │
-│          └─ MotherDuckClient.insert_auth_event()           │
-│              └─ MotherDuck: logs.auth_events               │
-│                                                             │
-│    ⚠️ WAL不要、Replication Slot不要                         │
-│    ⚠️ 常駐プロセス不要                                      │
-│    ⚠️ wal_level変更不要                                     │
-│                                                             │
-│  【dlt バッチETL】（15分ごと、QStash経由）                   │
-│    目的: DB状態の定期同期                                   │
-│    利点: 自動化、増分読み込み                                │
-│                                                             │
-│    QStash Schedules (*/15 * * * *)                         │
-│      └─ Webhook: /api/v1/webhooks/dlt-pipeline             │
-│          └─ dlt_worker/pipeline.py（数秒で終了）            │
-│              └─ SELECT * WHERE updated_at > '...'          │
-│                  └─ MotherDuck: dwh.*                      │
-│                                                             │
-│    ⚠️ WAL不要、通常のSELECT文のみ                           │
-│    ⚠️ 常駐プロセス不要（QStashが起動）                       │
-│    ⚠️ wal_level変更不要                                     │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-### 比較表
-
-| 項目 | CDC（論理レプリケーション） | Webhook方式（採用） | dlt バッチETL（採用） |
-|------|----------------------------|----------------|------------------|
-| **リアルタイム性** | ⭐⭐⭐⭐⭐（数秒） | ⭐⭐⭐⭐⭐（即座） | ⭐⭐⭐☆☆（15分） |
-| **wal_level変更** | ❌ 必須（不可逆） | ✅ 不要 | ✅ 不要 |
-| **Replication Slot** | ❌ 必要 | ✅ 不要 | ✅ 不要 |
-| **常駐プロセス** | ❌ 必要 | ✅ 不要 | ✅ 不要 |
-| **WAL肥大化** | ❌ リスクあり | ✅ なし | ✅ なし |
-| **ロールバック** | ❌ 困難 | ✅ 簡単 | ✅ 簡単 |
-| **Neon無料プラン** | ❌ 制限あり | ✅ 問題なし | ✅ 問題なし |
-| **Render無料枠** | ❌ 不可 | ✅ 可能 | ✅ 可能 |
-| **実装複雑度** | 非常に複雑 | 中程度 | シンプル |
-| **学習コスト** | 1〜2ヶ月 | 数時間 | 1週間 |
-| **月額コスト** | $40〜50 | $0 | $0 |
-| **データ完全性** | 完全 | 記録漏れリスク | 完全 |
-| **保守性** | 難しい | 中程度 | 簡単 |
-
----
-
-### 採用理由まとめ
-```yaml
-Webhook + dlt バッチETL を採用した理由:
-
-1. 技術的メリット:
-   ✅ wal_level変更不要
-   ✅ Replication Slot不要
-   ✅ 常駐プロセス不要
-   ✅ WAL肥大化リスクなし
-   ✅ 簡単にロールバック可能
-
-2. 運用メリット:
-   ✅ シンプルで保守しやすい
-   ✅ 学習コストが低い
-   ✅ デバッグが容易
-   ✅ エラー復旧が簡単
-
-3. コストメリット:
-   ✅ $0/月で運用可能
-   ✅ Neon/Render無料プランで動作
-   ✅ QStash無料枠内
-
-4. 要件適合性:
-   ✅ イベントログ: リアルタイム記録
-   ✅ DB状態: 15分ごとに同期
-   ✅ 分析に十分な粒度
-   ✅ 将来的な拡張も可能
-```
-
----
-
-### アーキテクチャ概要
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │         MotherDuck Analytics Pipeline                       │
@@ -1548,29 +1005,37 @@ Webhook + dlt バッチETL を採用した理由:
 
 ---
 
-### 1. 同期的なイベント記録（Realtime Logging）
+### アーキテクチャ選定: ハイブリッドアプローチ
+
+**Webhook + dlt バッチETL** を採用（CDC方式は見送り）
+
+| 手法 | リアルタイム性 | 複雑度 | コスト | 採用 |
+|------|--------------|--------|--------|------|
+| **CDC（論理レプリケーション）** | ⭐⭐⭐⭐⭐ | 非常に複雑 | $40-50/月 | ❌ |
+| **Webhook方式** | ⭐⭐⭐⭐⭐ | 中程度 | $0 | ✅ |
+| **dlt バッチETL** | ⭐⭐⭐☆☆ | シンプル | $0 | ✅ |
+
+**採用理由**:
+- ✅ wal_level変更不要（不可逆な設定変更を回避）
+- ✅ 常駐プロセス不要（Renderスリープ対応）
+- ✅ WAL肥大化リスクなし
+- ✅ 簡単にロールバック可能
+- ✅ $0/月で運用可能
+
+---
+
+### データ収集方法
+
+#### 1. 同期的なイベント記録（Realtime Logging）
 
 **目的**: ユーザーの行動をリアルタイムで記録
-
-**実装場所**:
-- `backend/users/analytics_service.py` - 認証イベント記録
-- `backend/todos/analytics_service.py` - Todoイベント記録
-- `backend/common/infrastructure/motherduck_client.py` - MotherDuck接続
-
-**記録されるイベント**:
 
 | テーブル | イベント種別 | 記録タイミング |
 |---------|------------|--------------|
 | `logs.auth_events` | login, logout, register, login_failed | 認証時に即座に記録 |
 | `logs.todo_events` | create, update, delete, complete | CRUD操作時に即座に記録 |
 
-**特徴**:
-- ✅ リアルタイム記録（10-50ms）
-- ✅ イベント駆動型
-- ✅ 失敗してもアプリケーションの動作は継続
-- ✅ タイムスタンプ自動付与
-
-**使用例**:
+**実装例**:
 ```python
 # ログインイベントの記録
 AnalyticsService.log_auth_event(
@@ -1578,12 +1043,6 @@ AnalyticsService.log_auth_event(
     event_type="login",
     request=request,
     success=True
-)
-
-# Todo作成イベントの記録
-TodoAnalyticsService.log_todo_create(
-    user=user,
-    todo=todo
 )
 ```
 
@@ -1597,34 +1056,13 @@ FROM my_db.logs.auth_events
 WHERE event_type = 'login'
 GROUP BY hour
 ORDER BY hour;
-
--- Todo完了率
-WITH todo_lifecycle AS (
-    SELECT 
-        todo_id,
-        MAX(CASE WHEN event_type = 'complete' THEN 1 ELSE 0 END) as is_completed
-    FROM my_db.logs.todo_events
-    GROUP BY todo_id
-)
-SELECT 
-    COUNT(*) as total_todos,
-    SUM(is_completed) as completed_todos,
-    ROUND(SUM(is_completed) * 100.0 / COUNT(*), 2) as completion_rate
-FROM todo_lifecycle;
 ```
 
 ---
 
-### 2. 非同期的なDB状態同期（Batch ETL）
+#### 2. 非同期的なDB状態同期（Batch ETL）
 
 **目的**: DBの最終状態を定期的にDWHに同期して、分析を可能にする
-
-**実装場所**:
-- `backend/dlt_worker/pipeline.py` - メインパイプライン
-- `backend/users/views.py::dlt_pipeline_webhook` - Webhookエンドポイント
-- QStash Schedules - スケジュール管理
-
-**同期されるテーブル**:
 
 | テーブル | 同期方式 | 実行頻度 |
 |---------|---------|---------|
@@ -1636,60 +1074,37 @@ FROM todo_lifecycle;
 - **QStash** (Upstash) - スケジュール実行（Cron）
 - **MotherDuck** - クラウドDWH
 
-**特徴**:
-- ✅ 増分読み込み（`updated_at` カラムで差分のみ取得）
-- ✅ 自動スケジュール（15分ごと実行）
-- ✅ QStash署名検証（セキュリティ）
-- ✅ エラーハンドリング・リトライ機能
+**実装**:
+```python
+# dlt_worker/pipeline.py
+import dlt
+from dlt.sources.sql_database import sql_database
+
+source = sql_database(
+    credentials={...},
+    table_names=["custom_user", "todos_todo"],
+    incremental=dlt.sources.incremental("updated_at"),
+)
+
+# MotherDuckに同期
+pipeline = dlt.pipeline(
+    pipeline_name="django_react_app",
+    destination="motherduck",
+    dataset_name="django_react_app_dwh"
+)
+
+pipeline.run(source)
+```
 
 **手動実行**:
 ```bash
 # パイプラインを手動実行
 docker compose exec backend python dlt_worker/pipeline.py
-
-# 期待される出力:
-# ============================================================
-# Starting dlt pipeline
-# Tables to sync: ['custom_user', 'todos_todo']
-# Connecting to PostgreSQL: ...
-# Connecting to MotherDuck...
-# Pipeline completed successfully!
-# ============================================================
-```
-
-**分析クエリ例**:
-```sql
--- 現在のユーザー数
-SELECT COUNT(*) as total_users 
-FROM my_db.django_react_app_dwh.custom_user
-WHERE is_active = true;
-
--- ユーザーごとの未完了Todo数
-SELECT 
-    user_id,
-    COUNT(*) as incomplete_todos,
-    AVG(progress) as avg_progress
-FROM my_db.django_react_app_dwh.todos_todo
-WHERE progress < 100
-GROUP BY user_id
-ORDER BY incomplete_todos DESC;
-
--- ユーザー登録日と現在のTodo状況
-SELECT 
-    u.id,
-    u.email,
-    u.date_joined as registered_at,
-    COUNT(t.id) as current_todo_count,
-    AVG(t.progress) as avg_progress
-FROM my_db.django_react_app_dwh.custom_user u
-LEFT JOIN my_db.django_react_app_dwh.todos_todo t ON u.id = t.user_id
-GROUP BY u.id, u.email, u.date_joined
-ORDER BY current_todo_count DESC;
 ```
 
 ---
 
-### 3. イベントログとDB状態の使い分け
+### イベントログとDB状態の使い分け
 
 | 分析内容 | 使用するデータ | 理由 |
 |---------|-------------|------|
@@ -1701,9 +1116,8 @@ ORDER BY current_todo_count DESC;
 
 ---
 
-### 4. 環境変数
+### 環境変数
 
-以下の環境変数が必要です：
 ```bash
 # PostgreSQL (Neon)
 PGHOST=ep-xxx.aws.neon.tech
@@ -1719,14 +1133,12 @@ MOTHERDUCK_TOKEN=your_motherduck_token
 QSTASH_TOKEN=qstash_xxx
 QSTASH_CURRENT_SIGNING_KEY=sig_xxx
 QSTASH_NEXT_SIGNING_KEY=sig_xxx
-
-# Webhook Base URL（署名検証用）
 WEBHOOK_BASE_URL=https://your-app.onrender.com
 ```
 
 ---
 
-### 5. QStash Schedules 設定
+### QStash Schedules 設定
 
 **スケジュール名**: `dlt-pipeline-sync`
 
@@ -1734,18 +1146,13 @@ WEBHOOK_BASE_URL=https://your-app.onrender.com
 
 **Destination**: `https://your-app.onrender.com/api/v1/webhooks/dlt-pipeline`
 
-**Headers**:
-```
-Content-Type: application/json
-```
-
 **Retry設定**:
 - Retries: 3
 - Retry Delay: `5000 * (retried + 1)` （5秒、10秒、15秒）
 
 ---
 
-### 6. MotherDuckでの確認方法
+### MotherDuckでの確認方法
 
 #### MotherDuck Web UIにアクセス
 ```
@@ -1781,45 +1188,18 @@ LIMIT 10;
 
 ---
 
-### 7. トラブルシューティング
+### 詳細ドキュメント
 
-#### パイプラインが失敗する
-```bash
-# ログ確認
-docker compose logs backend | grep -i "dlt"
+MotherDuck Analyticsの詳細については、以下のドキュメントを参照してください。
 
-# 環境変数確認
-docker compose exec backend python -c "
-import os
-print('PGHOST:', os.getenv('PGHOST'))
-print('MOTHERDUCK_TOKEN:', 'set' if os.getenv('MOTHERDUCK_TOKEN') else 'not set')
-"
-
-# 手動実行
-docker compose exec backend python dlt_worker/pipeline.py
-```
-
-#### Webhook が 401 Unauthorized
-```bash
-# QStash署名キーを確認
-docker compose exec backend python -c "
-from django.conf import settings
-print('QSTASH_CURRENT_SIGNING_KEY:', settings.QSTASH_CURRENT_SIGNING_KEY[:10] + '...')
-print('WEBHOOK_BASE_URL:', os.getenv('WEBHOOK_BASE_URL'))
-"
-```
-
-#### MotherDuckにデータが表示されない
-```sql
--- スキーマを確認
-SHOW DATABASES;
-SHOW SCHEMAS FROM my_db;
-SHOW TABLES FROM my_db.django_react_app_dwh;
-
--- 同期履歴を確認
-SELECT * FROM my_db.django_react_app_dwh._dlt_loads 
-ORDER BY inserted_at DESC LIMIT 5;
-```
+- **[docs/analytics.md](docs/analytics.md)** - データ分析基盤詳細ガイド
+  - アーキテクチャ選定の経緯（CDC検討からdlt採用まで）
+  - CDC（論理レプリケーション）を見送った理由
+  - Webhook方式の実装詳細
+  - dlt バッチETLの実装詳細
+  - スケジュール実行方法の比較（Render Cron vs QStash）
+  - 分析クエリ例
+  - トラブルシューティング
 
 ---
 
@@ -1956,6 +1336,8 @@ Webhook エンドポイント（/api/v1/webhooks/send-welcome-email）
 Resend でメール送信
 ```
 
+---
+
 ### 使用技術
 
 | サービス | 用途 | 選定理由 |
@@ -1963,67 +1345,54 @@ Resend でメール送信
 | **QStash** | 非同期タスクキュー | 自動リトライ、サーバーレス課金、メンテナンス不要 |
 | **Resend** | メール送信 | 開発者フレンドリーなAPI、高い到達率 |
 
-### 実装
+---
 
-#### 1. メール送信サービス
+### メリット
+
+- ⚡ **ユーザー登録が高速**: メール送信を待たずに即座にレスポンス
+- 🔄 **自動リトライ**: QStashが失敗時に自動で再送（最大3回）
+- 🐳 **Renderのスリープ対応**: サーバーがスリープしていても問題なし
+- 🧪 **テストフレンドリー**: テスト環境では自動的に無効化
+
+---
+
+### 実装の流れ
+
 ```python
-# backend/users/email_service.py
-import resend
-from django.conf import settings
+# 1. ユーザー登録時
+@transaction.atomic
+def register_user(self, request, user_data):
+    # ユーザー作成
+    user = self.command_service.create_user_with_adapter(...)
+    
+    # メール送信を予約（DB保存成功後に実行）
+    if not settings.TESTING:
+        transaction.on_commit(
+            lambda: self._send_welcome_email_safely(user)
+        )
+    
+    return user
 
-class EmailService:
-    @staticmethod
-    def send_welcome_email(email: str, first_name: str):
-        params = {
-            "from": "noreply@yourdomain.com",
-            "to": [email],
-            "subject": f"Welcome, {first_name}!",
-            "html": f"<h1>Welcome to Django React App!</h1>"
-        }
-        response = resend.Emails.send(params)
-        return {"success": True, "id": response["id"]}
-```
-
-#### 2. QStash サービス
-```python
-# backend/users/qstash_service.py
-import requests
-from django.conf import settings
-
-class QStashService:
-    @staticmethod
-    def send_welcome_email_async(email: str, first_name: str):
-        webhook_url = f"{settings.WEBHOOK_BASE_URL}/api/v1/webhooks/send-welcome-email"
-        
-        requests.post(
-            f"https://qstash.upstash.io/v2/publish/{webhook_url}",
-            headers={
-                "Authorization": f"Bearer {settings.QSTASH_TOKEN}",
-                "Content-Type": "application/json",
-            },
-            json={"email": email, "first_name": first_name}
+# 2. メール送信を安全に実行（失敗してもエラーを投げない）
+@staticmethod
+def _send_welcome_email_safely(user):
+    with ErrorMonitor.capture_and_continue(
+        component='qstash',
+        operation='send_welcome_email',
+        service='UserRegistrationService',
+        expected_errors=(QStashError,),
+        user=user
+    ):
+        UserQStashService.send_welcome_email_async(
+            email=user.email,
+            first_name=user.first_name or "User"
         )
 ```
 
-#### 3. Webhook エンドポイント
-```python
-# backend/users/views.py
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def send_welcome_email_webhook(request):
-    # QStash署名検証
-    if not _verify_qstash_signature(request):
-        return Response({"error": "Invalid signature"}, status=401)
-    
-    # メール送信
-    result = EmailService.send_welcome_email(
-        email=request.data.get("email"),
-        first_name=request.data.get("first_name")
-    )
-    return Response({"message": "Email sent"}, status=200)
-```
+---
 
 ### 環境変数
+
 ```bash
 # backend/.env
 QSTASH_TOKEN=your_qstash_token
@@ -2034,6 +1403,8 @@ WEBHOOK_BASE_URL=https://your-backend.onrender.com
 FRONT_URL=https://your-frontend.pages.dev
 ```
 
+---
+
 ### セキュリティ
 
 | 機能 | 実装 |
@@ -2042,46 +1413,19 @@ FRONT_URL=https://your-frontend.pages.dev
 | **レート制限** | 登録エンドポイントを3回/時間に制限 |
 | **テスト環境** | メール送信とレート制限を自動無効化 |
 
-### メリット
+---
 
-- ⚡ **ユーザー登録が高速**: メール送信を待たずに即座にレスポンス
-- 🔄 **自動リトライ**: QStashが失敗時に自動で再送（最大3回）
-- 🐳 **Renderのスリープ対応**: サーバーがスリープしていても問題なし
-- 🧪 **テストフレンドリー**: テスト環境では自動的に無効化
+### 詳細ドキュメント
 
-### 実装ファイル
+メール送信機能の詳細については、以下のドキュメントを参照してください。
 
-| ファイル | 役割 |
-|---------|------|
-| `users/email_service.py` | Resendメール送信ロジック |
-| `users/qstash_service.py` | QStash非同期タスク送信 |
-| `users/views.py` | Webhookエンドポイント、署名検証 |
-| `users/exceptions.py` | レート制限エラーハンドリング |
-
-### 開発環境での動作確認
-
-**Codespaces の場合**:
-```bash
-# 1. バックエンドURLを確認
-# PORTS タブで 8000 の URL をコピー
-
-# 2. .env に設定
-WEBHOOK_BASE_URL=https://your-codespace-8000.app.github.dev
-
-# 3. ポートを Public に変更
-# PORTS タブ → 8000 → 右クリック → Port Visibility → Public
-
-# 4. ユーザー登録をテスト
-```
-
-**ローカル開発の場合**:
-```bash
-# ngrok で外部公開
-ngrok http 8000
-
-# .env に ngrok URL を設定
-WEBHOOK_BASE_URL=https://xxxx.ngrok-free.app
-```
+- **[docs/email-sending.md](docs/email-sending.md)** - メール送信機能詳細ガイド
+  - 実装ファイル構成
+  - QStash Service実装
+  - Resend設定
+  - Webhook実装
+  - 開発環境での動作確認
+  - トラブルシューティング
 
 ---
 
@@ -2380,265 +1724,18 @@ npx playwright test --project=auth_chromium   # 認証済み
 
 GitHub Actionsによる自動化されたCI/CDパイプラインを採用し、コード品質の維持とデプロイの自動化を実現しています。
 
-### ワークフロー構成
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    GitHub Actions                           │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Pull Request                                               │
-│  └─ pr-check.yml                                           │
-│     ├─ Commit message validation (Conventional Commits)    │
-│     ├─ File size check (<5MB)                              │
-│     └─ Secret scan                                         │
-│                                                             │
-│  Push to develop branch                                     │
-│  ├─ backend-staging.yml                                    │
-│  │  ├─ Lint & Format (Black, isort, Flake8)               │
-│  │  ├─ Type check                                          │
-│  │  ├─ Tests (Django TestCase, 60%+ coverage)             │
-│  │  ├─ Security audit                                      │
-│  │  └─ Deploy notification                                 │
-│  │                                                          │
-│  ├─ frontend-staging.yml                                   │
-│  │  ├─ Lint & Format (ESLint, Prettier)                   │
-│  │  ├─ Type check (TypeScript)                            │
-│  │  ├─ Unit tests (Vitest, 60%+ coverage)                 │
-│  │  ├─ Build                                               │
-│  │  ├─ E2E tests (Playwright + MSW, Chromium only)        │
-│  │  ├─ Security audit (npm audit)                         │
-│  │  └─ Deploy notification                                 │
-│  │                                                          │
-│  └─ e2e-smoke-test-staging.yml (手動実行)                  │
-│     └─ Smoke tests (実環境での疎通確認)                    │
-│                                                             │
-│  Push to main branch                                        │
-│  ├─ backend-production.yml                                 │
-│  │  ├─ Lint & Format (Black, isort, Flake8)               │
-│  │  ├─ Type check                                          │
-│  │  ├─ Tests (Django TestCase, 80%+ coverage)             │
-│  │  ├─ Security audit                                      │
-│  │  └─ Deploy notification                                 │
-│  │                                                          │
-│  ├─ frontend-production.yml                                │
-│  │  ├─ Lint & Format (ESLint, Prettier)                   │
-│  │  ├─ Type check (TypeScript)                            │
-│  │  ├─ Unit tests (Vitest, 70%+ coverage)                 │
-│  │  ├─ Build                                               │
-│  │  ├─ E2E tests (Playwright + MSW, All browsers)         │
-│  │  ├─ Security audit (npm audit)                         │
-│  │  └─ Deploy notification                                 │
-│  │                                                          │
-│  └─ e2e-smoke-test-production.yml                          │
-│     ├─ 手動実行可能                                         │
-│     ├─ 定期実行 (6時間ごと、将来用)                         │
-│     └─ Smoke tests (実環境での疎通確認)                    │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### ワークフローの詳細
-
-#### 1. PR Quality Check (`pr-check.yml`)
-
-**トリガー**: Pull Request作成・更新時
-
-**実行内容**:
-
-| チェック | 説明 |
-|---------|------|
-| **Commit Message** | Conventional Commits形式の検証 |
-| **File Size** | 5MB以上のファイル検出（Git LFS推奨） |
-| **Secret Scan** | 認証情報の誤コミット検出 |
-
-**目的**: コード品質の最低基準を維持
-
 ---
 
-#### 2. Backend CI/CD
+### ワークフロー一覧
 
-**Staging** (`backend-staging.yml`)
-- **トリガー**: `develop`ブランチへのプッシュ
-- **カバレッジ**: 60%以上
-- **デプロイ**: Render（自動）
-
-**Production** (`backend-production.yml`)
-- **トリガー**: `main`ブランチへのプッシュ
-- **カバレッジ**: 80%以上
-- **デプロイ**: Render（自動）
-
-**テストステップ**:
-```yaml
-1. Lint & Format
-   - Black (コードフォーマット)
-   - isort (import整理)
-   - Flake8 (静的解析)
-
-2. Django Checks
-   - python manage.py check --deploy (本番環境)
-   - python manage.py check (ステージング環境)
-
-3. Migration Check
-   - makemigrations --check --dry-run
-
-4. Tests
-   - Django TestCase
-   - Coverage報告
-
-5. Security Audit
-   - safety check (脆弱性スキャン)
-```
-
----
-
-#### 3. Frontend CI/CD
-
-**Staging** (`frontend-staging.yml`)
-- **トリガー**: `develop`ブランチへのプッシュ
-- **カバレッジ**: 60%以上
-- **E2E**: Chromiumのみ
-- **デプロイ**: Cloudflare Pages（自動）
-
-**Production** (`frontend-production.yml`)
-- **トリガー**: `main`ブランチへのプッシュ
-- **カバレッジ**: 70%以上
-- **E2E**: 全ブラウザ（Chromium, Firefox, WebKit）
-- **デプロイ**: Cloudflare Pages（自動）
-
-**テストステップ**:
-```yaml
-1. Lint & Format
-   - ESLint (静的解析)
-   - Prettier (コードフォーマット)
-
-2. Type Check
-   - TypeScript compiler (tsc --noEmit)
-
-3. Unit & Integration Tests
-   - Vitest + Testing Library
-   - MSW (APIモック)
-   - Coverage報告
-
-4. Build
-   - Vite build
-   - Build size確認
-
-5. E2E Tests
-   - Playwright + playwright-msw
-   - 認証済み/未認証テスト分離
-
-6. Security Audit
-   - npm audit (脆弱性スキャン)
-```
-
----
-
-#### 4. Smoke Tests
-
-**目的**: デプロイ後の実環境での疎通確認
-
-**Staging** (`e2e-smoke-test-staging.yml`)
-- **トリガー**: 手動実行のみ
-- **環境**: Staging環境
-- **ブラウザ**: Chromiumのみ
-
-**Production** (`e2e-smoke-test-production.yml`)
-- **トリガー**: 手動実行、定期実行（6時間ごと、将来用）
-- **環境**: Production環境
-- **ブラウザ**: Chromiumのみ
-
-**実行内容**:
-```yaml
-1. サービス疎通確認
-   - Frontend: curl チェック
-   - Backend: /api/v1/health/ エンドポイント
-
-2. Smoke Tests実行
-   - 重要なユーザーフロー検証
-   - @smoke タグ付きテストのみ実行
-
-3. 結果レポート
-   - GitHub Step Summary
-   - 失敗時の通知
-```
-
----
-
-### 再利用可能なワークフロー
-
-#### Backend Tests (`reusable-backend-test.yml`)
-
-**パラメータ**:
-```yaml
-inputs:
-  environment: staging | production
-  debug-mode: 'True' | 'False'
-  strict-mode: boolean (lintエラーで失敗するか)
-  coverage-threshold: 0-100 (カバレッジ閾値)
-```
-
-#### Frontend Tests (`reusable-frontend-test.yml`)
-
-**パラメータ**:
-```yaml
-inputs:
-  environment: staging | production
-  strict-mode: boolean (lintエラーで失敗するか)
-  coverage-threshold: 0-100 (カバレッジ閾値)
-```
-
----
-
-### カスタムアクション
-
-#### Setup Node.js (`setup-node/action.yml`)
-
-**機能**:
-- Node.js環境のセットアップ
-- npm キャッシュ管理
-- 依存関係のインストール
-
-**使用例**:
-```yaml
-- uses: ./.github/actions/setup-node
-  with:
-    node-version: '20'
-    working-directory: frontend
-```
-
-#### Setup Python (`setup-python/action.yml`)
-
-**機能**:
-- Python環境のセットアップ
-- pip キャッシュ管理
-- 依存関係のインストール
-- Django バージョン検証
-
-**使用例**:
-```yaml
-- uses: ./.github/actions/setup-python
-  with:
-    python-version: '3.12'
-    requirements-path: backend/requirements.txt
-```
-
----
-
-### 環境変数管理
-
-**GitHub Environment Variables** (Terraform管理)
-
-| 環境 | 変数 | 用途 |
-|------|------|------|
-| **staging** | `VITE_BASE_API_URL` | バックエンドURL |
-| | `FRONTEND_URL` | フロントエンドURL |
-| | `VITE_STORAGE_URL` | ストレージURL |
-| | `E2E_TEST_EMAIL` | E2Eテスト用メール |
-| | `E2E_TEST_PASSWORD` | E2Eテスト用パスワード |
-| **production** | 同上 | 同上 |
-
-**設定方法**: Terraformで自動設定（`terraform/modules/github/`）
+| トリガー | ワークフロー | 内容 |
+|---------|------------|------|
+| **Pull Request** | `pr-check.yml` | Commit message検証、ファイルサイズチェック、Secret scan |
+| **Push to develop** | `backend-staging.yml` | Lint, Tests, Deploy（カバレッジ60%+） |
+| | `frontend-staging.yml` | Lint, Tests, Build, E2E（カバレッジ60%+） |
+| **Push to main** | `backend-production.yml` | Lint, Tests, Deploy（カバレッジ80%+） |
+| | `frontend-production.yml` | Lint, Tests, Build, E2E（カバレッジ70%+、全ブラウザ） |
+| **手動実行** | `e2e-smoke-test-*.yml` | 実環境での疎通確認 |
 
 ---
 
@@ -2649,14 +1746,10 @@ inputs:
    ↓
 2. Pull Request作成
    └─ pr-check.yml 実行
-      ├─ Commit message検証
-      ├─ File size検証
-      └─ Secret scan
    ↓
 3. developブランチにマージ
    └─ backend-staging.yml, frontend-staging.yml 実行
       ├─ Lint & Format
-      ├─ Type check
       ├─ Tests (60%+ coverage)
       ├─ Build
       ├─ E2E tests (Chromium)
@@ -2664,22 +1757,15 @@ inputs:
    ↓
 4. Render & Cloudflare が自動デプロイ
    ↓
-5. 手動でスモークテスト実行（オプション）
-   └─ e2e-smoke-test-staging.yml
-   ↓
-6. mainブランチにマージ
+5. mainブランチにマージ
    └─ backend-production.yml, frontend-production.yml 実行
       ├─ Lint & Format
-      ├─ Type check
       ├─ Tests (70-80%+ coverage)
       ├─ Build
       ├─ E2E tests (全ブラウザ)
       └─ デプロイ通知
    ↓
-7. Render & Cloudflare が自動デプロイ
-   ↓
-8. 定期スモークテスト（6時間ごと、将来用）
-   └─ e2e-smoke-test-production.yml
+6. Render & Cloudflare が自動デプロイ
 ```
 
 ---
@@ -2697,36 +1783,101 @@ inputs:
 
 ---
 
-### トラブルシューティング
+### バックエンドCI/CD
 
-#### ワークフローが失敗する
-
+**実行内容**:
 ```yaml
-# 確認項目
-1. GitHub Environment Variablesが設定されているか
-   - Repository → Settings → Environments
+1. Lint & Format
+   - Black (コードフォーマット)
+   - isort (import整理)
+   - Flake8 (静的解析)
 
-2. Secretsが正しく設定されているか
-   - E2E_TEST_EMAIL
-   - E2E_TEST_PASSWORD
+2. Django Checks
+   - python manage.py check
 
-3. テストが通るか
-   - ローカルで npm run test 実行
-   - ローカルで npm run test:e2e 実行
+3. Migration Check
+   - makemigrations --check --dry-run
+
+4. Tests
+   - Django TestCase
+   - Coverage報告
+
+5. Security Audit
+   - safety check (脆弱性スキャン)
 ```
 
-#### デプロイが自動で行われない
+---
 
+### フロントエンドCI/CD
+
+**実行内容**:
 ```yaml
-# 確認項目
-1. RenderとCloudflareでGitHub連携が完了しているか
+1. Lint & Format
+   - ESLint (静的解析)
+   - Prettier (コードフォーマット)
 
-2. ブランチ設定が正しいか
-   - Staging: develop
-   - Production: main
+2. Type Check
+   - TypeScript compiler
 
-3. ビルドコマンドが正しいか
+3. Unit & Integration Tests
+   - Vitest + Testing Library
+   - MSW (APIモック)
+
+4. Build
+   - Vite build
+
+5. E2E Tests
+   - Playwright + playwright-msw
+   - 認証済み/未認証テスト分離
+
+6. Security Audit
+   - npm audit (脆弱性スキャン)
 ```
+
+---
+
+### 再利用可能なコンポーネント
+
+#### カスタムアクション
+
+| アクション | 用途 |
+|-----------|------|
+| `setup-node` | Node.js環境のセットアップ、npmキャッシュ管理 |
+| `setup-python` | Python環境のセットアップ、pipキャッシュ管理 |
+
+#### 再利用可能なワークフロー
+
+| ワークフロー | パラメータ |
+|------------|----------|
+| `reusable-backend-test.yml` | environment, debug-mode, strict-mode, coverage-threshold |
+| `reusable-frontend-test.yml` | environment, strict-mode, coverage-threshold |
+
+---
+
+### 環境変数管理
+
+**GitHub Environment Variables** (Terraform管理)
+
+| 環境 | 主な変数 |
+|------|---------|
+| **staging** | VITE_BASE_API_URL, FRONTEND_URL, E2E_TEST_EMAIL, E2E_TEST_PASSWORD |
+| **production** | 同上 |
+
+**設定方法**: Terraformで自動設定（`terraform/modules/github/`）
+
+---
+
+### 詳細ドキュメント
+
+CI/CDパイプラインの詳細については、以下のドキュメントを参照してください。
+
+- **[docs/cicd.md](docs/cicd.md)** - CI/CD詳細ガイド
+  - 各ワークフローの詳細
+  - 再利用可能なワークフロー
+  - カスタムアクションの実装
+  - 環境変数管理
+  - Smoke Testsの実装
+  - トラブルシューティング
 
 ---
 
@@ -2972,304 +2123,46 @@ terraform destroy
 
 ### 概要
 
-本プロジェクトでは、**Terraform Cloud**によるインフラ管理と**GitHub Actions**による自動デプロイを組み合わせ、安全で再現性の高いデプロイフローを実現しています。
+**Terraform Cloud**によるインフラ管理と**GitHub Actions**による自動デプロイを組み合わせ、安全で再現性の高いデプロイフローを実現しています。
+
+---
+
+### フロー概要
 
 ```
-┌────────────────────────────────────────────────────────────┐
-│              Terraform + Deployment Flow                   │
-├────────────────────────────────────────────────────────────┤
-│                                                            │
-│  1. terraform/** 変更 + PR作成                             │
-│     └─ terraform-plan.yml（自動実行）                      │
-│        ├─ Staging/Production Plan を表示                  │
-│        └─ PRにコメント                                     │
-│                                                            │
-│  2. PR マージ（develop または main）                       │
-│     └─ 通常のCI/CDワークフロー実行                         │
-│                                                            │
-│  3. terraform-apply.yml（手動実行）                        │
-│     ├─ Terraform Apply                                     │
-│     │  ├─ インフラ構築・変更                               │
-│     │  └─ GitHub Environment Variables 更新               │
-│     │                                                      │
-│     └─ デプロイ戦略の選択                                  │
-│        ├─ Staging: Parallel（高速）                       │
-│        └─ Production: Sequential（安全）                  │
-│                                                            │
-│  4. アプリケーションデプロイ（自動トリガー）                │
-│     ├─ Backend Deployment（Render）                       │
-│     │  ├─ Render自動デプロイ開始                          │
-│     │  └─ Health Check（最大5分）                         │
-│     │                                                      │
-│     └─ Frontend Deployment（Cloudflare Pages）            │
-│        ├─ Cloudflare Pages自動デプロイ開始                │
-│        └─ Health Check（最大5分）                         │
-│                                                            │
-│  5. デプロイ完了 🎉                                        │
-│                                                            │
-└────────────────────────────────────────────────────────────┘
+1. terraform/** 変更 + PR作成
+   └─ terraform-plan.yml（自動実行）
+      └─ PRにPlan結果をコメント
+
+2. PR マージ（develop または main）
+   └─ 通常のCI/CDワークフロー実行
+
+3. terraform-apply.yml（手動実行）
+   ├─ Terraform Apply
+   │  └─ GitHub Environment Variables 更新
+   └─ デプロイ戦略の選択
+      ├─ Staging: Parallel（高速）
+      └─ Production: Sequential（安全）
+
+4. アプリケーションデプロイ（自動トリガー）
+   ├─ Backend Deployment（Render）
+   └─ Frontend Deployment（Cloudflare Pages）
 ```
 
 ---
 
-### Terraform ワークフロー詳細
+### Terraformワークフロー
 
-#### 1. terraform-plan.yml（自動実行）
-
-**トリガー**: 
-- Pull Request作成・更新時
-- `terraform/**` または `backend/.env.example` または `frontend/.env.example` などの変更を検出
-
-**実行内容**:
-
-| ステップ | 説明 |
-|---------|------|
-| **変更検出** | dorny/paths-filter で変更ファイルを検出 |
-| **環境判定** | Staging/Productionへの影響を自動判定 |
-| **Terraform Plan** | 変更される内容をプレビュー |
-| **PRコメント** | Plan結果をPRにコメント |
-
-**判定ロジック**:
-
-```yaml
-# Staging Plan を実行する条件
-- terraform/envs/staging/** 変更
-- terraform/modules/** 変更
-→ Staging に影響あり
-
-# Production Plan を実行する条件
-- terraform/envs/production/** 変更
-- terraform/modules/** 変更（PRがmainブランチ向けの場合のみ）
-→ Production に影響あり
-
-# アプリ設定のみ変更の場合
-- backend/.env.example 変更
-- frontend/.env.example 変更
-→ Terraform Plan はスキップ（無風プラン防止）
-→ PRに通知コメント
-```
-
-**PRコメント例**:
-```markdown
-### Terraform Plan (Staging)
-
-<details>
-<summary>Show Plan</summary>
-
-Terraform will perform the following actions:
-
-  # module.github.github_actions_environment_variable.vite_base_api_url will be updated in-place
-  ~ resource "github_actions_environment_variable" "vite_base_api_url" {
-      ~ value         = "https://old-url.com" -> "https://new-url.com"
-    }
-
-Plan: 0 to add, 1 to change, 0 to destroy.
-
-</details>
-
-**Workspace:** `django-react-staging`
-**Status:** success
-```
+| ワークフロー | トリガー | 用途 |
+|------------|---------|------|
+| `terraform-plan.yml` | PR作成・更新 | 変更内容のプレビュー |
+| `terraform-apply.yml` | 手動実行 | インフラ構築・変更 |
+| `terraform-fmt.yml` | PR作成・更新 | フォーマットチェック |
+| `terraform-destroy.yml` | 手動実行（緊急時） | 環境削除 |
 
 ---
 
-#### 2. terraform-apply.yml（手動実行）
-
-**トリガー**: 
-- GitHub Actions UI から手動実行
-- インフラ変更が必要な時のみ実行
-
-**入力パラメータ**:
-
-| パラメータ | 説明 | デフォルト |
-|-----------|------|----------|
-| `environment` | 環境選択（staging/production） | 必須 |
-| `auto-approve` | 自動承認（確認スキップ） | false |
-| `trigger-deployment` | デプロイ自動トリガー | true |
-| `deployment-strategy` | デプロイ戦略（auto/parallel/sequential） | auto |
-
-**実行フロー**:
-
-```
-1. 環境選択
-   └─ staging または production
-
-2. GitHub Environment による承認
-   ├─ Staging: 承認不要
-   └─ Production: レビュアー承認が必要
-
-3. Terraform Apply
-   ├─ インフラ構築・変更
-   ├─ GitHub Environment Variables 更新
-   └─ Terraform Outputs 取得
-
-4. デプロイ戦略の決定
-   ├─ auto（デフォルト）
-   │  ├─ Staging → parallel（高速）
-   │  └─ Production → sequential（安全）
-   │
-   ├─ parallel（手動選択）
-   │  └─ Backend/Frontend 同時デプロイ
-   │
-   └─ sequential（手動選択）
-      ├─ Backend デプロイ
-      ├─ Health Check
-      └─ Frontend デプロイ
-
-5. Repository Dispatch
-   └─ アプリケーションデプロイワークフローをトリガー
-```
-
-**実行例**:
-```bash
-# GitHub Actions UI から実行
-
-Environment: production
-Auto approve: false
-Trigger deployment: true
-Deployment strategy: auto
-```
-
----
-
-#### 3. terraform-fmt.yml（自動実行）
-
-**トリガー**: 
-- Pull Request作成・更新時
-- `terraform/**` の変更を検出
-
-**実行内容**:
-```yaml
-1. Terraform Format Check
-   └─ terraform fmt -check -recursive
-
-2. フォーマットエラーがある場合
-   ├─ PRにコメント
-   └─ 修正コマンドを提示
-```
-
-**PRコメント例**:
-```markdown
-### ⚠️ Terraform Format Issues
-
-The following files need formatting:
-
-- `terraform/modules/neon/main.tf`
-- `terraform/envs/staging/main.tf`
-
-**Fix command:**
-```bash
-terraform fmt -recursive terraform/
-```
-
----
-
-#### 4. terraform-destroy.yml（緊急時のみ）
-
-**トリガー**: 
-- 手動実行のみ
-- 環境削除が必要な時のみ使用
-
-**安全機能**:
-
-| 機能 | 説明 |
-|------|------|
-| **確認ワード** | "destroy" を入力しないと実行不可 |
-| **理由の記録** | 削除理由を必須入力 |
-| **厳格な承認** | Production は 2人以上の承認が必要 |
-| **30秒待機** | 実行前に30秒の待機時間 |
-| **監査証跡** | 削除理由と実行者を記録 |
-
-**入力パラメータ**:
-```yaml
-environment: staging | production  # 環境選択
-confirmation: "destroy"            # 確認ワード（必須）
-reason: "理由を記述"                # 削除理由（必須）
-```
-
----
-
-### アプリケーションデプロイワークフロー
-
-#### 1. backend-deploy.yml（Post-Infrastructure）
-
-**トリガー**: 
-- `repository_dispatch` イベント（`deploy-backend`）
-- Terraform Apply 成功後に自動実行
-
-**実行内容**:
-
-```yaml
-1. デプロイ情報表示
-   ├─ Environment（staging/production）
-   ├─ Triggered by（terraform-apply）
-   └─ Infrastructure Info（DB host, Backend URL）
-
-2. Render自動デプロイ待機
-   └─ 2分待機（Renderがデプロイ完了するまで）
-
-3. Health Check（最大5回リトライ）
-   ├─ Backend URL/api/health/ にアクセス
-   ├─ 200 OK → 成功
-   └─ エラー → 30秒待機して再試行
-
-4. デプロイサマリー作成
-   ├─ 成功時: 次のステップを表示
-   └─ 失敗時: トラブルシューティング情報を表示
-```
-
-**Health Check の仕組み**:
-```bash
-MAX_RETRIES=5
-RETRY_COUNT=0
-
-while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-  if curl -f -s -o /dev/null "$BACKEND_URL/api/health"; then
-    echo "✅ Backend is healthy!"
-    exit 0
-  fi
-  
-  RETRY_COUNT=$((RETRY_COUNT + 1))
-  echo "⏳ Retry $RETRY_COUNT/$MAX_RETRIES..."
-  sleep 30
-done
-
-echo "❌ Backend health check failed"
-exit 1
-```
-
----
-
-#### 2. frontend-deploy.yml（Post-Infrastructure）
-
-**トリガー**: 
-- `repository_dispatch` イベント（`deploy-frontend`）
-- Backend Deploy 成功後に自動実行（sequential の場合）
-
-**実行内容**:
-
-```yaml
-1. デプロイ情報表示
-   ├─ Environment（staging/production）
-   ├─ Triggered by（terraform-apply）
-   └─ Configuration（Frontend URL, Backend API URL）
-
-2. Cloudflare Pages自動デプロイ待機
-   └─ 3分待機（Cloudflare Pagesがデプロイ完了するまで）
-
-3. Health Check（最大5回リトライ）
-   ├─ Frontend URL にアクセス
-   ├─ HTTP 200 → 成功
-   └─ エラー → 30秒待機して再試行
-
-4. デプロイサマリー作成
-   ├─ 成功時: 全デプロイ完了を表示
-   └─ 失敗時: トラブルシューティング情報を表示
-```
-
----
-
-### デプロイ戦略の違い
+### デプロイ戦略
 
 #### Parallel（並列実行）- Staging推奨
 
@@ -3317,125 +2210,35 @@ Frontend Deploy
 #### シナリオ1: 新しい環境変数の追加
 
 ```bash
-# 1. 環境変数を .env.example に追加
-echo "NEW_API_KEY=your-api-key" >> backend/.env.example
-
-# 2. Terraform に反映
-# terraform/modules/github/main.tf を編集
-resource "github_actions_environment_variable" "new_api_key" {
-  variable_name = "NEW_API_KEY"
-  value         = var.new_api_key
-}
-
-# 3. PR作成
-git add .
-git commit -m "feat: add new API key environment variable"
-git push origin feat/add-api-key
-
-# 4. terraform-plan.yml が自動実行
-# → PRにPlan結果がコメントされる
-
-# 5. レビュー & マージ（develop）
-
-# 6. terraform-apply.yml を手動実行
-# → Environment: staging
-# → Trigger deployment: true（デフォルト）
-
-# 7. 自動デプロイ開始
-# → Backend Deploy（2分待機 + Health Check）
-# → Frontend Deploy（3分待機 + Health Check）
-
-# 8. 完了 🎉
+1. .env.example に環境変数を追加
+2. Terraform に反映（terraform/modules/github/main.tf）
+3. PR作成 → terraform-plan.yml が自動実行
+4. レビュー & マージ（develop）
+5. terraform-apply.yml を手動実行（Staging）
+6. 自動デプロイ開始
+7. 完了 🎉
 ```
-
----
 
 #### シナリオ2: データベース設定の変更
 
 ```bash
-# 1. Neon モジュールを編集
-# terraform/modules/neon/main.tf
-resource "neon_branch" "main" {
-  project_id = neon_project.main.id
-  name       = var.branch_name
-  
-  # Compute上限を変更
-  default_endpoint_settings {
-    autoscaling_limit_min_cu = 0.25
-    autoscaling_limit_max_cu = 0.50  # 0.25 → 0.50 に変更
-  }
-}
-
-# 2. PR作成（develop向け）
-git add terraform/
-git commit -m "feat: increase Neon compute limit to 0.50"
-git push origin feat/increase-compute
-
-# 3. terraform-plan.yml が自動実行
-# → Staging Plan 表示（modules変更を検出）
-# → Production Plan も表示（早期警告）
-
-# 4. PRコメントで確認
-# "⚠️ Shared Module Change Detected
-#  Module changes affect both Staging AND Production."
-
-# 5. レビュー & マージ（develop）
-
-# 6. terraform-apply.yml を手動実行（Staging）
-# → Environment: staging
-# → Deployment strategy: auto（→ parallel）
-
-# 7. 自動デプロイ開始（並列）
-# → Backend Deploy & Frontend Deploy（同時実行）
-# → 2-3分で完了
-
-# 8. Staging で動作確認
-
-# 9. main ブランチにマージ
-
-# 10. terraform-apply.yml を手動実行（Production）
-# → Environment: production
-# → Deployment strategy: auto（→ sequential）
-
-# 11. 自動デプロイ開始（順次）
-# → Backend Deploy → Health Check → Frontend Deploy
-# → 5-7分で完了
-
-# 12. Production デプロイ完了 🎉
-```
-
----
-
-#### シナリオ3: インフラのみ変更（デプロイ不要）
-
-```bash
-# 1. Terraform ファイルを編集
-# 例: タグを追加
-
-# 2. PR作成 & マージ
-
-# 3. terraform-apply.yml を手動実行
-# → Environment: staging
-# → Trigger deployment: false  # ← デプロイをスキップ
-
-# 4. Terraform Apply のみ実行
-# → アプリケーションデプロイはトリガーされない
-
-# 5. 完了
+1. Neon モジュールを編集
+2. PR作成 → Staging/Production Plan 表示
+3. レビュー & マージ（develop）
+4. terraform-apply.yml を手動実行（Staging）
+5. Staging で動作確認
+6. main ブランチにマージ
+7. terraform-apply.yml を手動実行（Production）
+8. Production デプロイ完了 🎉
 ```
 
 ---
 
 ### GitHub Environment 設定
 
-Terraform実行に必要なEnvironmentの設定:
-
 #### terraform-staging
 
 ```
-Settings → Environments → New environment
-
-Name: terraform-staging
 Protection rules:
   ✅ Required reviewers: 0人
   ❌ Wait timer: なし
@@ -3444,9 +2247,6 @@ Protection rules:
 #### terraform-production
 
 ```
-Settings → Environments → New environment
-
-Name: terraform-production
 Protection rules:
   ✅ Required reviewers: 1人以上
   ⏱️ Wait timer: 0分（任意）
@@ -3454,223 +2254,27 @@ Protection rules:
 
 ---
 
-### GitHub Secrets 設定
+### GitHub Secrets
 
-#### Repository Secrets
-
-```
-Settings → Secrets and variables → Actions → New repository secret
-
-Name: TF_API_TOKEN
-Secret: <Terraform Cloud API Token>
-```
-
-```
-Settings → Secrets and variables → Actions → New repository secret
-
-Name: GH_PAT
-Secret: <Personal Access Token>
-Scopes: repo + workflow
-```
-
-**GH_PAT の作成**:
-```
-1. GitHub → Settings → Developer settings
-2. Personal access tokens → Tokens (classic)
-3. Generate new token (classic)
-4. Select scopes:
-   ✅ repo (Full control)
-   ✅ workflow (Update workflows)
-5. Generate token
-6. Copy token
-```
+| Secret | 用途 |
+|--------|------|
+| `TF_API_TOKEN` | Terraform Cloud API Token |
+| `GH_PAT` | Personal Access Token（repo + workflow権限） |
 
 ---
 
-### Terraform Cloud 設定
+### 詳細ドキュメント
 
-#### Organization & Workspaces
+Terraform + デプロイワークフローの詳細については、以下のドキュメントを参照してください。
 
-```
-1. Terraform Cloud にログイン
-2. Organization作成: django-react-app
-3. Workspaces作成:
-   - django-react-staging
-   - django-react-production
-```
-
-#### Workspace Variables
-
-**両方のWorkspaceに設定**:
-
-| Variable | Type | Sensitive | 説明 |
-|----------|------|-----------|------|
-| `NEON_API_KEY` | Environment | ✅ | Neon API Key |
-| `RENDER_API_KEY` | Environment | ✅ | Render API Key |
-| `CLOUDFLARE_API_TOKEN` | Environment | ✅ | Cloudflare API Token |
-| `B2_APPLICATION_KEY_ID` | Environment | ✅ | Backblaze Key ID |
-| `B2_APPLICATION_KEY` | Environment | ✅ | Backblaze Key Secret |
-| `GITHUB_TOKEN` | Environment | ✅ | GitHub PAT（repo権限） |
-
-**Terraform Variables**（環境ごとに異なる値）:
-
-| Variable | Type | Staging | Production |
-|----------|------|---------|------------|
-| `environment` | Terraform | staging | production |
-| `project_name` | Terraform | django-react-app | django-react-app |
-| `render_owner_id` | Terraform | usr-xxx | usr-xxx |
-| `github_repo_url` | Terraform | https://github.com/... | https://github.com/... |
-
----
-
-### トラブルシューティング
-
-#### エラー: "Resource not accessible by integration"
-
-```yaml
-Error: Resource not accessible by integration
-```
-
-**原因**: デフォルトの `GITHUB_TOKEN` では Repository Dispatch できない
-
-**解決**:
-```bash
-1. Personal Access Token (PAT) を作成
-   - Scopes: repo + workflow
-
-2. GitHub Secrets に GH_PAT として登録
-
-3. ワークフローで使用
-   token: ${{ secrets.GH_PAT }}
-```
-
----
-
-#### エラー: Backend Health Check Timeout
-
-```
-❌ Backend health check failed after 5 retries
-```
-
-**確認項目**:
-```bash
-1. Render Dashboard でデプロイログを確認
-   - マイグレーションエラー？
-   - 環境変数の設定ミス？
-
-2. 環境変数が正しく設定されているか確認
-   - GitHub Environment Variables
-   - Render Environment Variables
-
-3. データベース接続を確認
-   - Neon Database が起動しているか
-   - 接続情報が正しいか
-```
-
----
-
-#### エラー: Frontend Health Check Timeout
-
-```
-❌ Frontend health check failed after 5 retries
-```
-
-**確認項目**:
-```bash
-1. Cloudflare Pages Dashboard でビルドログを確認
-   - ビルドエラー？
-   - 環境変数の設定ミス？
-
-2. 環境変数が正しく設定されているか確認
-   - VITE_BASE_API_URL
-   - VITE_STORAGE_URL
-
-3. DNS/CDN の伝播を確認
-   - 数分待ってから再度アクセス
-```
-
----
-
-#### エラー: Terraform Apply Failed
-
-```
-Error: Error creating resource
-```
-
-**確認項目**:
-```bash
-1. Terraform Cloud のログを確認
-   https://app.terraform.io/app/django-react-app/workspaces/...
-
-2. API キーが有効か確認
-   - Neon, Render, Cloudflare, Backblaze, GitHub
-
-3. リソースが既に存在しないか確認
-   - 手動で作成したリソースがあれば削除
-   - または terraform import でインポート
-
-4. Provider API Status を確認
-   - Neon Status: https://neon.tech/status
-   - Render Status: https://status.render.com
-   - Cloudflare Status: https://www.cloudflarestatus.com
-```
-
----
-
-### ベストプラクティス
-
-#### 1. デプロイタイミング
-
-```
-推奨:
-  ✅ Staging: いつでも
-  ✅ Production: 営業時間外（深夜・早朝）
-  ✅ Production: 金曜日は避ける
-```
-
-#### 2. 変更の段階的ロールアウト
-
-```
-手順:
-  1. develop → Staging デプロイ
-  2. Staging で動作確認（数時間〜数日）
-  3. main → Production デプロイ
-  4. Production で動作確認
-```
-
-#### 3. ロールバック準備
-
-```
-事前準備:
-  ✅ 前バージョンのタグを作成
-  ✅ データベースバックアップ
-  ✅ ロールバック手順の確認
-```
-
-#### 4. モニタリング
-
-```
-デプロイ後の確認:
-  ✅ Render Dashboard でログ確認
-  ✅ Cloudflare Pages でビルドログ確認
-  ✅ Neon Console でDB接続確認
-  ✅ Smoke Tests の実行（手動）
-```
-
----
-
-### まとめ
-
-| フェーズ | ワークフロー | 自動/手動 | 頻度 |
-|---------|------------|----------|------|
-| **Plan** | terraform-plan.yml | 自動 | 毎PR |
-| **Format** | terraform-fmt.yml | 自動 | 毎PR |
-| **Apply** | terraform-apply.yml | 手動 | 月1-2回 |
-| **Deploy** | backend-deploy.yml | 自動（Terraform後） | Apply時 |
-| | frontend-deploy.yml | 自動（Terraform後） | Apply時 |
-| **Destroy** | terraform-destroy.yml | 手動 | 年1回以下 |
-
-この構成により、**安全で自動化されたインフラ管理とアプリケーションデプロイ**を実現できます
+- **[docs/terraform-workflow.md](docs/terraform-workflow.md)** - Terraformワークフロー詳細ガイド
+  - terraform-plan.ymlの詳細
+  - terraform-apply.ymlの詳細
+  - terraform-destroy.ymlの安全機能
+  - Backend/Frontend Deployワークフロー
+  - Health Checkの仕組み
+  - トラブルシューティング
+  - ベストプラクティス
 
 ---
 

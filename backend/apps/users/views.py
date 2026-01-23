@@ -1,5 +1,4 @@
 import logging
-import subprocess
 
 from django.conf import settings
 from django.utils.decorators import method_decorator
@@ -16,6 +15,7 @@ from apps.common.infrastructure.motherduck_client import MotherDuckClient
 from apps.common.permissions import IsQStashAuthenticated
 from apps.common.error_decorators import log_webhook_call
 from apps.common.exceptions import EmailDeliveryError, AnalyticsError
+from apps.analytics.services import DltPipelineService
 
 from .email_service import UserEmailService
 from .user_service import UserAuthService
@@ -338,6 +338,11 @@ def dlt_pipeline_webhook(request):
     署名検証は IsQStashAuthenticated で自動処理。
     15分ごとにQStashから呼ばれ、PostgreSQL → MotherDuck 同期を実行。
     
+    **変更点**:
+    - subprocessを削除
+    - Service層を直接呼び出し（メモリ効率向上）
+    - タイムアウトはQStash側で管理（5-10分に設定推奨）
+    
     Returns:
         200: 成功
         500: 処理エラー（QStashが自動リトライ）
@@ -346,50 +351,22 @@ def dlt_pipeline_webhook(request):
         AnalyticsError: パイプライン実行エラー（統一エラーハンドラーが処理）
     """
     try:
-        # dltパイプラインを実行
-        result = subprocess.run(
-            ["python", "manage.py", "run_pipeline"],
-            capture_output=True,
-            text=True,
-            timeout=300,  # 5分タイムアウト
-        )
-
-        if result.returncode == 0:
-            logger.info("✅ dlt pipeline executed successfully")
-            logger.info(f"Output: {result.stdout}")
-
-            return Response({
-                "status": "success",
-                "message": "Pipeline executed successfully",
-                "output": result.stdout[-500:],  # 最後の500文字のみ返す
-            })
-        else:
-            # パイプライン実行失敗
-            logger.error(f"❌ dlt pipeline failed: {result.stderr}")
-            raise AnalyticsError(
-                message="Pipeline execution failed",
-                context={
-                    "error": result.stderr[-500:],
-                    "returncode": result.returncode
-                }
-            )
-
-    except subprocess.TimeoutExpired:
-        # タイムアウト
-        logger.error("❌ dlt pipeline timeout (5 minutes)")
-        raise AnalyticsError(
-            message="Pipeline execution timeout (5 minutes)",
-            context={"timeout": 300}
-        )
-    
-    except AnalyticsError:
-        # 既に適切な例外なので再送出
-        raise
-    
+        result = DltPipelineService.execute_postgres_to_motherduck()
+        
+        logger.info(f"✅ dlt pipeline executed successfully: {result['tables']}")
+        
+        return Response({
+            "status": "success",
+            "message": "Pipeline executed successfully",
+            "synced_tables": result["tables"],
+        })
+        
     except Exception as e:
-        # 予期しないエラー
-        logger.exception("❌ dlt pipeline unexpected error")
+        # すべてのエラーをAnalyticsErrorでラップ
+        logger.exception("❌ dlt pipeline execution error")
         raise AnalyticsError(
-            message=f"Unexpected pipeline error: {str(e)}",
-            context={"error_type": type(e).__name__}
+            message=f"Pipeline execution failed: {str(e)}",
+            context={
+                "error_type": type(e).__name__,
+            }
         )
