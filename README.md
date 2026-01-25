@@ -94,6 +94,7 @@ Django/React モノレポベースのSPAアプリケーション
 │   │   │   │   ├── base_email.py
 │   │   │   │   ├── base_qstash.py
 │   │   │   │   ├── base_vector.py
+│   │   │   │   ├── base_embedding.py
 │   │   │   │   └── base_analytics.py
 │   │   │   ├── exceptions.py
 │   │   │   ├── error_handlers.py

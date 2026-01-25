@@ -2,7 +2,7 @@ import logging
 
 from apps.common.services.base_vector import BaseVectorService
 from apps.common.error_decorators import service_error_handler
-from .embedding_service import EmbeddingService
+from .embedding_service import TodoEmbeddingService
 
 
 logger = logging.getLogger(__name__)
@@ -16,7 +16,7 @@ class VectorService(BaseVectorService):
     """
 
     def __init__(self):
-        self.embedding_service = EmbeddingService()
+        self.embedding_service = TodoEmbeddingService()
 
     @service_error_handler
     def add_todo(self, todo):
@@ -28,7 +28,7 @@ class VectorService(BaseVectorService):
             EmbeddingError: ベクトル化エラー時
         """
         # テキスト準備
-        text = EmbeddingService.prepare_text(todo)
+        text = self.embedding_service.prepare_text(todo)
         
         # ベクトル化
         embedding = self.embedding_service.embed_text(
@@ -102,7 +102,7 @@ class VectorService(BaseVectorService):
     def add_todos_batch(self, todos):
         """複数のTodoを一括追加"""
         # テキストを一括準備
-        texts = [EmbeddingService.prepare_text(todo) for todo in todos]
+        texts = [self.embedding_service.prepare_text(todo) for todo in todos]
         
         # バッチでベクトル化
         embeddings = self.embedding_service.embed_batch(texts)
