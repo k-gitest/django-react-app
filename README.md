@@ -129,6 +129,7 @@ Django/React モノレポベースのSPAアプリケーション
 │   │   │   ├── embedding_service.py
 │   │   │   ├── vector_service.py
 │   │   │   ├── analytics_service.py
+│   │   │   ├── webhook_service.py
 │   │   │   └── urls.py                     
 │   │   │
 │   │   └── webhooks/                     
