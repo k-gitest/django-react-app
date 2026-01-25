@@ -1,28 +1,24 @@
-import logging
-import re
-import google.generativeai as genai
+"""
+Todo Embedding Service - Todo固有のテキスト整形
 
-from django.conf import settings
-from apps.common.exceptions import EmbeddingError
+BaseEmbeddingServiceを継承し、Todo固有のロジックを提供
+"""
+
+import re
+import logging
+from apps.common.services.base_embedding import BaseEmbeddingService
 
 
 logger = logging.getLogger(__name__)
 
 
-class EmbeddingService:
+class TodoEmbeddingService(BaseEmbeddingService):
     """
-    Gemini APIを使用したテキストのベクトル化サービス
+    Todo用のEmbeddingサービス
     
-    text-embedding-004モデルを使用
-    - 次元数: 768
-    - 無料枠: 1,500リクエスト/日
+    BaseEmbeddingServiceを継承し、Todo固有のテキスト整形を担当
     """
-
-    def __init__(self):
-        genai.configure(api_key=settings.GOOGLE_API_KEY)
-        self.model = "models/text-embedding-004"
     
-    @staticmethod
     def prepare_text(todo) -> str:
         """
         検索用テキストを生成
@@ -46,61 +42,3 @@ class EmbeddingService:
         text = re.sub(r'\s+', ' ', text.strip())
         
         return text
-    
-    def embed_text(self, text: str, task_type: str = "retrieval_document") -> list[float]:
-        """
-        テキストをベクトル化
-        
-        Args:
-            text: 埋め込むテキスト
-            task_type: 
-                - "retrieval_document": 保存用（デフォルト）
-                - "retrieval_query": 検索クエリ用
-        
-        Returns:
-            list[float]: 768次元のベクトル
-        
-        Raises:
-            Exception: API呼び出しエラー時
-        """
-        try:
-            result = genai.embed_content(
-                model=self.model,
-                content=text,
-                task_type=task_type
-            )
-            return result['embedding']
-        except Exception as e:
-            logger.error(f"Failed to embed text: {e}")
-            raise EmbeddingError(
-                message=f"Failed to embed text: {str(e)}",
-                text=text
-            ) from e
-    
-    def embed_batch(self, texts: list[str], task_type: str = "retrieval_document") -> list[list[float]]:
-        """
-        複数テキストを一括ベクトル化
-        
-        Args:
-            texts: テキストのリスト
-            task_type: retrieval_document または retrieval_query
-        
-        Returns:
-            list[list[float]]: ベクトルのリスト
-        
-        Raises:
-            Exception: API呼び出しエラー時
-        """
-        try:
-            result = genai.embed_content(
-                model=self.model,
-                content=texts,
-                task_type=task_type
-            )
-            return [embedding for embedding in result['embedding']]
-        except Exception as e:
-            logger.error(f"Failed to embed batch: {e}")
-            raise EmbeddingError(
-                message=f"Failed to embed batch: {str(e)}",
-                text=f"{len(texts)} texts"
-            ) from e
