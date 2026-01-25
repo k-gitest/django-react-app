@@ -1,11 +1,13 @@
-from datetime import timedelta
-from pathlib import Path
-from decouple import config
+import newrelic.agent
+import logging
 import sentry_sdk
 from sentry_sdk.integrations.django import DjangoIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration
+from datetime import timedelta
+from pathlib import Path
+from decouple import config
 from apps.common.error_reporting import _before_send
-import logging
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 SECRET_KEY = config("SECRET_KEY")
@@ -313,3 +315,12 @@ if not DEBUG or config('SENTRY_ENABLED', default=False, cast=bool):
         # エラーの前処理
         before_send=_before_send,
     )
+
+# New Relic初期化（本番環境のみ）
+NEW_RELIC_LICENSE_KEY = config('NEW_RELIC_LICENSE_KEY', default='')
+NEW_RELIC_APP_NAME = config('NEW_RELIC_APP_NAME', default='django-react-app-backend')
+NEW_RELIC_ENVIRONMENT = config('NEW_RELIC_ENVIRONMENT', default='development')
+
+# 本番環境のみNew Relicを初期化
+if not DEBUG and config('NEW_RELIC_LICENSE_KEY', default=''):
+    newrelic.agent.initialize()
