@@ -7,6 +7,10 @@ from apps.common.permissions import IsQStashAuthenticated
 from apps.common.error_decorators import log_webhook_call
 from apps.common.exceptions import EmailDeliveryError, AnalyticsError
 
+from .serializers import AnalyticsEventWebhookSerializer
+from .services import AnalyticsWebhookService
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -49,18 +53,7 @@ def analytics_event_webhook(request):
     event_type = serializer.validated_data['event_type']
     event_data = serializer.validated_data['event_data']
 
-    # MotherDuckにイベント記録（エラーは統一エラーハンドラーが処理）
-    client = MotherDuckClient()
-    
-    if event_type == "auth_event":
-        client.insert_auth_event(event_data)
-    else:
-        # この分岐は実際には来ない（Serializerでバリデーション済み）
-        # 将来的に新しいイベントタイプが追加された場合のフォールバック
-        raise AnalyticsError(
-            message=f"Unsupported event_type: {event_type}",
-            context={"event_type": event_type}
-        )
+    AnalyticsWebhookService.handle_webhook_event(event_type, event_data)
 
     return Response({
         "message": "Event logged successfully",

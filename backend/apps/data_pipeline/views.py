@@ -35,23 +35,10 @@ def dlt_pipeline_webhook(request):
     Raises:
         AnalyticsError: パイプライン実行エラー（統一エラーハンドラーが処理）
     """
-    try:
-        result = DltPipelineService.execute_postgres_to_motherduck()
-        
-        logger.info(f"✅ dlt pipeline executed successfully: {result['tables']}")
-        
-        return Response({
-            "status": "success",
-            "message": "Pipeline executed successfully",
-            "synced_tables": result["tables"],
-        })
-        
-    except Exception as e:
-        # すべてのエラーをAnalyticsErrorでラップ
-        logger.exception("❌ dlt pipeline execution error")
-        raise AnalyticsError(
-            message=f"Pipeline execution failed: {str(e)}",
-            context={
-                "error_type": type(e).__name__,
-            }
-        )
+    result = DltPipelineService.execute_postgres_to_motherduck()
+    
+    return Response({
+        "status": "success",
+        "message": "Pipeline executed successfully",
+        "synced_tables": result["tables"],
+    })

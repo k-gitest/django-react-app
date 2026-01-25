@@ -254,15 +254,9 @@ def send_welcome_email_webhook(request):
     first_name = serializer.validated_data['first_name']
 
     # メール送信（エラーは統一エラーハンドラーが処理）
-    result = UserEmailService.send_welcome_email(email, first_name)
-    
-    if not result["success"]:
-        raise EmailDeliveryError(
-            message=result.get('error', 'Unknown error'),
-            email=email
-        )
-    
+    message_id = UserEmailService.send_welcome_email(email, first_name)
+
     return Response({
         "message": "Email sent successfully",
-        "id": result["id"]
+        "message_id": message_id
     })
