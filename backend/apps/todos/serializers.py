@@ -1,6 +1,5 @@
 from rest_framework import serializers
 from .models import Todo
-from apps.common.exceptions import ValidationError
 
 
 class TodoSerializer(serializers.ModelSerializer):

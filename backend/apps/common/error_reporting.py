@@ -3,10 +3,11 @@
 現在の実装: Sentry
 """
 import logging
+import sentry_sdk
+
 from typing import Optional, Dict, Any, Union, Type, Tuple
 from contextlib import contextmanager
 from dataclasses import dataclass
-import sentry_sdk
 from sentry_sdk import capture_exception, capture_message
 from django.conf import settings
 

@@ -1,7 +1,9 @@
+import logging
+
 from apps.common.services.base_email import BaseEmailService
 from apps.common.error_decorators import service_error_handler
 from django.conf import settings
-import logging
+
 
 logger = logging.getLogger(__name__)
 

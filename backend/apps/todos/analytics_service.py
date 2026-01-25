@@ -1,7 +1,9 @@
 import json
+import logging
+
 from apps.common.services.base_analytics import BaseAnalyticsService
 from apps.common.error_decorators import service_error_handler
-import logging
+
 
 logger = logging.getLogger(__name__)
 

@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     "apps.todos",
     'apps.webhooks',
     "apps.analytics",
+    "apps.data_pipeline",
 ]
 
 MIDDLEWARE = [

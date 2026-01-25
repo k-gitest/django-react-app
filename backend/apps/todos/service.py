@@ -13,7 +13,6 @@ from apps.common.exceptions import (
     AnalyticsError,
     VectorError,
     EmbeddingError,
-    BaseAppError
 )
 from apps.common.error_reporting import ErrorMonitor, ErrorProfiles
 
@@ -474,64 +473,3 @@ class TodoSearchService:
                 message=f"一括インデックス登録中に予期しないエラーが発生しました: {str(e)}",
                 endpoint="bulk_vector_indexing"
             )
-
-
-# ============================================================================
-# 後方互換性のためのファサード（移行期間用）
-# ============================================================================
-class TodoService:
-    """
-    後方互換性のための統合ファサード
-    
-    既存コードを段階的に移行するため、古いメソッド名も維持。
-    将来的に削除予定。
-    """
-    
-    # キャッシュの有効期限（秒）
-    CACHE_TIMEOUT = TodoStatsService.CACHE_TIMEOUT
-    
-    # Query
-    @staticmethod
-    def get_user_todos(user):
-        return TodoQueryService.get_user_todos(user)
-    
-    # Command
-    @staticmethod
-    def create_todo(user, validated_data):
-        return TodoCommandService.create_todo(user, validated_data)
-    
-    @staticmethod
-    def update_todo(todo_id, user, validated_data):
-        return TodoCommandService.update_todo(todo_id, user, validated_data)
-    
-    @staticmethod
-    def delete_todo(todo_id, user):
-        return TodoCommandService.delete_todo(todo_id, user)
-    
-    # Stats
-    @staticmethod
-    def get_progress_stats(user):
-        return TodoStatsService.get_progress_stats(user)
-    
-    @staticmethod
-    def get_priority_stats(user):
-        return TodoStatsService.get_priority_stats(user)
-    
-    @staticmethod
-    def _invalidate_stats_cache(user_id):
-        """非推奨: TodoStatsService.invalidate_stats_cache を使用"""
-        TodoStatsService.invalidate_stats_cache(user_id)
-    
-    @staticmethod
-    def _get_stats_cache_key(user_id, stats_type):
-        """非推奨: TodoStatsService._get_stats_cache_key を使用"""
-        return TodoStatsService._get_stats_cache_key(user_id, stats_type)
-    
-    # Search
-    @staticmethod
-    def search_similar_todos(user, query: str, top_k: int = 5, min_score: float = 0.5):
-        return TodoSearchService.search_similar_todos(user, query, top_k, min_score)
-    
-    @staticmethod
-    def bulk_index_todos(user):
-        return TodoSearchService.bulk_index_todos(user)

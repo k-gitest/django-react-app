@@ -11,15 +11,12 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from dj_rest_auth.registration.views import RegisterView
 from dj_rest_auth.views import LoginView, LogoutView
 
-from apps.common.infrastructure.motherduck_client import MotherDuckClient
 from apps.common.permissions import IsQStashAuthenticated
 from apps.common.error_decorators import log_webhook_call
-from apps.common.exceptions import EmailDeliveryError, AnalyticsError
-from apps.analytics.services import DltPipelineService
 
 from .email_service import UserEmailService
 from .user_service import UserAuthService
-from .serializers import WelcomeEmailWebhookSerializer, AnalyticsEventWebhookSerializer
+from .serializers import WelcomeEmailWebhookSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -254,119 +251,9 @@ def send_welcome_email_webhook(request):
     first_name = serializer.validated_data['first_name']
 
     # メール送信（エラーは統一エラーハンドラーが処理）
-    result = UserEmailService.send_welcome_email(email, first_name)
-    
-    if not result["success"]:
-        raise EmailDeliveryError(
-            message=result.get('error', 'Unknown error'),
-            email=email
-        )
-    
+    message_id = UserEmailService.send_welcome_email(email, first_name)
+
     return Response({
         "message": "Email sent successfully",
-        "id": result["id"]
+        "message_id": message_id
     })
-
-
-@api_view(["POST"])
-@permission_classes([IsQStashAuthenticated])
-@log_webhook_call(webhook_name="analytics_event")
-def analytics_event_webhook(request):
-    """
-    分析イベントWebhook（QStashから呼ばれる）
-    
-    POST /api/v1/webhooks/analytics-event
-    
-    署名検証は IsQStashAuthenticated で自動処理。
-    MotherDuckにイベントを記録。
-    
-    Payload:
-        {
-            "event_type": "auth_event",
-            "event_data": {
-                "user_id": 123,
-                "event_type": "login",
-                "timestamp": "2024-01-01T00:00:00Z",
-                ...
-            }
-        }
-    
-    Returns:
-        200: 成功
-        400: バリデーションエラー
-        500: 処理エラー（QStashが自動リトライ）
-    
-    Raises:
-        ValidationError: バリデーションエラー（統一エラーハンドラーが処理）
-        AnalyticsError: 分析サービスエラー（統一エラーハンドラーが処理）
-    """
-    # Serializerでバリデーション
-    serializer = AnalyticsEventWebhookSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
-    
-    event_type = serializer.validated_data['event_type']
-    event_data = serializer.validated_data['event_data']
-
-    # MotherDuckにイベント記録（エラーは統一エラーハンドラーが処理）
-    client = MotherDuckClient()
-    
-    if event_type == "auth_event":
-        client.insert_auth_event(event_data)
-    else:
-        # この分岐は実際には来ない（Serializerでバリデーション済み）
-        # 将来的に新しいイベントタイプが追加された場合のフォールバック
-        raise AnalyticsError(
-            message=f"Unsupported event_type: {event_type}",
-            context={"event_type": event_type}
-        )
-
-    return Response({
-        "message": "Event logged successfully",
-        "event_type": event_type
-    })
-
-
-@api_view(["POST"])
-@permission_classes([IsQStashAuthenticated])
-@log_webhook_call(webhook_name="dlt_pipeline")
-def dlt_pipeline_webhook(request):
-    """
-    dltパイプライン実行Webhook（QStashから呼ばれる）
-    
-    POST /api/v1/webhooks/dlt-pipeline
-    
-    署名検証は IsQStashAuthenticated で自動処理。
-    15分ごとにQStashから呼ばれ、PostgreSQL → MotherDuck 同期を実行。
-    
-    **変更点**:
-    - subprocessを削除
-    - Service層を直接呼び出し（メモリ効率向上）
-    - タイムアウトはQStash側で管理（5-10分に設定推奨）
-    
-    Returns:
-        200: 成功
-        500: 処理エラー（QStashが自動リトライ）
-    
-    Raises:
-        AnalyticsError: パイプライン実行エラー（統一エラーハンドラーが処理）
-    """
-    try:
-        result = DltPipelineService.execute_postgres_to_motherduck()
-        
-        logger.info(f"✅ dlt pipeline executed successfully: {result['tables']}")
-        
-        return Response({
-            "status": "success",
-            "message": "Pipeline executed successfully",
-            "synced_tables": result["tables"],
-        })
-        
-    except Exception as e:
-        # すべてのエラーをAnalyticsErrorでラップ
-        logger.exception("❌ dlt pipeline execution error")
-        raise AnalyticsError(
-            message=f"Pipeline execution failed: {str(e)}",
-            context={
-                "error_type": type(e).__name__,
-            }
-        )

@@ -1,9 +1,10 @@
-import os
-from django.conf import settings
 import logging
+
+from django.conf import settings
 from qstash import Receiver
 
 logger = logging.getLogger(__name__)
+
 
 def verify_qstash_signature(request) -> bool:
     """

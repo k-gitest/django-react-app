@@ -1,8 +1,10 @@
-import google.generativeai as genai
-from django.conf import settings
-from apps.common.exceptions import EmbeddingError
 import logging
 import re
+import google.generativeai as genai
+
+from django.conf import settings
+from apps.common.exceptions import EmbeddingError
+
 
 logger = logging.getLogger(__name__)
 

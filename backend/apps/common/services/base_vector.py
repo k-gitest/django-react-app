@@ -1,6 +1,8 @@
+import logging
+
 from apps.common.infrastructure.vector_client import VectorClient
 from apps.common.exceptions import VectorError
-import logging
+
 
 logger = logging.getLogger(__name__)
 
