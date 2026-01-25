@@ -1,7 +1,9 @@
+import logging
+
 from apps.common.services.base_vector import BaseVectorService
 from apps.common.error_decorators import service_error_handler
 from .embedding_service import EmbeddingService
-import logging
+
 
 logger = logging.getLogger(__name__)
 

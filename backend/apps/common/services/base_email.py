@@ -1,6 +1,8 @@
+import logging
+
 from apps.common.infrastructure.email_client import EmailClient
 from apps.common.exceptions import EmailDeliveryError
-import logging
+
 
 logger = logging.getLogger(__name__)
 

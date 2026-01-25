@@ -1,4 +1,3 @@
-from typing import Final, Union
 from apps.common.infrastructure.qstash_client import QStashClient
 from apps.common.exceptions import QStashError
 

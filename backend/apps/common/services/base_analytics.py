@@ -1,7 +1,7 @@
+import logging
 from typing import Literal
 from apps.common.infrastructure.motherduck_client import MotherDuckClient
 from apps.common.exceptions import AnalyticsError
-import logging
 
 logger = logging.getLogger(__name__)
 

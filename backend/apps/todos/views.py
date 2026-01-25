@@ -1,9 +1,7 @@
 import logging
-from typing import Any
 
 from django.contrib.auth import get_user_model
-from django.shortcuts import get_object_or_404
-from rest_framework import status, viewsets
+from rest_framework import viewsets
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -11,9 +9,7 @@ from rest_framework.request import Request
 
 from apps.common.permissions import IsQStashAuthenticated
 from apps.common.error_decorators import log_webhook_call
-from apps.common.exceptions import VectorError, EmbeddingError
 
-from .models import Todo
 from .serializers import (
     TodoSerializer,
     TodoSearchParamsSerializer,
@@ -21,7 +17,7 @@ from .serializers import (
     BulkVectorIndexingWebhookSerializer
 )
 from .service import TodoCommandService, TodoQueryService, TodoStatsService, TodoSearchService
-from .vector_service import VectorService
+from .webhook_service import TodoWebhookService
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -213,53 +209,16 @@ def vector_indexing_webhook(request: Request) -> Response:
     
     POST /api/v1/webhooks/vector-indexing
     
-    署名検証は IsQStashAuthenticated で自動処理。
-    
-    Payload:
-        {
-            "todo_id": 123,
-            "operation": "upsert"  // or "delete"
-        }
-    
-    Returns:
-        200: 成功
-        400: バリデーションエラー
-        404: Todo not found
-        500: 処理エラー（QStashが自動リトライ）
     """
-    # Serializerでバリデーション
     serializer = VectorIndexingWebhookSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     
-    todo_id = serializer.validated_data['todo_id']
-    operation = serializer.validated_data['operation']
+    result = TodoWebhookService.handle_vector_indexing(
+        todo_id=serializer.validated_data['todo_id'],
+        operation=serializer.validated_data['operation']
+    )
     
-    vector_service = VectorService()
-    
-    if operation == "delete":
-        # 削除処理（エラーは統一エラーハンドラーが処理）
-        vector_service.delete_todo(todo_id)
-        logger.info(f"✅ Deleted todo {todo_id} from vector index (async)")
-        
-        return Response({
-            "message": "Vector deleted successfully",
-            "todo_id": todo_id,
-            "operation": "delete"
-        })
-    
-    else:  # upsert
-        # Todo取得（存在しない場合は404）
-        todo = get_object_or_404(Todo, id=todo_id)
-        
-        # ベクトルインデックスに追加（エラーは統一エラーハンドラーが処理）
-        vector_service.add_todo(todo)
-        logger.info(f"✅ Added/Updated todo {todo_id} to vector index (async)")
-        
-        return Response({
-            "message": "Vector indexed successfully",
-            "todo_id": todo_id,
-            "operation": "upsert"
-        })
+    return Response(result)
 
 
 @api_view(["POST"])
@@ -271,46 +230,12 @@ def bulk_vector_indexing_webhook(request: Request) -> Response:
     
     POST /api/v1/webhooks/bulk-vector-indexing
     
-    署名検証は IsQStashAuthenticated で自動処理。
-    
-    Payload:
-        {
-            "user_id": 123
-        }
-    
-    Returns:
-        200: 成功
-        400: バリデーションエラー
-        404: User not found
-        500: 処理エラー（QStashが自動リトライ）
     """
-    # Serializerでバリデーション
     serializer = BulkVectorIndexingWebhookSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     
-    user_id = serializer.validated_data['user_id']
+    result = TodoWebhookService.handle_bulk_vector_indexing(
+        user_id=serializer.validated_data['user_id']
+    )
     
-    # ユーザー取得（存在しない場合は404）
-    user = get_object_or_404(User, id=user_id)
-    
-    # Todoリスト取得
-    todos = list(Todo.objects.filter(user=user))
-    
-    if not todos:
-        logger.info(f"ℹ️ No todos found for user {user_id}")
-        return Response({
-            "message": "No todos to index",
-            "count": 0
-        })
-    
-    # 一括インデックス（エラーは統一エラーハンドラーが処理）
-    vector_service = VectorService()
-    vector_service.add_todos_batch(todos)
-    
-    logger.info(f"✅ Bulk indexed {len(todos)} todos for user {user_id} (async)")
-    
-    return Response({
-        "message": "Bulk vector indexing completed",
-        "user_id": user_id,
-        "count": len(todos)
-    })
+    return Response(result)

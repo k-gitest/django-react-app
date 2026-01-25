@@ -11,15 +11,12 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from dj_rest_auth.registration.views import RegisterView
 from dj_rest_auth.views import LoginView, LogoutView
 
-from apps.common.infrastructure.motherduck_client import MotherDuckClient
 from apps.common.permissions import IsQStashAuthenticated
 from apps.common.error_decorators import log_webhook_call
-from apps.common.exceptions import EmailDeliveryError, AnalyticsError
-from apps.analytics.services import DltPipelineService
 
 from .email_service import UserEmailService
 from .user_service import UserAuthService
-from .serializers import WelcomeEmailWebhookSerializer, AnalyticsEventWebhookSerializer
+from .serializers import WelcomeEmailWebhookSerializer
 
 logger = logging.getLogger(__name__)
 

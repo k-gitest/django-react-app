@@ -2,8 +2,6 @@ from dj_rest_auth.registration.serializers import RegisterSerializer
 from dj_rest_auth.serializers import LoginSerializer as DefaultLoginSerializer
 from rest_framework import serializers
 
-from apps.common.exceptions import UserAlreadyExistsError, ValidationError
-
 from .models import CustomUser
 from .user_service import UserQueryService, UserRegistrationService
 

@@ -5,7 +5,6 @@ from rest_framework.decorators import api_view, permission_classes
 
 from apps.common.permissions import IsQStashAuthenticated
 from apps.common.error_decorators import log_webhook_call
-from apps.common.exceptions import EmailDeliveryError, AnalyticsError
 
 from .serializers import AnalyticsEventWebhookSerializer
 from .services import AnalyticsWebhookService

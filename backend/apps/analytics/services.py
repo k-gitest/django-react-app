@@ -5,10 +5,10 @@ Analytics Webhook Service - Webhook経路専用の分析イベント処理
 QStashから送られてきた既に整形済みのイベントデータをMotherDuckに記録する。
 """
 
+import logging
 from apps.common.services.base_analytics import BaseAnalyticsService
 from apps.common.error_decorators import service_error_handler
 from apps.common.exceptions import AnalyticsError
-import logging
 
 logger = logging.getLogger(__name__)
 
