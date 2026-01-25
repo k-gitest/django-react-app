@@ -57,4 +57,4 @@ EXPOSE 8000
 
 # コンテナ起動時に静的ファイル収集とサーバー起動をセットで行う
 # configはプロジェクト名、wsgiはWSGIモジュール
-CMD ["sh", "-c", "python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000"]
+CMD ["sh", "-c", "python manage.py collectstatic --noinput && newrelic-admin run-program gunicorn config.wsgi:application --bind 0.0.0.0:8000"]
