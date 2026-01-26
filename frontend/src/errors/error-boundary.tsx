@@ -1,7 +1,7 @@
 import type { ErrorInfo, ReactNode } from "react";
 import { Component } from "react";
 import { errorHandler } from "@/errors/error-handler";
-//import * as Sentry from "@sentry/react";
+import * as Sentry from "@sentry/react";
 
 interface Props {
   children?: ReactNode;
@@ -22,15 +22,15 @@ class ErrorBoundary extends Component<Props, State> {
   };
 
   public static getDerivedStateFromError(error: Error): State {
-    return { 
+    return {
       hasError: true,
-      error 
+      error
     };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     const level = this.props.level || 'component';
-    
+
     // レベルに応じたログ出力
     console.error(`[${level.toUpperCase()}] Error Boundary caught an error:`, {
       error,
@@ -48,14 +48,14 @@ class ErrorBoundary extends Component<Props, State> {
     if (import.meta.env.PROD) {
       // TODO: エラー監視サービス（Sentry等）への送信
       // sendErrorToMonitoringService(error, errorInfo, level);
-      /*
+
       Sentry.captureException(error, {
         extra: {
           componentStack: errorInfo.componentStack,
           level,
         },
       });
-      */
+
     }
   }
 
@@ -72,9 +72,9 @@ class ErrorBoundary extends Component<Props, State> {
 
       // デフォルトのフォールバックUI
       return (
-        <div style={{ 
-          padding: '20px', 
-          textAlign: 'center', 
+        <div style={{
+          padding: '20px',
+          textAlign: 'center',
           border: '1px solid #ff6b6b',
           borderRadius: '8px',
           backgroundColor: '#fff5f5',
@@ -85,9 +85,9 @@ class ErrorBoundary extends Component<Props, State> {
           {import.meta.env.DEV && this.state.error && (
             <details style={{ marginTop: '16px', textAlign: 'left' }}>
               <summary>エラー詳細（開発環境のみ）</summary>
-              <pre style={{ 
-                backgroundColor: '#f5f5f5', 
-                padding: '12px', 
+              <pre style={{
+                backgroundColor: '#f5f5f5',
+                padding: '12px',
                 borderRadius: '4px',
                 overflow: 'auto',
                 fontSize: '12px'
@@ -96,7 +96,7 @@ class ErrorBoundary extends Component<Props, State> {
               </pre>
             </details>
           )}
-          <button 
+          <button
             onClick={this.resetError}
             style={{
               marginTop: '16px',
@@ -120,13 +120,13 @@ class ErrorBoundary extends Component<Props, State> {
 
 // グローバル用エラーバウンダリー（アプリ全体を包む）
 export const GlobalErrorBoundary = ({ children }: { children: ReactNode }) => (
-  <ErrorBoundary 
+  <ErrorBoundary
     level="global"
     fallback={
-      <div style={{ 
-        display: 'flex', 
+      <div style={{
+        display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center', 
+        alignItems: 'center',
         justifyContent: 'center',
         height: '100vh',
         padding: '20px',
@@ -135,7 +135,7 @@ export const GlobalErrorBoundary = ({ children }: { children: ReactNode }) => (
         <h1>アプリケーションエラー</h1>
         <p>アプリケーションで予期しないエラーが発生しました。</p>
         <p>ページを再読み込みしてください。</p>
-        <button 
+        <button
           onClick={() => window.location.reload()}
           style={{
             marginTop: '20px',
@@ -159,11 +159,11 @@ export const GlobalErrorBoundary = ({ children }: { children: ReactNode }) => (
 
 // ページ用エラーバウンダリー
 export const PageErrorBoundary = ({ children }: { children: ReactNode }) => (
-  <ErrorBoundary 
+  <ErrorBoundary
     level="page"
     fallback={
-      <div style={{ 
-        padding: '40px 20px', 
+      <div style={{
+        padding: '40px 20px',
         textAlign: 'center',
         minHeight: '400px',
         display: 'flex',
@@ -175,7 +175,7 @@ export const PageErrorBoundary = ({ children }: { children: ReactNode }) => (
         <p>このページを表示する際に問題が発生しました。</p>
         <p>画面を再読み込みするか、別のページに移動してください。</p>
         <div style={{ marginTop: '24px', display: 'flex', gap: '12px' }}>
-          <button 
+          <button
             onClick={() => window.location.reload()}
             style={{
               padding: '10px 20px',
@@ -188,7 +188,7 @@ export const PageErrorBoundary = ({ children }: { children: ReactNode }) => (
           >
             再読み込み
           </button>
-          <button 
+          <button
             onClick={() => window.history.back()}
             style={{
               padding: '10px 20px',
@@ -210,18 +210,18 @@ export const PageErrorBoundary = ({ children }: { children: ReactNode }) => (
 );
 
 // コンポーネント用エラーバウンダリー（小さなUIパーツ用）
-export const ComponentErrorBoundary = ({ 
-  children, 
-  componentName 
-}: { 
+export const ComponentErrorBoundary = ({
+  children,
+  componentName
+}: {
   children: ReactNode;
   componentName?: string;
 }) => (
-  <ErrorBoundary 
+  <ErrorBoundary
     level="component"
     fallback={
-      <div style={{ 
-        padding: '12px', 
+      <div style={{
+        padding: '12px',
         border: '1px dashed #ffc107',
         borderRadius: '4px',
         backgroundColor: '#fff9c4',

@@ -7,6 +7,7 @@ from datetime import timedelta
 from pathlib import Path
 from decouple import config
 from apps.common.error_reporting import _before_send
+from corsheaders.defaults import default_headers
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -117,6 +118,18 @@ CORS_ALLOWED_ORIGINS = [
 
 # 本番環境では False に設定し、CORS_ALLOWED_ORIGINS または CORS_ALLOWED_HOSTS を厳密に定義すべき
 CORS_ALLOW_CREDENTIALS = True  # クッキーや認証ヘッダーを含める場合に必要
+
+# 許可するヘッダー
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    # Sentry
+    "sentry-trace",
+    "baggage",
+    
+    # New Relic
+    "traceparent",
+    "tracestate",
+    "newrelic",
+]
 
 # CSRFトークンもCookieで送る
 CSRF_COOKIE_SAMESITE = "None"
