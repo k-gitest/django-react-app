@@ -1,6 +1,11 @@
 {
   // composeは手動で起動する場合はこの設定を使用する
   "name": "Django + React Monorepo Dev",
+
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
+
+  "onCreateCommand": "sudo rm -f /etc/apt/sources.list.d/yarn.list && sudo apt-get update",
+  
   // frontendとbackendのコンテナはcomposeで起動する
   // ルートのpackage.jsonとbackendのdjangoの自動インストール設定を行う
   "postCreateCommand": "python3 -m venv backend/.venv && backend/.venv/bin/pip install -r backend/requirements.txt && npm install && npm install --prefix frontend && echo 'source backend/.venv/bin/activate' >> ~/.bashrc",
@@ -14,8 +19,12 @@
     },
     "ghcr.io/devcontainers/features/terraform:1": {
       "version": "1.14",
-      "tflint": "0.56.0",
+      "tflint": "0.56.0"
       //"terragrunt": "latest"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:1": {
+      "version": "latest",
+      "moby": true
     }
   },
   "customizations": {
@@ -66,7 +75,9 @@
         },
         "terraform.languageServer": {
           "enabled": true,
-          "args": []
+          "args": [
+            "serve"
+          ]
         },
         "terraform.experimentalFeatures": {
           "validateOnSave": true,
