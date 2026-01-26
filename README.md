@@ -1328,6 +1328,291 @@ REDIS_URL=rediss://default:password@region.upstash.io:6379
 
 ---
 
+# モニタリングセクション（READMEに追加する内容）
+
+以下の内容を、READMEの「## パフォーマンス最適化」セクションの後に追加してください。
+
+---
+
+## モニタリング・監視戦略
+
+### 概要
+
+本プロジェクトでは、**「役割の明確な分離」**により、エラー監視とパフォーマンス監視を最適化しています。
+
+```
+【モニタリングの原則】
+✅ エラー監視: Sentry（フロント・バック）
+✅ パフォーマンス監視: New Relic（フロント・バック）
+✅ アクセス解析: Google Analytics（フロント）
+✅ データ分析: MotherDuck（バック）
+```
+
+---
+
+### ツールの役割分担
+
+| ツール | 対象 | 監視内容 | 通知タイミング |
+|--------|------|---------|--------------|
+| **Sentry（Frontend）** | React | JS例外、React Error Boundary、ネットワークエラー | エラー発生時 |
+| **Sentry（Backend）** | Django | `BaseAppError`、未処理例外、500エラー | エラー発生時 |
+| **New Relic（Frontend）** | React | ページロード時間、Core Web Vitals、APIレスポンス | 性能劣化時 |
+| **New Relic（Backend）** | Django | SQLクエリ実行時間、外部API通信、処理ボトルネック | 性能劣化時 |
+| **Google Analytics** | React | ページビュー、ユーザー行動、コンバージョン | - |
+| **MotherDuck** | Django | イベントログ、DB状態、ビジネス指標 | - |
+
+---
+
+### Sentry：エラー監視
+
+#### フロントエンド
+
+**初期化**:
+```typescript
+// frontend/src/main.tsx
+import * as Sentry from "@sentry/react";
+
+if (IS_PRODUCTION && SENTRY_DSN) {
+  Sentry.init({
+    dsn: SENTRY_DSN,
+    environment: import.meta.env.MODE,
+    release: SENTRY_RELEASE,  // production@{git-hash}
+    
+    // 分散トレーシング
+    integrations: [
+      Sentry.browserTracingIntegration(),
+    ],
+    tracePropagationTargets: [
+      "localhost",
+      /^https:\/\/.*\.onrender\.com\/api/,
+    ],
+    
+    tracesSampleRate: 0.1,
+    sendDefaultPii: true,
+  });
+}
+```
+
+**エラーキャッチ**:
+```typescript
+// ErrorBoundary で自動キャッチ
+<GlobalAsyncBoundary>
+  <App />
+</GlobalAsyncBoundary>
+
+// componentDidCatch で Sentry に送信
+window.Sentry.captureException(error, {
+  contexts: {
+    react: { componentStack: errorInfo.componentStack }
+  }
+});
+```
+
+---
+
+#### バックエンド
+
+**初期化**:
+```python
+# backend/config/settings/base.py
+import sentry_sdk
+from sentry_sdk.integrations.django import DjangoIntegration
+
+if not DEBUG or config('SENTRY_ENABLED', default=False, cast=bool):
+    sentry_sdk.init(
+        dsn=config('SENTRY_DSN'),
+        environment=config('ENVIRONMENT', default='development'),
+        release=config('RELEASE', default='development@local'),
+        
+        integrations=[
+            DjangoIntegration(),
+            LoggingIntegration(
+                level=logging.INFO,
+                event_level=logging.ERROR
+            ),
+        ],
+        
+        traces_sample_rate=0.1,
+        send_default_pii=False,
+    )
+```
+
+**エラーキャッチ**:
+```python
+# BaseAppError で自動キャッチ
+class UserAlreadyExistsError(BaseAppError):
+    status_code = 400
+    code = "user_already_exists"
+
+# Sentry に自動送信される（500エラーのみ）
+if error.status_code >= 500:
+    sentry_sdk.capture_exception(error)
+```
+
+---
+
+### New Relic：パフォーマンス監視
+
+#### フロントエンド
+
+**初期化**:
+```typescript
+// frontend/src/lib/newrelic.ts
+import { BrowserAgent } from '@newrelic/browser-agent/loaders/browser-agent';
+
+export const initNewRelic = () => {
+  if (import.meta.env.PROD && import.meta.env.VITE_NEW_RELIC_LICENSE_KEY) {
+    new BrowserAgent({
+      init: {
+        distributed_tracing: { enabled: true },
+        privacy: { cookies_enabled: true },
+      },
+      info: {
+        licenseKey: import.meta.env.VITE_NEW_RELIC_LICENSE_KEY,
+        applicationID: import.meta.env.VITE_NEW_RELIC_APP_ID,
+      },
+    });
+  }
+};
+```
+
+**自動収集される情報**:
+- ✅ ページロード時間（LCP, FID, CLS）
+- ✅ APIリクエストの応答時間
+- ✅ JSエラー（Sentryと重複するがサンプリング率が異なる）
+- ✅ ユーザーセッション
+
+---
+
+#### バックエンド
+
+**起動コマンド**:
+```dockerfile
+# backend/Dockerfile
+CMD ["sh", "-c", "python manage.py collectstatic --noinput && newrelic-admin run-program gunicorn config.wsgi:application --bind 0.0.0.0:8000"]
+```
+
+**環境変数**:
+```bash
+# Render環境変数
+NEW_RELIC_LICENSE_KEY=your_license_key
+NEW_RELIC_APP_NAME=django-react-app-backend-production
+NEW_RELIC_ENVIRONMENT=production
+NEW_RELIC_DISTRIBUTED_TRACING_ENABLED=true
+NEW_RELIC_LOG=stdout
+```
+
+**自動収集される情報**:
+- ✅ SQLクエリ実行時間
+- ✅ 外部API通信時間（Gemini, Upstash, MotherDuck）
+- ✅ エンドポイント別レスポンスタイム
+- ✅ メモリ使用量、CPU使用率
+
+---
+
+### 分散トレーシング
+
+フロントエンドとバックエンドのエラーを**一本の線で繋ぐ**仕組み。
+
+```
+ユーザーがボタンクリック（React）
+    ↓ sentry-trace, traceparent ヘッダー送信
+API呼び出し（Django）
+    ↓ 同じTrace IDでログ記録
+エラー発生
+    ↓
+Sentry画面で「Trace」タブに両方のログが表示される
+```
+
+**必要な設定**:
+
+1. **リリースバージョンを統一**:
+```yaml
+# GitHub Actions
+VITE_SENTRY_RELEASE: production@${{ github.sha }}  # フロント
+RELEASE: production@${{ github.sha }}              # バック
+```
+
+2. **CORS設定**:
+```python
+# backend/config/settings/base.py
+from corsheaders.defaults import default_headers
+
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    # Sentry
+    "sentry-trace",
+    "baggage",
+    
+    # New Relic
+    "traceparent",
+    "tracestate",
+    "newrelic",
+]
+```
+
+---
+
+### 環境変数
+
+#### フロントエンド
+
+```bash
+# frontend/.env.production
+VITE_SENTRY_DSN=https://xxx@sentry.io/xxx
+VITE_SENTRY_RELEASE=production@abc1234
+VITE_NEW_RELIC_LICENSE_KEY=your_license_key
+VITE_NEW_RELIC_APP_ID=your_app_id
+VITE_NEW_RELIC_ACCOUNT_ID=your_account_id
+```
+
+#### バックエンド
+
+```bash
+# backend/.env
+SENTRY_DSN=https://xxx@sentry.io/xxx
+ENVIRONMENT=production
+RELEASE=production@abc1234
+SENTRY_TRACES_SAMPLE_RATE=0.1
+NEW_RELIC_LICENSE_KEY=your_license_key
+NEW_RELIC_APP_NAME=django-react-app-backend-production
+NEW_RELIC_ENVIRONMENT=production
+```
+
+---
+
+### コスト最適化
+
+| ツール | 無料枠 | 推奨設定 |
+|--------|--------|---------|
+| **Sentry** | 5,000 errors/月 | 本番のみ有効、サンプリング10% |
+| **New Relic** | 100GB/月 | 本番のみ有効、サンプリング10% |
+
+**節約のコツ**:
+- ✅ 開発・テスト環境では無効化
+- ✅ サンプリングレートを調整（0.1 = 10%）
+- ✅ 404エラーは記録しない
+
+```python
+# Sentryで404を無視
+before_send = lambda event, hint: None if event.get('status_code') == 404 else event
+```
+
+---
+
+### 詳細ドキュメント
+
+モニタリングの詳細については、以下のドキュメントを参照してください。
+
+- **[docs/monitoring.md](docs/monitoring.md)** - モニタリング詳細ガイド
+  - Sentry設定の詳細
+  - New Relic設定の詳細
+  - 分散トレーシングの仕組み
+  - エラープロファイルの作成
+  - ダッシュボードのカスタマイズ
+  - トラブルシューティング
+
+---
+
 ## メール送信機能（非同期処理）
 
 ### 概要
