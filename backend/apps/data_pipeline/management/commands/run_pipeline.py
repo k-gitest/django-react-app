@@ -10,7 +10,7 @@ Management Command - dlt pipeline wrapper
 """
 
 from django.core.management.base import BaseCommand, CommandError
-from apps.analytics.services import DltPipelineService
+from apps.data_pipeline.services import DltPipelineService
 import logging
 
 logger = logging.getLogger(__name__)
