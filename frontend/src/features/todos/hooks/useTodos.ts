@@ -1,6 +1,7 @@
 import { todoService } from '../services/todo-service';
 import type { UpdateTodoInput, Todo, CreateTodoInput } from '../types';
-import { useApiQuery, useApiMutation } from '@/hooks/use-tanstack-query';
+import { useApiMutation } from '@/hooks/use-tanstack-query';
+import { useApiSuspenseQuery } from '@/hooks/use-suspense-query';
 import { queryClient } from '@/lib/queryClient';
 import { ApiError } from '@/errors/api-error';
 
@@ -8,9 +9,16 @@ export const TODO_QUERY_KEY = ['todos'] as const;
 
 export const useTodos = () => {
   // 一覧取得
+  /*
   const todosQuery = useApiQuery<Todo[]>({
     queryKey: TODO_QUERY_KEY,
     queryFn: todoService.getTodos,
+  });
+  */
+  const todosQuery = useApiSuspenseQuery<Todo[]>({
+    queryKey: TODO_QUERY_KEY,
+    queryFn: todoService.getTodos,
+    staleTime: 1000 * 5, // 5秒間はデータを新鮮とみなす（頻繁な再ロードによるSuspense化を防止）
   });
 
   // 作成
@@ -131,8 +139,8 @@ export const useTodos = () => {
   return {
     // データ
     todos: todosQuery.data ?? [],
-    isLoading: todosQuery.isLoading,
-    isError: todosQuery.isError,
+    //isLoading: todosQuery.isLoading,
+    //isError: todosQuery.isError,
 
     // メソッド
     createTodo,

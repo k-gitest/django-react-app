@@ -1,14 +1,14 @@
 import { useTodos } from '../hooks/useTodos';
 import { TodoItem } from './TodoItem';
-import { Spinner } from '@/components/ui/spinner';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Terminal } from 'lucide-react';
+// import { Spinner } from '@/components/ui/spinner';
+// import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+// import { Terminal } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { TodoEditModal } from './TodoEditModal';
 import type { Todo } from '../types';
 
 export const TodoList = ({ showActions = true, limit }: { showActions?: boolean; limit?: number; }) => {
-  const { todos, isLoading, isError, updateTodo, deleteTodo } = useTodos();
+  const { todos, updateTodo, deleteTodo } = useTodos();
 	const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
 
   const handleToggleComplete = useCallback(async (todo: Todo) => {
@@ -34,6 +34,7 @@ export const TodoList = ({ showActions = true, limit }: { showActions?: boolean;
 
   const displayTodos = limit ? todos.slice(0, limit) : todos;
 
+  /*
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-40">
@@ -51,6 +52,7 @@ export const TodoList = ({ showActions = true, limit }: { showActions?: boolean;
       </Alert>
     );
   }
+  */
 
   if (todos.length === 0) {
     return <p className="text-center text-gray-500">まだタスクがありません。新しいタスクを追加しましょう！</p>;
@@ -70,7 +72,7 @@ export const TodoList = ({ showActions = true, limit }: { showActions?: boolean;
 					/>
 				))}
 			</div>
-			{/* ✅ 編集モードの時だけモーダルをレンダリング（微塵の無駄も省く） */}
+			{/* ✅ 編集モードの時だけモーダルをレンダリング */}
       {showActions && (
         <TodoEditModal 
           todo={editingTodo} 
