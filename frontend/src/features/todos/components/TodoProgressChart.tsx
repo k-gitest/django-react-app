@@ -8,9 +8,9 @@ const chartConfig = {
 } satisfies ChartConfig;
 
 export const TodoProgressChart = () => {
-  const { data, isLoading } = useProgressStats();
+  const { data } = useProgressStats();
 
-  if (isLoading || !data) return <div className="h-[200px] flex items-center justify-center">Loading...</div>;
+  //if (isLoading || !data) return <div className="h-[200px] flex items-center justify-center">Loading...</div>;
 
   return (
     <Card>

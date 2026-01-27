@@ -7,7 +7,9 @@ const Dashboard = () => {
     return (
         <>
             <div>ダッシュボード</div>
-            <TodoProgressChart />
+            <ComponentAsyncBoundary componentName="DashboardProgress">
+                <TodoProgressChart />
+            </ComponentAsyncBoundary>
             <ComponentAsyncBoundary componentName="DashboardStats">
                 <TodoStatsChart />
             </ComponentAsyncBoundary>
