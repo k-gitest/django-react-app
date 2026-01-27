@@ -13,7 +13,9 @@ const Dashboard = () => {
             <ComponentAsyncBoundary componentName="DashboardStats">
                 <TodoStatsChart />
             </ComponentAsyncBoundary>
-            <TodoList showActions={false} limit={3} />
+            <ComponentAsyncBoundary componentName="DashboardList">
+                <TodoList showActions={false} limit={3} />
+            </ComponentAsyncBoundary>
         </>
     )
 }
