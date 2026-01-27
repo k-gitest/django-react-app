@@ -16,7 +16,7 @@ class VectorService(BaseVectorService):
     """
 
     def __init__(self):
-        self.embedding_service = TodoEmbeddingService()
+        super().__init__()
 
     @service_error_handler
     def add_todo(self, todo):
@@ -28,10 +28,10 @@ class VectorService(BaseVectorService):
             EmbeddingError: ベクトル化エラー時
         """
         # テキスト準備
-        text = self.embedding_service.prepare_text(todo)
+        text = TodoEmbeddingService.prepare_text(todo)
         
         # ベクトル化
-        embedding = self.embedding_service.embed_text(
+        embedding = TodoEmbeddingService.embed_text(
             text, 
             task_type="retrieval_document"
         )
@@ -72,7 +72,7 @@ class VectorService(BaseVectorService):
     ):
         """類似Todoをセマンティック検索"""
         # クエリをベクトル化
-        query_embedding = self.embedding_service.embed_text(
+        query_embedding = TodoEmbeddingService.embed_text(
             query,
             task_type="retrieval_query"
         )
@@ -102,10 +102,10 @@ class VectorService(BaseVectorService):
     def add_todos_batch(self, todos):
         """複数のTodoを一括追加"""
         # テキストを一括準備
-        texts = [self.embedding_service.prepare_text(todo) for todo in todos]
+        texts = [TodoEmbeddingService.prepare_text(todo) for todo in todos]
         
         # バッチでベクトル化
-        embeddings = self.embedding_service.embed_batch(texts)
+        embeddings = TodoEmbeddingService.embed_batch(texts)
         
         # ベクトルデータ作成
         vectors = [
