@@ -1,4 +1,5 @@
-import { useApiQuery } from "@/hooks/use-tanstack-query";
+//import { useApiQuery } from "@/hooks/use-tanstack-query";
+import { useApiSuspenseQuery } from "@/hooks/use-suspense-query";
 import { todoService } from "../services/todo-service";
 
 type TodoStatsData = {
@@ -7,8 +8,24 @@ type TodoStatsData = {
   fill: string;
 }[];
 
+/*
 export const useTodoStats = () => {
   return useApiQuery<TodoStatsData>({
+    queryKey: ['todos', 'stats'],
+    queryFn: async () => {
+      const response = await todoService.getTodoStats();
+      return response.map(item => ({
+        priority: item.priority,
+        count: item.count,
+        fill: `var(--color-${item.priority.toLowerCase()})`
+      }));
+    }
+  });
+};
+*/
+
+export const useTodoStats = () => {
+  return useApiSuspenseQuery<TodoStatsData>({
     queryKey: ['todos', 'stats'],
     queryFn: async () => {
       const response = await todoService.getTodoStats();

@@ -11,9 +11,9 @@ const chartConfig = {
 } satisfies ChartConfig;
 
 export const TodoStatsChart = () => {
-  const { data, isLoading } = useTodoStats();
+  const { data } = useTodoStats();
 
-  if (isLoading || !data) return <div>Loading...</div>;
+  //if (isLoading || !data) return <div>Loading...</div>;
 
   return (
     <Card className="flex flex-col">

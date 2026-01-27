@@ -1,9 +1,9 @@
 import { useEffect } from 'react';
 import {
-  QueryKey,
+  type QueryKey,
   useSuspenseQuery,
-  UseSuspenseQueryOptions,
-  UseSuspenseQueryResult,
+  type UseSuspenseQueryOptions,
+  type UseSuspenseQueryResult,
 } from '@tanstack/react-query';
 
 /**
