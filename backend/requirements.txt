@@ -23,3 +23,5 @@ pyarrow==18.0.0
 qstash>=2.1.2
 sentry-sdk[django]==2.43.0
 newrelic==11.3.0
+drf-spectacular==0.29.0
+strawberry-graphql-django==0.74.1

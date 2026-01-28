@@ -11,7 +11,9 @@
     "test": "vitest",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui --project=chromium --project=auth_chromium --ui-host=0.0.0.0",
-    "e2e:debug": "playwright test --debug"
+    "e2e:debug": "playwright test --debug",
+    "codegen": "graphql-codegen",
+    "codegen:watch": "graphql-codegen --watch"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -32,6 +34,8 @@
     "@tanstack/react-query": "^5.90.12",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "graphql": "^16.10.0",
+    "graphql-request": "^7.1.2",
     "ky": "^1.14.1",
     "lucide-react": "^0.555.0",
     "next-themes": "^0.4.6",
@@ -49,6 +53,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@graphql-codegen/cli": "^5.0.3",
+    "@graphql-codegen/client-preset": "^4.5.1",
     "@playwright/test": "^1.57.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
