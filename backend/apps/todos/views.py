@@ -18,6 +18,7 @@ from .serializers import (
 )
 from .service import TodoCommandService, TodoQueryService, TodoStatsService, TodoSearchService
 from .webhook_service import TodoWebhookService
+from .rest_schemas import TodoSchemas
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -46,6 +47,36 @@ class TodoViewSet(viewsets.ModelViewSet):
         Service層から取得することで、ビジネスロジックを集約
         """
         return TodoQueryService.get_user_todos(self.request.user)
+    
+    @TodoSchemas.list
+    def list(self, request, *args, **kwargs):
+        """標準のlist実装を使用"""
+        return super().list(request, *args, **kwargs)
+
+    @TodoSchemas.create
+    def create(self, request, *args, **kwargs):
+        """標準のcreate実装を使用"""
+        return super().create(request, *args, **kwargs)
+
+    @TodoSchemas.retrieve
+    def retrieve(self, request, *args, **kwargs):
+        """標準のretrieve実装を使用"""
+        return super().retrieve(request, *args, **kwargs)
+
+    @TodoSchemas.update
+    def update(self, request, *args, **kwargs):
+        """標準のupdate実装を使用"""
+        return super().update(request, *args, **kwargs)
+
+    @TodoSchemas.partial_update
+    def partial_update(self, request, *args, **kwargs):
+        """標準のpartial_update実装を使用"""
+        return super().partial_update(request, *args, **kwargs)
+
+    @TodoSchemas.destroy
+    def destroy(self, request, *args, **kwargs):
+        """標準のdestroy実装を使用"""
+        return super().destroy(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         """
@@ -79,6 +110,7 @@ class TodoViewSet(viewsets.ModelViewSet):
 
     # ===== 統計エンドポイント =====
 
+    @TodoSchemas.stats
     @action(detail=False, methods=["get"])
     def stats(self, request: Request) -> Response:
         """
@@ -96,6 +128,7 @@ class TodoViewSet(viewsets.ModelViewSet):
         stats = TodoStatsService.get_priority_stats(request.user)
         return Response(stats)
 
+    @TodoSchemas.progress_stats
     @action(detail=False, methods=["get"], url_path="progress-stats")
     def progress_stats(self, request: Request) -> Response:
         """
@@ -117,6 +150,7 @@ class TodoViewSet(viewsets.ModelViewSet):
 
     # ===== ベクトル検索エンドポイント =====
 
+    @TodoSchemas.search
     @action(detail=False, methods=["get"])
     def search(self, request: Request) -> Response:
         """
@@ -169,6 +203,7 @@ class TodoViewSet(viewsets.ModelViewSet):
             "count": len(results)
         })
 
+    @TodoSchemas.bulk_index
     @action(detail=False, methods=["post"], url_path="bulk-index")
     def bulk_index(self, request: Request) -> Response:
         """

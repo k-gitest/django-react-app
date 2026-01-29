@@ -1,27 +1,41 @@
-Django==4.2.7
-djangorestframework==3.14.0
-django-cors-headers==4.3.0
-python-dotenv==1.0.0
-psycopg2-binary==2.9.9
-python-decouple
-gunicorn==21.2.0
-djangorestframework-simplejwt==5.5.1
-dj-rest-auth==7.0.1
-django-allauth==64.2.1
-requests>=2.31.0  # django-allauthの依存パッケージ
-django-storages==1.14.4
-boto3==1.35.77
-django-redis==5.4.0
-redis==5.0.1
-django-ratelimit==4.1.0
-resend==0.8.0
-google-generativeai==0.8.3
-upstash-vector==0.8.0
-duckdb==1.4.3
-dlt[postgres,duckdb,sql_database]==1.20.0
-pyarrow==18.0.0
-qstash>=2.1.2
-sentry-sdk[django]==2.43.0
-newrelic==11.3.0
-drf-spectacular==0.29.0
+# Core Framework
+Django~=5.2,<6.0
+djangorestframework~=3.15.2
+django-cors-headers>=4.6.0
+python-decouple>=3.8
+
+# Database
+psycopg~=3.1.8
+django-storages[boto3]>=1.14.4
+boto3>=1.35.77
+
+# Authentication & JWT (Cookie-based setup)
+djangorestframework-simplejwt>=5.5.1
+dj-rest-auth==7.0.2
+django-allauth==65.0.0
+requests>=2.32.3
+
+# GraphQL (Main)
 strawberry-graphql-django==0.74.1
+
+# Background Tasks & Cache
+django-redis>=5.4.0
+redis>=5.0.1
+qstash>=2.1.2
+
+# Monitoring & Security
+django-ratelimit>=4.1.0
+sentry-sdk[django]>=2.43.0
+newrelic>=11.3.0
+drf-spectacular>=0.29.0
+
+# Data, AI & Vector DB
+google-genai>=1.0.0
+upstash-vector>=0.8.0
+resend>=0.8.0
+duckdb>=1.4.3
+dlt[postgres,duckdb,sql_database]==1.20.0
+pyarrow>=18.0.0
+
+# Server
+gunicorn>=23.0.0
