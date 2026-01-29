@@ -1,7 +1,7 @@
 from drf_spectacular.utils import extend_schema, OpenApiExample
 from apps.common.schemas import CommonSchemas
 from dj_rest_auth.serializers import LoginSerializer
-from .serializers import CustomRegisterSerializer, UserSerializer, WelcomeEmailWebhookSerializer
+from .serializers import CustomRegisterSerializer, WelcomeEmailWebhookSerializer
 
 class AuthSchemas:
     """認証関連のOpenAPIスキーマ定義"""

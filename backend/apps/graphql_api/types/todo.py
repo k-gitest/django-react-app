@@ -2,6 +2,7 @@ import strawberry
 from strawberry import relay
 from typing import Optional
 from datetime import datetime
+from enum import Enum
 
 from apps.todos.models import Todo
 
@@ -11,7 +12,7 @@ from apps.todos.models import Todo
 # ============================================================================
 
 @strawberry.enum
-class PriorityEnum:
+class PriorityEnum(Enum):
     """優先度Enum（モデルのCHOICESと同期）"""
     LOW = "LOW"
     MEDIUM = "MEDIUM"
