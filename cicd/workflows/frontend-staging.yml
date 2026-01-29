@@ -12,8 +12,13 @@ on:
     paths: ['frontend/**']
 
 jobs:
+  # バックエンドのコードから最新の型を取得
+  generate-schema:
+    uses: ./.github/workflows/reusable-schema-gen.yml
+
   test:
     name: Test (Staging)
+    needs: generate-schema # 型ができてから実行
     uses: ./.github/workflows/reusable-frontend-test.yml
     with:
       environment: staging

@@ -22,7 +22,36 @@ env:
   NODE_VERSION: '20'
 
 jobs:
+  # 最初に型を生成するジョブ
+  prepare-types:
+    name: Prepare API Types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: ./.github/actions/setup-node
+        with:
+          working-directory: frontend
+
+      # バックエンドからスキーマを抽出
+      - name: Export Schema
+        run: |
+          # 例: docker-compose run backend python manage.py export_schema > schema.yaml
+          # モノレポなので直接ファイルを指定できるならそれでもOK
+          cp ../backend/schema.yaml ./frontend/schema.yaml 
+
+      - name: Generate Types
+        run: npx openapi-typescript ./schema.yaml -o ./src/types/api.d.ts
+        working-directory: frontend
+
+      - name: Upload Generated Types
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-types-${{ github.sha }}
+          path: frontend/src/types/api.d.ts
+
   lint:
+    needs: prepare-types
     name: Lint & Format
     runs-on: ubuntu-latest
     
@@ -32,6 +61,12 @@ jobs:
       
       - name: Setup Node.js
         uses: ./.github/actions/setup-node
+
+      - name: Download Types
+        uses: actions/download-artifact@v4
+        with:
+          name: api-types-${{ github.sha }}
+          path: frontend/src/types/
       
       - name: Run ESLint
         run: npm run lint
@@ -44,6 +79,7 @@ jobs:
         continue-on-error: ${{ !inputs.strict-mode }}
 
   typecheck:
+    needs: prepare-types
     name: TypeScript Check
     runs-on: ubuntu-latest
     
@@ -53,12 +89,19 @@ jobs:
       
       - name: Setup Node.js
         uses: ./.github/actions/setup-node
+
+      - name: Download Types
+        uses: actions/download-artifact@v4
+        with:
+          name: api-types-${{ github.sha }}
+          path: frontend/src/types/
       
       - name: Run TypeScript compiler
         run: npx tsc --noEmit
         working-directory: frontend
 
   test:
+    needs: prepare-types
     name: Run Tests
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
@@ -69,6 +112,12 @@ jobs:
       
       - name: Setup Node.js
         uses: ./.github/actions/setup-node
+
+      - name: Download Types
+        uses: actions/download-artifact@v4
+        with:
+          name: api-types-${{ github.sha }}
+          path: frontend/src/types/
       
       - name: Run tests
         run: npm run test -- --coverage --watchAll=false
@@ -106,6 +155,12 @@ jobs:
       
       - name: Setup Node.js
         uses: ./.github/actions/setup-node
+
+      - name: Download Types
+        uses: actions/download-artifact@v4
+        with:
+          name: api-types-${{ github.sha }}
+          path: frontend/src/types/
       
       - name: Build
         run: npm run build

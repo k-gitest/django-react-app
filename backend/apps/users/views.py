@@ -17,6 +17,7 @@ from apps.common.error_decorators import log_webhook_call
 from .email_service import UserEmailService
 from .user_service import UserAuthService
 from .serializers import WelcomeEmailWebhookSerializer
+from .rest_schemas import AuthSchemas, UserWebhookSchemas
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,7 @@ class CustomLoginView(LoginView):
         - 分析ログエラー: ErrorMonitor.capture_and_continueで隔離（UserAuthService内）
     """
 
+    @AuthSchemas.login
     def post(self, request, *args, **kwargs):
         """
         ログイン処理
@@ -119,6 +121,7 @@ class CustomRegisterView(RegisterView):
         - 分析ログエラー: ErrorMonitor.capture_and_continueで隔離
     """
 
+    @AuthSchemas.register
     def create(self, request, *args, **kwargs):
         """
         ユーザー登録処理
@@ -197,6 +200,7 @@ class CustomLogoutView(LogoutView):
         - 分析ログエラー: ErrorMonitor.capture_and_continueで隔離
     """
     
+    @AuthSchemas.logout
     def logout(self, request):
         """
         ログアウト処理
@@ -217,6 +221,7 @@ class CustomLogoutView(LogoutView):
 # Webhook エンドポイント
 # ============================================================================
 
+@UserWebhookSchemas.send_welcome_email
 @api_view(["POST"])
 @permission_classes([IsQStashAuthenticated])
 @log_webhook_call(webhook_name="send_welcome_email")

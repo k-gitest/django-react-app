@@ -1,0 +1,29 @@
+name: Reusable Schema Generator
+on:
+  workflow_call:
+    outputs:
+      artifact-name:
+        description: "保存されたアーティファクト名"
+        value: "openapi-schema-${{ github.sha }}"
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Backend (スキーマ抽出に必要なら)
+        uses: ./.github/actions/setup-backend # 既存のセットアップを利用
+      
+      - name: Export OpenAPI Schema
+        run: |
+          # ここで schema.yaml を出力するコマンドを実行
+          # 例: python manage.py export_schema > schema.yaml
+          # 例: npm run api:extract
+        working-directory: backend
+
+      - name: Upload Schema Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-schema-${{ github.sha }}
+          path: backend/schema.yaml
+          retention-days: 1

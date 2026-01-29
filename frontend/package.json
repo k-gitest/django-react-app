@@ -13,7 +13,8 @@
     "e2e:ui": "playwright test --ui --project=chromium --project=auth_chromium --ui-host=0.0.0.0",
     "e2e:debug": "playwright test --debug",
     "codegen": "graphql-codegen",
-    "codegen:watch": "graphql-codegen --watch"
+    "codegen:watch": "graphql-codegen --watch",
+    "generate:api": "openapi-typescript http://localhost:8000/api/schema/ -o src/types/api.d.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -71,6 +72,7 @@
     "globals": "^16.5.0",
     "jsdom": "^27.3.0",
     "msw": "^2.12.4",
+    "openapi-typescript": "^7.0.0",
     "playwright-msw": "^3.0.1",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
