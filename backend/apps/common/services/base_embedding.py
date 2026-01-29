@@ -8,7 +8,7 @@ text-embedding-004モデルを使用
 """
 
 import logging
-import google.generativeai as genai
+from google import genai
 from django.conf import settings
 from apps.common.exceptions import EmbeddingError
 
