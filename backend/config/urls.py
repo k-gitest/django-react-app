@@ -8,6 +8,9 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
     SpectacularRedocView,
 )
+from strawberry.django.views import GraphQLView
+from .schemas import schema
+from apps.graphql_api.context import get_context
 
 def health_check(request):
     # status=200 を明示的に返す（curl -f は 200番台を成功とみなすため）
@@ -53,4 +56,7 @@ urlpatterns = [
 
     # Webhookエンドポイント
     path("api/v1/webhooks/", include("apps.webhooks.urls")),
+
+    # graphqlエンドポイント
+    path("graphql/", GraphQLView.as_view(schema=schema, context_getter=get_context)),
 ]
