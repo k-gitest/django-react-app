@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
+    'drf_spectacular',
     "apps.common",
     "apps.users",
     "apps.todos",
@@ -149,6 +150,7 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.AllowAny",
     ),
     "EXCEPTION_HANDLER": "apps.common.error_handlers.custom_exception_handler",
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
 # dj-rest-authの設定
@@ -337,3 +339,29 @@ NEW_RELIC_ENVIRONMENT = config('NEW_RELIC_ENVIRONMENT', default='development')
 # 本番環境のみNew Relicを初期化
 if not DEBUG and config('NEW_RELIC_LICENSE_KEY', default=''):
     newrelic.agent.initialize()
+
+# open api schema設定
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Django React App API',
+    'DESCRIPTION': 'Django/React モノレポベースのSPAアプリケーション',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    
+    # 認証設定
+    'SECURITY': [
+        {
+            'cookieAuth': [],  # JWT Cookie認証
+        }
+    ],
+    'SECURITY_DEFINITIONS': {
+        'cookieAuth': {
+            'type': 'apiKey',
+            'in': 'cookie',
+            'name': 'access-token',
+        }
+    },
+    
+    # レスポンス設定
+    'COMPONENT_SPLIT_REQUEST': True,
+    'SCHEMA_PATH_PREFIX': '/api/v1',
+}
