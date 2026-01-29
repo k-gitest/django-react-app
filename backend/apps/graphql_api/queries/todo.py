@@ -3,7 +3,6 @@ from strawberry import relay
 from typing import List, Optional
 
 from apps.todos.service import TodoQueryService, TodoStatsService, TodoSearchService
-from apps.common.exceptions import BaseAppError
 from ..types.todo import (
     TodoType,
     TodoConnection,
@@ -13,7 +12,6 @@ from ..types.todo import (
     TodoSearchInput,
     TodoEdge,
 )
-from ..types.common import OperationError
 from ..permissions import IsAuthenticated
 
 
