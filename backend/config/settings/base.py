@@ -34,12 +34,14 @@ INSTALLED_APPS = [
     "allauth.account",
     "allauth.socialaccount",
     'drf_spectacular',
+    "strawberry_django",
     "apps.common",
     "apps.users",
     "apps.todos",
     'apps.webhooks',
     "apps.analytics",
     "apps.data_pipeline",
+    'apps.graphql_api',
 ]
 
 MIDDLEWARE = [
