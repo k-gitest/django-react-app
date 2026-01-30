@@ -72,13 +72,13 @@ const handleApiError = (error: ApiError): void => {
   }
 
   // 404: リソースが見つからない
-  if (error.status === 404) {
+  if (error.isNotFoundError()) {
     toast.error('リソースが見つかりませんでした。');
     return;
   }
 
   // 400: バリデーションエラー（フィールド別エラーがある場合）
-  if (error.status === 400 && error.fieldErrors) {
+  if (error.isValidationError() && error.fieldErrors) {
     // フィールド別エラーは通常フォームコンポーネントが処理するため
     // ここでは汎用的なメッセージのみ表示
     const firstError = Object.values(error.fieldErrors)[0]?.[0];
@@ -86,8 +86,13 @@ const handleApiError = (error: ApiError): void => {
     return;
   }
 
-  if (error.status === 429) {
-    toast.error(error.serverMessage || 'リクエスト制限にかかりました。');
+  if (error.isConflictError()) {
+    toast.error(error.message);
+    return;
+  }
+
+  if (error.isRateLimitError()) {
+    toast.error(error.message || 'リクエスト制限にかかりました。');
     return;
   }
 
