@@ -101,7 +101,8 @@ Django/React モノレポベースのSPAアプリケーション
 │   │   │   ├── error_decorators.py
 │   │   │   ├── error_reporting.py
 │   │   │   ├── security.py
-│   │   │   └── permissions.py
+│   │   │   ├── permissions.py
+│   │   │   └── rest_schemas.py
 │   │   │
 │   │   ├── users/                 # ユーザー管理アプリケーション
 │   │   │   ├── models.py          # データモデル定義
@@ -113,6 +114,7 @@ Django/React モノレポベースのSPAアプリケーション
 │   │   │   ├── email_service.py   
 │   │   │   ├── qstash_service.py  
 │   │   │   ├── analytics_service.py  
+│   │   │   ├── rest_schemas.py    # open api用スキーマ
 │   │   │   ├── tests/             # テストコード
 │   │   │   │   ├── test_models.py
 │   │   │   │   └── test_services.py
@@ -131,7 +133,28 @@ Django/React モノレポベースのSPAアプリケーション
 │   │   │   ├── vector_service.py
 │   │   │   ├── analytics_service.py
 │   │   │   ├── webhook_service.py
-│   │   │   └── urls.py                     
+│   │   │   ├── urls.py    
+│   │   │   └── rest_schemas.py
+│   │   │
+│   │   ├── graphql_api/           # graphql管理アプリケーション 
+│   │   │   ├── errors/            # エラーハンドラ・変換
+│   │   │   │   ├── extensions.py
+│   │   │   │   ├── formatters.py
+│   │   │   │   └── handlers.py
+│   │   │   ├── mutations/         # mutation用
+│   │   │   │   ├── todo.py
+│   │   │   │   └── user.py
+│   │   │   ├── queries/           # get用
+│   │   │   │   ├── todo.py
+│   │   │   │   └── user.py
+│   │   │   ├── types/             # schema・型定義
+│   │   │   │   ├── common.py
+│   │   │   │   ├── todo.py
+│   │   │   │   └── user.py
+│   │   │   ├── context.py
+│   │   │   ├── permissions.py
+│   │   │   ├── schema.py
+│   │   │   └── validators.py
 │   │   │
 │   │   └── webhooks/                     
 │   │       ├── __init__.py

@@ -1,5 +1,5 @@
 from drf_spectacular.utils import extend_schema, OpenApiParameter
-from apps.common.schemas import CommonSchemas
+from apps.common.rest_schemas import CommonSchemas
 from .serializers import TodoSerializer
 
 class TodoSchemas:
