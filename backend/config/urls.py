@@ -17,7 +17,24 @@ def health_check(request):
     return JsonResponse({"status": "healthy", "service": "backend"}, status=200)
 
 class CustomGraphQLView(GraphQLView):
+    """
+    カスタムGraphQL View
+    
+    responseオブジェクトをcontextに渡すための拡張
+    """
+    
     def get_context(self, request, response):
+        """
+        コンテキストにrequest + responseを渡す
+        
+        Args:
+            request: HTTPリクエスト
+            response: HTTPレスポンス
+        
+        Returns:
+            Context インスタンス
+        """
+        from apps.graphql_api.context import get_context
         return get_context(request, response)
     
 urlpatterns = [
@@ -61,5 +78,5 @@ urlpatterns = [
     path("api/v1/webhooks/", include("apps.webhooks.urls")),
 
     # graphqlエンドポイント
-    path("graphql/", CustomGraphQLView.as_view(schema=schema)),
+    path("graphql/", CustomGraphQLView.as_view(schema=schema, graphql_ide="graphiql",)),
 ]
