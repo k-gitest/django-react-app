@@ -1,5 +1,5 @@
 from drf_spectacular.utils import extend_schema, OpenApiExample
-from apps.common.schemas import CommonSchemas
+from apps.common.rest_schemas import CommonSchemas
 from dj_rest_auth.serializers import LoginSerializer
 from .serializers import CustomRegisterSerializer, WelcomeEmailWebhookSerializer
 
