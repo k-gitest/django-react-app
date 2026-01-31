@@ -5,25 +5,27 @@
  */
 
 // ============================================================================
-// Enum
+// Enum (const object + type に変更して erasableSyntaxOnly エラーを回避)
 // ============================================================================
 
-export enum PriorityEnum {
-  LOW = 'LOW',
-  MEDIUM = 'MEDIUM',
-  HIGH = 'HIGH',
-}
+export const PriorityEnum = {
+  LOW: 'LOW',
+  MEDIUM: 'MEDIUM',
+  HIGH: 'HIGH',
+} as const;
+export type PriorityEnum = typeof PriorityEnum[keyof typeof PriorityEnum];
 
-export enum ErrorCategory {
-  VALIDATION = 'validation',
-  AUTHENTICATION = 'authentication',
-  AUTHORIZATION = 'authorization',
-  NOT_FOUND = 'not_found',
-  CONFLICT = 'conflict',
-  RATE_LIMIT = 'rate_limit',
-  EXTERNAL_SERVICE = 'external_service',
-  INTERNAL = 'internal',
-}
+export const ErrorCategory = {
+  VALIDATION: 'validation',
+  AUTHENTICATION: 'authentication',
+  AUTHORIZATION: 'authorization',
+  NOT_FOUND: 'not_found',
+  CONFLICT: 'conflict',
+  RATE_LIMIT: 'rate_limit',
+  EXTERNAL_SERVICE: 'external_service',
+  INTERNAL: 'internal',
+} as const;
+export type ErrorCategory = typeof ErrorCategory[keyof typeof ErrorCategory];
 
 // ============================================================================
 // Types
@@ -94,6 +96,12 @@ export interface ValidationError {
   code: string;
 }
 
+export interface AuthenticationError {
+  __typename: 'AuthenticationError';
+  category: typeof ErrorCategory.AUTHENTICATION;
+  message: string;
+  code: string;
+}
 export interface ConflictError {
   __typename: 'ConflictError';
   category: ErrorCategory;

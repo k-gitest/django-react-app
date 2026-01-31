@@ -11,6 +11,7 @@ Django/React モノレポベースのSPAアプリケーション
 - 🏗️ **スケール可能なモノレポ構成**: フロントエンドとバックエンドを一元管理し、チーム全体での仕様変更への迅速な対応を可能にします。
 - 🎯 **チーム開発に適したレイヤードアーキテクチャ**: 複数人での並行開発を想定し、View/Service/Modelの責務を分離。コードの衝突（コンフリクト）を最小限に抑え、テスタビリティを向上させています。
 - 🔐 **JWT認証**: dj-rest-auth + simplejwtによる堅牢な認証システム
+- 🎯 ハイブリッドAPIアーキテクチャ: drf-spectacular による厳格なREST API管理と、strawberry-graphql-django による柔軟なGraphQLクエリを両立。フロントエンドのユースケースに応じて最適なデータ取得手法を選択可能です。
 - 🔍 **AIセマンティック検索**: Google Gemini API + Upstash Vectorによる自然言語検索。「明日の会議関連」などの曖昧な検索が可能
 - 📊 **データ分析基盤（MotherDuck Analytics）**: イベントログのリアルタイム記録とDB状態の定期同期により、ユーザー行動とデータ状態を包括的に分析可能
 - 🐳 **フロントエンド独立開発 (MSW)**: APIの実装を待たずに開発・テストが可能なMSWを活用。バックエンドへの依存を減らし、開発スピードを最大化します。
@@ -22,7 +23,8 @@ Django/React モノレポベースのSPAアプリケーション
 
 ### バックエンド
 - **フレームワーク**: Django 4.2.7
-- **API**: Django REST Framework 3.14.0
+- **API (REST)**: Django REST Framework 3.14.0, drf-spectacular 0.29.0
+- **API (GraphQL)**: strawberry-graphql-django 0.74.1
 - **認証**: dj-rest-auth 7.0.1, djangorestframework-simplejwt 5.5.1
 - **データベース**: PostgreSQL 17 (psycopg2-binary 2.9.9)
 - **データウェアハウス**: MotherDuck (DuckDB), dlt 1.20.0
@@ -42,7 +44,8 @@ Django/React モノレポベースのSPAアプリケーション
 - **状態管理**: Zustand 5.0.9, TanStack Query 5.90.12
 - **フォーム**: React Hook Form 7.68.0, Zod 4.1.13
 - **UI**: Tailwind CSS 4.1.17, shadcn/ui
-- **HTTPクライアント**: Ky 1.14.1
+- **HTTPクライアント**: Ky 1.14.1, graphql-request 7.1.2
+- **型定義・パース**: Zod 4.1.13, graphql 16.10.0
 - **テスト**: Playwright 1.57.0, Vitest 4.0.15, MSW 2.12.4, playwright-msw 3.0.1
 - **Linter**: ESLint 9.39.1
 

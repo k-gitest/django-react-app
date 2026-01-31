@@ -19,6 +19,7 @@ import type {
   TodoCreateInput,
   TodoUpdateInput,
   TodoType,
+  PriorityEnum,
 } from '@/graphql/types';
 import type { CreateTodoInput, Todo, UpdateTodoInput } from '../types/index';
 
@@ -39,7 +40,8 @@ export const todoServiceGraphQL = {
   createTodo: async (input: CreateTodoInput): Promise<Todo> => {
     const graphqlInput: TodoCreateInput = {
       todoTitle: input.todo_title,
-      priority: input.priority as any,
+      // input.priority が string なら PriorityEnum 型へ適切にアサーション
+      priority: input.priority as PriorityEnum,
       progress: input.progress,
     };
 
@@ -53,16 +55,12 @@ export const todoServiceGraphQL = {
   },
 
   updateTodo: async (id: number, input: UpdateTodoInput): Promise<Todo> => {
-    const graphqlInput: any = {};
-    if (input.todo_title !== undefined) {
-      graphqlInput.todoTitle = input.todo_title;
-    }
+    const graphqlInput: TodoUpdateInput = {};
+    if (input.todo_title !== undefined) graphqlInput.todoTitle = input.todo_title;
     if (input.priority !== undefined) {
-      graphqlInput.priority = input.priority;
+      graphqlInput.priority = input.priority as PriorityEnum;
     }
-    if (input.progress !== undefined) {
-      graphqlInput.progress = input.progress;
-    }
+    if (input.progress !== undefined) graphqlInput.progress = input.progress;
 
     const globalId = btoa(`TodoType:${id}`);
 
@@ -85,30 +83,28 @@ export const todoServiceGraphQL = {
     );
   },
 
-  getTodoStats: async (): Promise
-    Array< { priority: string; count: number } >
-  > => {
-  const data = await gqlRequest<GetTodoStatsQuery>(GET_TODO_STATS);
+  // ✅ 修正箇所: 改行をなくし、Promise<Array<{...}>> の形に整えました
+  getTodoStats: async (): Promise<Array<{ priority: string; count: number }>> => {
+    const data = await gqlRequest<GetTodoStatsQuery>(GET_TODO_STATS);
 
-  return data.priorityStats.map((stat) => ({
-    priority: stat.priority,
-    count: stat.count,
-  }));
-},
+    return data.priorityStats.map((stat) => ({
+      priority: stat.priority,
+      count: stat.count,
+    }));
+  },
 
-getProgressStats: async (): Promise<Record<string, number>> => {
-  const data = await gqlRequest<GetProgressStatsQuery>(GET_PROGRESS_STATS);
+  getProgressStats: async (): Promise<Record<string, number>> => {
+    const data = await gqlRequest<GetProgressStatsQuery>(GET_PROGRESS_STATS);
+    const stats = data.progressStats;
 
-  const stats = data.progressStats;
-
-  return {
-    range_0_20: stats.range020,
-    range_21_40: stats.range2140,
-    range_41_60: stats.range4160,
-    range_61_80: stats.range6180,
-    range_81_100: stats.range81100,
-  };
-},
+    return {
+      range_0_20: stats.range020,
+      range_21_40: stats.range2140,
+      range_41_60: stats.range4160,
+      range_61_80: stats.range6180,
+      range_81_100: stats.range81100,
+    };
+  },
 };
 
 /**
@@ -122,7 +118,7 @@ function graphqlToTodo(graphqlTodo: TodoType): Todo {
   return {
     id,
     todo_title: graphqlTodo.todoTitle,
-    priority: graphqlTodo.priority as any,
+    priority: graphqlTodo.priority as Todo['priority'],
     progress: graphqlTodo.progress,
     user: '',
     created_at: graphqlTodo.createdAt,

@@ -10,6 +10,26 @@ export class ApiError extends Error {
   public readonly data?: unknown;
   public readonly originalError?: unknown;
 
+  /**
+   * dataプロパティの中から 'field' を安全に取得する
+   */
+  public get field(): string | undefined {
+    if (this.data && typeof this.data === 'object' && 'field' in this.data) {
+      return (this.data as { field: string }).field;
+    }
+    return undefined;
+  }
+
+  /**
+   * dataプロパティの中から 'fields' を安全に取得する
+   */
+  public get fields(): Record<string, unknown> | undefined {
+    if (this.data && typeof this.data === 'object' && 'fields' in this.data) {
+      return (this.data as { fields: Record<string, unknown> }).fields;
+    }
+    return undefined;
+  }
+
   constructor(
     status: number,
     message?: string,
