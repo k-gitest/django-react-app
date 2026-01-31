@@ -1,0 +1,14 @@
+schema: ../schema.graphql
+documents: 'src/graphql/**/*.ts'
+generates:
+  src/graphql/types.ts:
+    plugins:
+      - typescript
+      - typescript-operations
+    config:
+      # 設定オプション
+      skipTypename: false
+      withHooks: false
+      withComponent: false
+      scalars:
+        DateTime: string

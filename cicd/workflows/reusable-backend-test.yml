@@ -139,14 +139,17 @@ jobs:
           name: backend-${{ inputs.environment }}-coverage
         continue-on-error: true
 
-      # ===== OpenAPIスキーマ生成 =====
+      # ===== APIスキーマ生成 (OpenAPI & GraphQL) =====
       - name: Generate OpenAPI Schema
         run: |
           cd backend
+          # OpenAPI
           python manage.py spectacular --color --file schema.yml
+          # GraphQL
+          python manage.py graphql_schema --out schema.graphql
           
           # スキーマが正しく生成されたか確認
-          if [ ! -f schema.yml ]; then
+          if [ ! -f schema.yml ] || [ ! -f schema.graphql ]; then
             echo "❌ Schema generation failed"
             exit 1
           fi
@@ -165,7 +168,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: openapi-schema-${{ github.sha }}
-          path: backend/schema.yml
+          path: |
+            backend/schema.yml
+            backend/schema.graphql
           retention-days: 1
           if-no-files-found: error  # ファイルがない場合はエラー
 

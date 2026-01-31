@@ -46,16 +46,21 @@ jobs:
       - name: Verify Schema Download
         run: |
           if [ ! -f schema.yml ]; then
-            echo "❌ Schema file not found after download"
-            echo "Contents of current directory:"
-            ls -la
+            echo "❌ OpenAPI schema not found"
             exit 1
           fi
-          echo "✅ Schema file found"
-          echo "Schema size: $(du -h schema.yml | cut -f1)"
 
-      # ===== TypeScript型定義を生成 =====
-      - name: Generate TypeScript Types
+          if [ ! -f schema.graphql ]; then
+            echo "❌ GraphQL schema not found"
+            exit 1
+          fi
+
+          echo "✅ Both schemas found"
+          echo "OpenAPI schema size: $(du -h schema.yml | cut -f1)"
+          echo "GraphQL schema size: $(du -h schema.graphql | cut -f1)"
+
+      # ===== OpenAPI型生成 =====
+      - name: Generate OpenAPI Types
         run: |
           npx openapi-typescript ../schema.yml -o src/types/api.d.ts
           
@@ -69,43 +74,89 @@ jobs:
           echo "Types file size: $(du -h src/types/api.d.ts | cut -f1)"
         working-directory: frontend
 
+      # ===== GraphQL型生成 =====
+      - name: Generate GraphQL Types
+        run: |
+          npx graphql-codegen --config codegen.yml
+          
+          if [ ! -f src/graphql/types.ts ]; then
+            echo "❌ GraphQL types generation failed"
+            exit 1
+          fi
+          
+          echo "✅ GraphQL types generated"
+          echo "Types file size: $(du -h src/graphql/types.ts | cut -f1)"
+        working-directory: frontend
+
       # 型定義の差分チェック
       - name: Check API Types Sync
         run: |
           cd frontend
           
-          if git diff --exit-code src/types/api.d.ts; then
-            echo "✅ API types are up to date" | tee -a $GITHUB_STEP_SUMMARY
-          else
+          OPENAPI_CHANGED=false
+          GRAPHQL_CHANGED=false
+          
+          # OpenAPI型の差分チェック
+          if ! git diff --exit-code src/types/api.d.ts; then
+            OPENAPI_CHANGED=true
+            echo "⚠️ OpenAPI types changed"
+          fi
+          
+          # GraphQL型の差分チェック
+          if ! git diff --exit-code src/graphql/types.ts; then
+            GRAPHQL_CHANGED=true
+            echo "⚠️ GraphQL types changed"
+          fi
+          
+          # サマリー生成
+          if [ "$OPENAPI_CHANGED" = true ] || [ "$GRAPHQL_CHANGED" = true ]; then
             echo "### 🔄 API Types Changed" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "The following types were updated from the OpenAPI schema:" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "<details>" >> $GITHUB_STEP_SUMMARY
-            echo "<summary>View Diff</summary>" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`diff" >> $GITHUB_STEP_SUMMARY
-            git diff src/types/api.d.ts >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            echo "</details>" >> $GITHUB_STEP_SUMMARY
+            
+            if [ "$OPENAPI_CHANGED" = true ]; then
+              echo "**OpenAPI Types:**" >> $GITHUB_STEP_SUMMARY
+              echo "<details>" >> $GITHUB_STEP_SUMMARY
+              echo "<summary>View Diff</summary>" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`diff" >> $GITHUB_STEP_SUMMARY
+              git diff src/types/api.d.ts >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+              echo "</details>" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
+            
+            if [ "$GRAPHQL_CHANGED" = true ]; then
+              echo "**GraphQL Types:**" >> $GITHUB_STEP_SUMMARY
+              echo "<details>" >> $GITHUB_STEP_SUMMARY
+              echo "<summary>View Diff</summary>" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`diff" >> $GITHUB_STEP_SUMMARY
+              git diff src/graphql/types.ts >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+              echo "</details>" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
             
             # Productionでは厳密にチェック
             if [ "${{ inputs.environment }}" == "production" ] && [ "${{ inputs.strict-mode }}" == "true" ]; then
-              echo "" >> $GITHUB_STEP_SUMMARY
               echo "❌ **Error:** API types must be committed before production deployment" >> $GITHUB_STEP_SUMMARY
               echo "" >> $GITHUB_STEP_SUMMARY
-              echo "Please run: \`npm run generate:api\` and commit the changes" >> $GITHUB_STEP_SUMMARY
+              echo "Please run:" >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+              echo "npm run generate:api        # OpenAPI types" >> $GITHUB_STEP_SUMMARY
+              echo "npm run generate:graphql    # GraphQL types" >> $GITHUB_STEP_SUMMARY
+              echo "git add src/types/api.d.ts src/graphql/types.ts" >> $GITHUB_STEP_SUMMARY
+              echo "git commit -m 'chore: update API types'" >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
               exit 1
             fi
             
             # Stagingでは警告のみ
+            echo "⚠️ **Warning:** Consider updating the committed types" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ✅ API Types Up to Date" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "⚠️ **Warning:** Consider updating the committed types by running:" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-            echo "npm run generate:api" >> $GITHUB_STEP_SUMMARY
-            echo "git add src/types/api.d.ts" >> $GITHUB_STEP_SUMMARY
-            echo "git commit -m 'chore: update API types'" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "Both OpenAPI and GraphQL types are synchronized." >> $GITHUB_STEP_SUMMARY
           fi
         continue-on-error: ${{ inputs.environment == 'staging' }}
 
@@ -114,7 +165,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: api-types-${{ github.sha }}
-          path: frontend/src/types/api.d.ts
+          path: |
+            frontend/src/types/api.d.ts
+            frontend/src/graphql/types.ts
           retention-days: 1
           if-no-files-found: error
 
