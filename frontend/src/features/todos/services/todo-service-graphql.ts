@@ -20,7 +20,7 @@ import type {
   TodoUpdateInput,
   TodoType,
 } from '@/graphql/types';
-import type { CreateTodoInput, Todo, UpdateTodoInput } from '../../types';
+import type { CreateTodoInput, Todo, UpdateTodoInput } from '../types/index';
 
 /**
  * GraphQL API実装

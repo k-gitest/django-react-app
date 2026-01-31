@@ -1,29 +1,96 @@
 name: Reusable Schema Generator
+
 on:
   workflow_call:
-    outputs:
-      artifact-name:
-        description: "保存されたアーティファクト名"
-        value: "openapi-schema-${{ github.sha }}"
 
 jobs:
   generate:
+    name: Generate OpenAPI Schema
     runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    env:
+      PGDATABASE: test_db
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGHOST: localhost
+      PGPORT: 5432
+      DJANGO_SETTINGS_MODULE: config.settings.test
+      SECRET_KEY: test-secret-key-for-ci
+      ENVIRONMENT: staging
+    
     steps:
-      - uses: actions/checkout@v4
-      - name: Setup Backend (スキーマ抽出に必要なら)
-        uses: ./.github/actions/setup-backend # 既存のセットアップを利用
+      - name: Checkout code
+        uses: actions/checkout@v4
       
-      - name: Export OpenAPI Schema
+      - name: Setup Python
+        uses: ./.github/actions/setup-python
+      
+      # ===== PostgreSQL接続待機（追加） =====
+      - name: Wait for PostgreSQL
         run: |
-          # ここで schema.yaml を出力するコマンドを実行
-          # 例: python manage.py export_schema > schema.yaml
-          # 例: npm run api:extract
-        working-directory: backend
-
-      - name: Upload Schema Artifact
+          echo "Waiting for PostgreSQL to be ready..."
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U postgres; then
+              echo "✅ PostgreSQL is ready"
+              break
+            fi
+            echo "⏳ Waiting for PostgreSQL... ($i/30)"
+            sleep 1
+          done
+          
+          if ! pg_isready -h localhost -p 5432 -U postgres; then
+            echo "❌ PostgreSQL failed to start"
+            exit 1
+          fi
+      
+      # マイグレーション実行
+      - name: Run migrations
+        run: |
+          cd backend
+          python manage.py migrate --no-input
+      
+      # ===== OpenAPIスキーマ生成（パス修正） =====
+      - name: Generate OpenAPI Schema
+        run: |
+          cd backend
+          python manage.py spectacular --color --file schema.yml
+          
+          # スキーマが正しく生成されたか確認
+          if [ ! -f schema.yml ]; then
+            echo "❌ Schema generation failed"
+            exit 1
+          fi
+          
+          echo "✅ OpenAPI schema generated successfully"
+          echo "Schema size: $(du -h schema.yml | cut -f1)"
+      
+      # スキーマの検証
+      - name: Validate OpenAPI Schema
+        uses: char0n/swagger-editor-validate@v1
+        with:
+          definition-file: backend/schema.yml
+        continue-on-error: true
+      
+      # ===== アップロード =====
+      - name: Upload OpenAPI Schema
         uses: actions/upload-artifact@v4
         with:
           name: openapi-schema-${{ github.sha }}
-          path: backend/schema.yaml
+          path: backend/schema.yml  # backend/ 配下のschema.yml
           retention-days: 1
+          if-no-files-found: error  # ファイルが見つからない場合はエラー
