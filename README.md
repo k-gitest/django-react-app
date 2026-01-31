@@ -862,6 +862,369 @@ def get_user_todos(user):
 
 ---
 
+## GraphQL API（REST APIとの並行運用）
+
+### 概要
+
+REST APIと並行して**GraphQL API**を提供しています。環境変数の切り替えだけで、フロントエンドはREST/GraphQLを透過的に切り替え可能です。
+```
+【設計原則】
+✅ UI層・フック層はREST/GraphQLを意識しない
+✅ Service層のみが通信方式を知っている
+✅ 型・エラーは完全に統一
+✅ 切り替えは環境変数で一元管理
+```
+
+---
+
+### アーキテクチャ
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   API Architecture                          │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  【フロントエンド】                                          │
+│    ├─ UI Components (React)                                │
+│    ├─ Custom Hooks (useTodos, useAuth)                     │
+│    │   └─ TanStack Query                                   │
+│    ├─ Service Layer（統一API）                              │
+│    │   ├─ todo-service.ts                                  │
+│    │   └─ auth-service.ts                                  │
+│    │       │                                               │
+│    │       └─ API_MODE で自動切り替え                       │
+│    │           ├─ REST: ky-client                          │
+│    │           └─ GraphQL: graphql-request                 │
+│    │                                                        │
+│    └─ Unified Error Handling                               │
+│        └─ ApiError（REST/GraphQL共通）                      │
+│                                                             │
+│  【バックエンド】                                            │
+│    ├─ REST API (Django REST Framework)                     │
+│    │   └─ /api/v1/*                                        │
+│    │                                                        │
+│    └─ GraphQL API (Strawberry)                             │
+│        ├─ /graphql/                                        │
+│        ├─ Query/Mutation（型安全）                          │
+│        ├─ Result Pattern（Union型エラー）                   │
+│        └─ Service層を再利用（ロジック重複なし）              │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 主な特徴
+
+| 項目 | 説明 |
+|------|------|
+| **完全な抽象化** | UI層はREST/GraphQLを一切意識しない |
+| **環境変数切り替え** | `VITE_API_MODE=graphql` で即座に切り替え |
+| **統一エラーハンドリング** | `ApiError`クラスに統一、エラーハンドラーも共通 |
+| **Service層の再利用** | ビジネスロジックを重複なく共有 |
+| **型安全性** | GraphQL Codegenで完全な型推論（オプション） |
+| **段階的移行** | REST APIと並行運用可能、リスク最小化 |
+
+---
+
+### 提供機能
+
+#### Todo機能
+
+| 機能 | REST API | GraphQL API |
+|------|---------|------------|
+| **一覧取得** | GET `/api/v1/todos/` | Query `todos` |
+| **作成** | POST `/api/v1/todos/` | Mutation `createTodo` |
+| **更新** | PATCH `/api/v1/todos/{id}/` | Mutation `updateTodo` |
+| **削除** | DELETE `/api/v1/todos/{id}/` | Mutation `deleteTodo` |
+| **優先度統計** | GET `/api/v1/todos/stats/` | Query `priorityStats` |
+| **進捗統計** | GET `/api/v1/todos/progress-stats/` | Query `progressStats` |
+| **セマンティック検索** | GET `/api/v1/todos/search/` | Query `searchTodos` |
+
+#### 認証機能
+
+| 機能 | REST API | GraphQL API |
+|------|---------|------------|
+| **ユーザー登録** | POST `/api/v1/auth/registration/` | Mutation `register` |
+| **ログイン** | POST `/api/v1/auth/login/` | Mutation `login` |
+| **ログアウト** | POST `/api/v1/auth/logout/` | Mutation `logout` |
+| **ユーザー情報取得** | GET `/api/v1/auth/user/` | Query `me` |
+| **パスワード変更** | POST `/api/v1/auth/password/change/` | Mutation `changePassword` |
+
+---
+
+### 技術スタック
+
+#### バックエンド
+
+| コンポーネント | 技術 |
+|--------------|------|
+| **GraphQLフレームワーク** | Strawberry GraphQL 0.248.0 |
+| **認証** | JWT Cookie（RESTと同じ） |
+| **エラーハンドリング** | Result Pattern（Union型） |
+| **Service層** | 既存のService層を再利用 |
+
+#### フロントエンド
+
+| コンポーネント | 技術 |
+|--------------|------|
+| **GraphQLクライアント** | graphql-request |
+| **状態管理** | TanStack Query（RESTと同じ） |
+| **エラークラス** | ApiError（統一） |
+| **型生成** | GraphQL Code Generator（オプション） |
+
+---
+
+### 使用例
+
+#### フロントエンド（切り替え方法）
+```typescript
+// .env.development
+VITE_API_MODE=rest      # REST API使用
+
+// .env.production
+VITE_API_MODE=graphql   # GraphQL API使用
+
+// コンポーネント（変更不要）
+import { useTodos } from '@/features/todo/hooks/useTodos';
+
+export const TodoPage = () => {
+  const { todos, createTodo } = useTodos();
+  // REST/GraphQLを意識せずに使用可能
+};
+```
+
+#### バックエンド（GraphQLエンドポイント）
+```python
+# config/urls.py
+urlpatterns = [
+    # REST API（既存）
+    path('api/v1/', include('apps.users.urls')),
+    path('api/v1/', include('apps.todos.urls')),
+    
+    # GraphQL API（新規）
+    path('graphql/', CustomGraphQLView.as_view(schema=schema)),
+]
+```
+
+---
+
+### GraphQL Playground
+
+開発環境では、GraphiQL UIでクエリをテストできます。
+```
+http://localhost:8000/graphql/
+```
+
+**クエリ例**:
+```graphql
+# Todo一覧取得
+query {
+  todos {
+    id
+    todoTitle
+    priority
+    progress
+  }
+}
+
+# Todo作成（Result Pattern）
+mutation {
+  createTodo(input: {
+    todoTitle: "GraphQLのテスト"
+    priority: HIGH
+    progress: 0
+  }) {
+    ... on TodoType {
+      id
+      todoTitle
+    }
+    ... on ValidationError {
+      message
+      field
+    }
+  }
+}
+```
+
+---
+
+### エラーハンドリング（Result Pattern）
+
+GraphQL APIは**Union型**を使用してエラーを表現します。
+
+**成功時**:
+```json
+{
+  "createTodo": {
+    "__typename": "TodoType",
+    "id": "VG9kb1R5cGU6MQ==",
+    "todoTitle": "新しいタスク"
+  }
+}
+```
+
+**エラー時**:
+```json
+{
+  "createTodo": {
+    "__typename": "ValidationError",
+    "category": "validation",
+    "message": "タイトルは空にできません。",
+    "field": "todo_title",
+    "code": "empty_title"
+  }
+}
+```
+
+**フロントエンドでの処理**:
+```typescript
+try {
+  await createTodo(data);
+  toast.success('作成しました');
+} catch (error) {
+  // ApiError に統一（REST/GraphQL共通）
+  if (error instanceof ApiError) {
+    if (error.isValidationError()) {
+      // バリデーションエラー処理
+    }
+  }
+}
+```
+
+---
+
+### 移行戦略
+
+#### Phase 1: 開発環境でテスト
+```bash
+# 開発環境でGraphQLを有効化
+VITE_API_MODE=graphql npm run dev
+
+# 動作確認
+# ✅ ログイン・ログアウト
+# ✅ Todo作成・更新・削除
+# ✅ エラーハンドリング
+```
+
+#### Phase 2: ステージング環境でテスト
+```bash
+# Render環境変数を設定
+API_MODE=graphql
+
+# Cloudflare Pages環境変数を設定
+VITE_API_MODE=graphql
+
+# デプロイ
+git push origin develop
+```
+
+#### Phase 3: 本番環境へ移行
+```bash
+# 問題がなければ本番環境へ
+git push origin main
+```
+
+---
+
+### ディレクトリ構成
+
+#### バックエンド
+```
+backend/apps/graphql_api/
+├── errors/              # エラーハンドリング
+│   ├── formatters.py   # BaseAppError → GraphQL型変換
+│   └── handlers.py     # @graphql_error_handler
+├── mutations/          # Mutation定義
+│   ├── todo.py
+│   └── user.py
+├── queries/            # Query定義
+│   ├── todo.py
+│   └── user.py
+├── types/              # 型定義
+│   ├── common.py       # エラー型
+│   ├── todo.py
+│   └── user.py
+├── context.py
+├── permissions.py
+├── schema.py           # ルートスキーマ
+└── validators.py
+```
+
+#### フロントエンド
+```
+frontend/src/
+├── graphql/                  # GraphQL定義
+│   ├── fragments/
+│   │   ├── todo.ts
+│   │   └── user.ts
+│   ├── queries/
+│   │   ├── todo.ts
+│   │   └── user.ts
+│   ├── mutations/
+│   │   ├── todo.ts
+│   │   └── user.ts
+│   └── types.ts              # GraphQL型定義
+│
+├── lib/
+│   ├── api-client.ts         # REST用
+│   ├── graphql-client.ts     # GraphQL用
+│   └── constants.ts          # API_MODE定義
+│
+├── errors/
+│   ├── api-error.ts          # ✅ REST/GraphQL統一
+│   └── error-handler.ts      # ✅ REST/GraphQL統一
+│
+└── features/
+    ├── todo/
+    │   ├── hooks/
+    │   │   └── useTodos.ts   # ✅ 統一フック
+    │   └── services/
+    │       ├── todo-service.ts              # 公開API（自動切り替え）
+    │       └── implementations/
+    │           ├── todo-service-rest.ts     # REST実装
+    │           └── todo-service-graphql.ts  # GraphQL実装
+    │
+    └── auth/
+        ├── hooks/
+        │   └── use-auth.ts   # ✅ 統一フック
+        └── services/
+            ├── auth-service.ts              # 公開API（自動切り替え）
+            └── implementations/
+                ├── auth-service-rest.ts     # REST実装
+                └── auth-service-graphql.ts  # GraphQL実装
+```
+
+---
+
+### 環境変数
+```bash
+# フロントエンド
+VITE_API_MODE=graphql                    # rest | graphql
+VITE_GRAPHQL_URL=http://localhost:8000/graphql/
+
+# バックエンド（設定不要、両方のAPIが常に有効）
+# REST: /api/v1/
+# GraphQL: /graphql/
+```
+
+---
+
+### 詳細ドキュメント
+
+GraphQL APIの詳細については、以下のドキュメントを参照してください。
+
+- **[docs/graphql.md](docs/graphql.md)** - GraphQL API詳細ガイド
+  - アーキテクチャ設計の経緯
+  - Result Patternの実装詳細
+  - Service層の再利用戦略
+  - エラーハンドリングの統合
+  - Relay GlobalIDの変換
+  - GraphQL Code Generatorの設定
+  - ベストプラクティス
+  - トラブルシューティング
+
+---
+
 ## ベクトル検索機能（セマンティック検索）
 
 ### 概要
@@ -1370,9 +1733,399 @@ REDIS_URL=rediss://default:password@region.upstash.io:6379
 
 ---
 
-# モニタリングセクション（READMEに追加する内容）
+## OpenAPI統合（型安全なAPI開発）
 
-以下の内容を、READMEの「## パフォーマンス最適化」セクションの後に追加してください。
+### 概要
+
+**drf-spectacular**と**openapi-typescript**を使用して、バックエンドのAPI仕様からフロントエンドのTypeScript型定義を自動生成しています。
+```
+【OpenAPI統合の目的】
+✅ API仕様の自動ドキュメント化
+✅ フロントエンド・バックエンド間の型の一貫性
+✅ API変更時の型エラーによる早期発見
+✅ 開発者体験の向上（型補完・型チェック）
+```
+
+---
+
+### アーキテクチャ
+```
+┌─────────────────────────────────────────────────────────────┐
+│              OpenAPI Integration Flow                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  【バックエンド】                                            │
+│    ├─ rest_schemas.py (OpenAPIスキーマ定義)                │
+│    ├─ views.py (@スキーマデコレーター)                     │
+│    └─ python manage.py spectacular                         │
+│         └─ schema.yml 生成                                 │
+│                                                             │
+│  【CI/CD】                                                  │
+│    ├─ backend-test.yml                                     │
+│    │   └─ schema.yml をアーティファクトとして保存          │
+│    │                                                       │
+│    └─ frontend-test.yml                                    │
+│        ├─ schema.yml をダウンロード                        │
+│        └─ openapi-typescript で型生成                      │
+│            └─ src/types/api.d.ts                           │
+│                                                             │
+│  【フロントエンド】                                          │
+│    ├─ src/types/api.d.ts (自動生成型定義)                  │
+│    └─ サービス層で型を適用                                 │
+│        └─ 型安全なAPI呼び出し                              │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 技術スタック
+
+| コンポーネント | ツール | 用途 |
+|--------------|--------|------|
+| **スキーマ生成** | drf-spectacular | DjangoからOpenAPIスキーマを生成 |
+| **型定義生成** | openapi-typescript | OpenAPIスキーマからTypeScript型を生成 |
+| **スキーマ定義** | rest_schemas.py | APIドキュメントの詳細を定義 |
+| **CI/CD統合** | GitHub Actions | スキーマ生成・型チェックの自動化 |
+
+---
+
+### 主な機能
+
+| 機能 | 説明 |
+|------|------|
+| **自動型生成** | API仕様変更時に自動でTypeScript型を更新 |
+| **型安全性** | APIレスポンスの型エラーをコンパイル時に検出 |
+| **ドキュメント自動化** | Swagger UIで常に最新のAPIドキュメントを提供 |
+| **CI/CD統合** | 型の不整合をデプロイ前に検出 |
+
+---
+
+### ディレクトリ構成
+```
+backend/apps/
+├── todos/
+│   ├── models.py
+│   ├── serializers.py
+│   ├── views.py              # @TodoSchemas.list などのデコレーター
+│   ├── rest_schemas.py       # OpenAPIスキーマ定義
+│   └── service.py
+│
+└── users/
+    ├── models.py
+    ├── serializers.py
+    ├── views.py              # @AuthSchemas.login などのデコレーター
+    ├── rest_schemas.py       # OpenAPIスキーマ定義
+    └── user_service.py
+
+frontend/src/
+├── types/
+│   └── api.d.ts             # 自動生成されるTypeScript型定義
+│
+└── features/
+    ├── auth/
+    │   └── services/
+    │       └── auth-service.ts  # 型を適用したサービス
+    │
+    └── todo/
+        └── services/
+            └── todo-service.ts  # 型を適用したサービス
+```
+
+---
+
+### バックエンド実装
+
+#### 1. スキーマ定義ファイルの作成
+```python
+# backend/apps/todos/rest_schemas.py
+
+from drf_spectacular.utils import extend_schema, OpenApiParameter
+from apps.common.schemas import CommonSchemas
+from .serializers import TodoSerializer
+
+class TodoSchemas:
+    """Todo関連のOpenAPIスキーマ定義"""
+    
+    list = extend_schema(
+        summary="Todoリスト取得",
+        description="ログインユーザーに紐づくTodoアイテムの一覧を取得します。",
+        responses={
+            200: TodoSerializer(many=True),
+            **CommonSchemas.COMMON_RESPONSES
+        },
+        tags=['Todos']
+    )
+    
+    create = extend_schema(
+        summary="Todo作成",
+        description="新しいTodoアイテムを作成します。",
+        request=TodoSerializer,
+        responses={
+            201: TodoSerializer,
+            400: CommonSchemas.ERROR_400,
+            **CommonSchemas.COMMON_RESPONSES
+        },
+        tags=['Todos']
+    )
+    
+    search = extend_schema(
+        summary="セマンティック検索",
+        description="自然言語でTodoを検索します。",
+        parameters=[
+            OpenApiParameter(
+                name='q',
+                type=str,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description='検索クエリ（例: "明日の会議関連"）'
+            ),
+        ],
+        responses={
+            200: {
+                'type': 'object',
+                'properties': {
+                    'query': {'type': 'string'},
+                    'results': {'type': 'array'},
+                    'count': {'type': 'integer'},
+                }
+            }
+        },
+        tags=['Todos', 'Search']
+    )
+```
+
+#### 2. Viewへのデコレーター適用
+```python
+# backend/apps/todos/views.py
+
+from .rest_schemas import TodoSchemas
+
+class TodoViewSet(viewsets.ModelViewSet):
+    serializer_class = TodoSerializer
+    permission_classes = [IsAuthenticated]
+    
+    @TodoSchemas.list
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
+    
+    @TodoSchemas.create
+    def create(self, request, *args, **kwargs):
+        return super().create(request, *args, **kwargs)
+    
+    @TodoSchemas.search
+    @action(detail=False, methods=["get"])
+    def search(self, request):
+        # 実装...
+        pass
+```
+
+---
+
+### フロントエンド実装
+
+#### 1. 型定義の利用
+```typescript
+// frontend/src/features/todo/services/todo-service.ts
+
+import type { components } from '@/types/api';
+import { apiClient } from '@/lib/api-client';
+
+// OpenAPIから自動生成された型を使用
+type Todo = components['schemas']['Todo'];
+type TodoCreate = components['schemas']['TodoRequest'];
+
+export const todoService = {
+  async list(): Promise<Todo[]> {
+    return apiClient.get('todos/').json<Todo[]>();
+  },
+  
+  async create(data: TodoCreate): Promise<Todo> {
+    return apiClient.post('todos/', { json: data }).json<Todo>();
+  },
+  
+  async search(params: { q: string }): Promise<{
+    query: string;
+    results: Array<Todo & { score: number }>;
+    count: number;
+  }> {
+    return apiClient
+      .get('todos/search/', { searchParams: params })
+      .json();
+  },
+};
+```
+
+#### 2. コンポーネントでの使用
+```typescript
+// frontend/src/features/todo/components/TodoList.tsx
+
+import type { components } from '@/types/api';
+
+type Todo = components['schemas']['Todo'];
+
+export const TodoList = () => {
+  const { data: todos } = useQuery({
+    queryKey: ['todos'],
+    queryFn: todoService.list,
+  });
+  
+  // todos は Todo[] 型として推論される
+  return (
+    <div>
+      {todos?.map((todo) => (
+        <div key={todo.id}>
+          <h3>{todo.todo_title}</h3>
+          <span>{todo.priority}</span>
+          <progress value={todo.progress} max={100} />
+        </div>
+      ))}
+    </div>
+  );
+};
+```
+
+---
+
+### ローカル開発
+
+#### スキーマ生成
+```bash
+# バックエンドでスキーマを生成
+cd backend
+python manage.py spectacular --color --file schema.yml
+
+# フロントエンドで型定義を生成
+cd ../frontend
+npm run generate:api
+```
+
+#### package.json スクリプト
+```json
+{
+  "scripts": {
+    "generate:api": "openapi-typescript http://localhost:8000/api/schema/ -o src/types/api.d.ts",
+    "generate:api:local": "openapi-typescript ../backend/schema.yml -o src/types/api.d.ts"
+  }
+}
+```
+
+---
+
+### CI/CD統合
+
+#### ワークフローの流れ
+```
+1. Backend Test Workflow
+   ├─ テスト実行
+   ├─ python manage.py spectacular
+   └─ schema.yml をアーティファクトとして保存
+
+2. Frontend Test Workflow
+   ├─ schema.yml をダウンロード
+   ├─ openapi-typescript で型生成
+   ├─ 型定義の差分チェック
+   ├─ TypeScriptコンパイル
+   ├─ テスト実行
+   └─ ビルド
+```
+
+#### 型定義の差分検出
+```yaml
+# .github/workflows/reusable-frontend-test.yml
+
+- name: Check API Types Sync
+  run: |
+    if git diff --exit-code frontend/src/types/api.d.ts; then
+      echo "✅ API types are up to date"
+    else
+      echo "⚠️ API types changed"
+      # Productionでは厳密にチェック
+      if [ "${{ inputs.environment }}" == "production" ]; then
+        exit 1
+      fi
+    fi
+```
+
+---
+
+### Swagger UI
+
+#### アクセス方法
+
+開発環境でのみSwagger UIが利用可能です：
+```
+開発環境: http://localhost:8000/api/docs/
+本番環境: 非公開（スキーマエンドポイントのみ）
+```
+
+#### 設定
+```python
+# backend/config/urls.py
+
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularSwaggerView,
+)
+
+urlpatterns = [
+    # スキーマエンドポイント（常に有効）
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+]
+
+# 開発環境のみSwagger UIを有効化
+if settings.DEBUG:
+    urlpatterns += [
+        path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    ]
+```
+
+---
+
+### トラブルシューティング
+
+#### 型定義が更新されない
+```bash
+# スキーマを再生成
+cd backend
+python manage.py spectacular --color --file schema.yml
+
+# 型定義を再生成
+cd ../frontend
+npm run generate:api:local
+```
+
+#### CI/CDで型定義エラー
+```bash
+# ローカルで型チェック
+cd frontend
+npx tsc --noEmit
+
+# エラーがある場合は型定義を更新
+npm run generate:api:local
+git add src/types/api.d.ts
+git commit -m "chore: update API types"
+```
+
+#### Swagger UIでCookie認証が動作しない
+
+Swagger UIはCookie認証のテストに制限があります。以下の方法を推奨：
+
+- ✅ Postman/Insomnia（Cookieサポートあり）
+- ✅ フロントエンドアプリケーション
+- ✅ curl コマンド（--cookie オプション使用）
+
+---
+
+### 詳細ドキュメント
+
+OpenAPI統合の詳細については、以下のドキュメントを参照してください。
+
+- **[docs/openapi-integration.md](docs/openapi-integration.md)** - OpenAPI統合詳細ガイド
+  - スキーマ定義のベストプラクティス
+  - 共通エラーレスポンスの管理
+  - CI/CD統合の詳細
+  - トラブルシューティング
 
 ---
 
