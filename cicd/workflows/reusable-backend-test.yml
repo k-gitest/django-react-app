@@ -7,13 +7,6 @@ on:
         description: Environment name (staging/production)
         required: true
         type: string
-      """
-      debug-mode:
-        description: Django DEBUG setting
-        required: false
-        type: string
-        default: 'True'
-      """
       strict-mode:
         description: Fail on linting errors
         required: false
@@ -145,6 +138,36 @@ jobs:
           flags: backend-${{ inputs.environment }}
           name: backend-${{ inputs.environment }}-coverage
         continue-on-error: true
+
+      # ===== OpenAPIスキーマ生成 =====
+      - name: Generate OpenAPI Schema
+        run: |
+          cd backend
+          python manage.py spectacular --color --file schema.yml
+          
+          # スキーマが正しく生成されたか確認
+          if [ ! -f schema.yml ]; then
+            echo "❌ Schema generation failed"
+            exit 1
+          fi
+          
+          echo "✅ OpenAPI schema generated successfully"
+          echo "Schema size: $(du -h schema.yml | cut -f1)"
+      
+      - name: Validate OpenAPI Schema
+        uses: char0n/swagger-editor-validate@v1
+        with:
+          definition-file: backend/schema.yml
+        continue-on-error: true
+      
+      # スキーマをアーティファクトとしてアップロード
+      - name: Upload OpenAPI Schema
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-schema-${{ github.sha }}
+          path: backend/schema.yml
+          retention-days: 1
+          if-no-files-found: error  # ファイルがない場合はエラー
 
   security:
     name: Security Check

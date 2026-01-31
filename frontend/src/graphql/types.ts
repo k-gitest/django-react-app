@@ -197,3 +197,75 @@ export interface DeleteTodoMutation {
 export interface BulkIndexTodosMutation {
   bulkIndexTodos: BulkIndexResult;
 }
+
+// ============================================================================
+// User Types
+// ============================================================================
+
+export interface UserType {
+  __typename: 'UserType';
+  id: number;
+  email: string;
+  firstName: string;
+  lastName: string;
+  isStaff: boolean;
+  dateJoined: string;
+}
+
+export interface AuthPayload {
+  __typename: 'AuthPayload';
+  user: UserType;
+  message: string;
+}
+
+// ============================================================================
+// Input Types (User)
+// ============================================================================
+
+export interface RegisterInput {
+  email: string;
+  password: string;
+  passwordConfirm: string;
+  firstName?: string;
+  lastName?: string;
+}
+
+export interface LoginInput {
+  email: string;
+  password: string;
+}
+
+// ============================================================================
+// Result Union Types (User)
+// ============================================================================
+
+export type AuthResult =
+  | AuthPayload
+  | ValidationError
+  | ConflictError
+  | InternalError;
+
+export type LogoutResult =
+  | Success
+  | AuthenticationError
+  | InternalError;
+
+// ============================================================================
+// Query/Mutation Response Types (User)
+// ============================================================================
+
+export interface GetMeQuery {
+  me: UserType | null;
+}
+
+export interface RegisterMutation {
+  register: AuthResult;
+}
+
+export interface LoginMutation {
+  login: AuthResult;
+}
+
+export interface LogoutMutation {
+  logout: LogoutResult;
+}

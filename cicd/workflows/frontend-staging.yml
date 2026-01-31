@@ -5,20 +5,33 @@ on:
     branches: [develop]
     paths:
       - 'frontend/**'
+      - 'backend/apps/**/serializers.py'  # API変更を検知
+      - 'backend/apps/**/views.py'
+      - 'backend/apps/**/rest_schemas.py'  # スキーマ定義変更を検知
       - '.github/workflows/frontend-staging.yml'
       - '.github/workflows/reusable-frontend-test.yml'
+      - '.github/workflows/reusable-schema-gen.yml'
   pull_request:
     branches: [develop]
-    paths: ['frontend/**']
+    paths: 
+      - 'frontend/**'
+      - 'backend/apps/**/serializers.py'
+      - 'backend/apps/**/views.py'
+      - 'backend/apps/**/rest_schemas.py'
 
 jobs:
-  # バックエンドのコードから最新の型を取得
-  generate-schema:
-    uses: ./.github/workflows/reusable-schema-gen.yml
+  # スキーマ生成（バックエンドのテストを実行してスキーマを生成）
+  backend-test:
+    uses: ./.github/workflows/reusable-backend-test.yml
+    with:
+      environment: staging
+      strict-mode: false
+      coverage-threshold: 60
+    secrets: inherit
 
   test:
     name: Test (Staging)
-    needs: generate-schema # 型ができてから実行
+    needs: backend-test # 型ができてから実行
     uses: ./.github/workflows/reusable-frontend-test.yml
     with:
       environment: staging

@@ -169,11 +169,12 @@ Django/React モノレポベースのSPAアプリケーション
 ├── frontend/                   # Reactフロントエンド
 │   ├── src/
 │   │   ├── features/          # 機能単位のディレクトリ（今後追加）
-│   │   │   └── auth/         # 認証機能
-│   │   │       ├── components/
-│   │   │       ├── hooks/
-│   │   │       ├── services/
-│   │   │       └── types/
+│   │   │   ├── auth/          # 認証機能
+│   │   │   │   ├── components/
+│   │   │   │   ├── hooks/
+│   │   │   │   ├── services/
+│   │   │   │   └── types/
+│   │   │   └── todos/         # Todo機能
 │   │   │
 │   │   ├── components/        # 共通コンポーネント
 │   │   │   ├── form/          # フォーム関連
@@ -194,11 +195,29 @@ Django/React モノレポベースのSPAアプリケーション
 │   │   ├── hooks/             # 共通カスタムフック
 │   │   ├── lib/               # ユーティリティ・クライアント
 │   │   │   ├── api-client.ts  # Kyベースのクライアント
-│   │   │   ├── auth-client.ts
+│   │   │   ├── graphql-client.ts
+│   │   │   ├── ky-client.ts
 │   │   │   └── queryClient.ts
 │   │   ├── schemas/           # Zodスキーマ
 │   │   ├── types/             # TypeScript型定義
 │   │   ├── errors/            # エラーハンドリング
+│   │   │    ├── api-errors.ts
+│   │   │    ├── error-handlers.ts
+│   │   │    ├── network-error.ts
+│   │   │    ├── validation-error.ts
+│   │   │    └── error-baundary.tsx
+│   │   │
+│   │   ├── graphql/           # graphql設定管理
+│   │   │    ├── fragments/
+│   │   │    │    ├── todo.ts
+│   │   │    │    └── user.ts
+│   │   │    ├── queries/
+│   │   │    │    ├── todo.ts
+│   │   │    │    └── user.ts
+│   │   │    ├── mutations/
+│   │   │    │    ├── todo.ts
+│   │   │    │    └── user.ts
+│   │   │    └── types.ts       # GraphQL型定義
 │   │   ├── App.tsx
 │   │   └── main.tsx
 │   │

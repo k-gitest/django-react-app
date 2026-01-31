@@ -27,28 +27,96 @@ jobs:
     name: Prepare API Types
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
       - name: Setup Node.js
         uses: ./.github/actions/setup-node
         with:
           working-directory: frontend
 
-      # バックエンドからスキーマを抽出
-      - name: Export Schema
-        run: |
-          # 例: docker-compose run backend python manage.py export_schema > schema.yaml
-          # モノレポなので直接ファイルを指定できるならそれでもOK
-          cp ../backend/schema.yaml ./frontend/schema.yaml 
+      # バックエンドのスキーマをダウンロード
+      - name: Download OpenAPI Schema
+        uses: actions/download-artifact@v4
+        with:
+          name: openapi-schema-${{ github.sha }}
+          path: .  # ルートディレクトリにダウンロード
 
-      - name: Generate Types
-        run: npx openapi-typescript ./schema.yaml -o ./src/types/api.d.ts
+      # スキーマの存在確認
+      - name: Verify Schema Download
+        run: |
+          if [ ! -f schema.yml ]; then
+            echo "❌ Schema file not found after download"
+            echo "Contents of current directory:"
+            ls -la
+            exit 1
+          fi
+          echo "✅ Schema file found"
+          echo "Schema size: $(du -h schema.yml | cut -f1)"
+
+      # ===== TypeScript型定義を生成 =====
+      - name: Generate TypeScript Types
+        run: |
+          npx openapi-typescript ../schema.yml -o src/types/api.d.ts
+          
+          # 型定義が正しく生成されたか確認
+          if [ ! -f src/types/api.d.ts ]; then
+            echo "❌ TypeScript types generation failed"
+            exit 1
+          fi
+          
+          echo "✅ TypeScript types generated successfully"
+          echo "Types file size: $(du -h src/types/api.d.ts | cut -f1)"
         working-directory: frontend
 
+      # 型定義の差分チェック
+      - name: Check API Types Sync
+        run: |
+          cd frontend
+          
+          if git diff --exit-code src/types/api.d.ts; then
+            echo "✅ API types are up to date" | tee -a $GITHUB_STEP_SUMMARY
+          else
+            echo "### 🔄 API Types Changed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "The following types were updated from the OpenAPI schema:" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "<details>" >> $GITHUB_STEP_SUMMARY
+            echo "<summary>View Diff</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`diff" >> $GITHUB_STEP_SUMMARY
+            git diff src/types/api.d.ts >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+            
+            # Productionでは厳密にチェック
+            if [ "${{ inputs.environment }}" == "production" ] && [ "${{ inputs.strict-mode }}" == "true" ]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "❌ **Error:** API types must be committed before production deployment" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "Please run: \`npm run generate:api\` and commit the changes" >> $GITHUB_STEP_SUMMARY
+              exit 1
+            fi
+            
+            # Stagingでは警告のみ
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ **Warning:** Consider updating the committed types by running:" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+            echo "npm run generate:api" >> $GITHUB_STEP_SUMMARY
+            echo "git add src/types/api.d.ts" >> $GITHUB_STEP_SUMMARY
+            echo "git commit -m 'chore: update API types'" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          fi
+        continue-on-error: ${{ inputs.environment == 'staging' }}
+
+      # 生成した型定義をアップロード
       - name: Upload Generated Types
         uses: actions/upload-artifact@v4
         with:
           name: api-types-${{ github.sha }}
           path: frontend/src/types/api.d.ts
+          retention-days: 1
+          if-no-files-found: error
 
   lint:
     needs: prepare-types
@@ -61,6 +129,8 @@ jobs:
       
       - name: Setup Node.js
         uses: ./.github/actions/setup-node
+        with:
+          working-directory: frontend
 
       - name: Download Types
         uses: actions/download-artifact@v4
@@ -179,11 +249,19 @@ jobs:
           echo "✅ Build successful"
           echo "Build size: $(du -sh frontend/dist | cut -f1)"
           
+          # Productionビルドの検証
           if [ "${{ inputs.environment }}" == "production" ]; then
-            if find frontend/dist -name "*.map" | grep -q .; then
+            if find dist -name "*.map" | grep -q .; then
               echo "⚠️  Warning: Source maps found in production build"
             fi
+            
+            # index.htmlの存在確認
+            if [ ! -f "dist/index.html" ]; then
+              echo "❌ index.html not found in build output"
+              exit 1
+            fi
           fi
+        working-directory: frontend
       
       - name: Upload build artifacts
         if: inputs.environment == 'production' || inputs.environment == 'staging'
@@ -192,6 +270,7 @@ jobs:
           name: frontend-${{ inputs.environment }}-build-${{ github.sha }}
           path: frontend/dist
           retention-days: 30
+          if-no-files-found: error
 
   security:
     name: Security Audit
