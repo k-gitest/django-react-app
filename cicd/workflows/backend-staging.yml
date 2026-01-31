@@ -20,6 +20,7 @@ jobs:
       debug-mode: 'True'  # Stagingでは詳細ログを有効化
       strict-mode: false  # 警告のみ
       coverage-threshold: 60  # Stagingは60%
+    secrets: inherit # GraphQLエンドポイントにアクセスするため
 
   deploy-notification:
     name: Deployment Notification

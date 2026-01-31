@@ -8,6 +8,7 @@ on:
       - 'backend/apps/**/serializers.py'  # API変更を検知
       - 'backend/apps/**/views.py'
       - 'backend/apps/**/rest_schemas.py'  # スキーマ定義変更を検知
+      - 'backend/apps/graphql_api/**'
       - '.github/workflows/frontend-staging.yml'
       - '.github/workflows/reusable-frontend-test.yml'
       - '.github/workflows/reusable-schema-gen.yml'
