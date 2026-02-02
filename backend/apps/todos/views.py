@@ -6,6 +6,7 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.request import Request
+from drf_spectacular.utils import extend_schema
 
 from apps.common.permissions import IsQStashAuthenticated
 from apps.common.error_decorators import log_webhook_call
@@ -234,7 +235,28 @@ class TodoViewSet(viewsets.ModelViewSet):
 
 # ===== Webhook エンドポイント（QStash専用） =====
 
-
+@extend_schema(
+    summary="[内部API] Todoベクトルインデックス作成",
+    description="QStashから呼ばれる内部エンドポイント",
+    request={
+        'type': 'object',
+        'properties': {
+            'todo_id': {'type': 'integer'},
+            'operation': {'type': 'string', 'enum': ['create', 'update', 'delete']},
+        }
+    },
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'message': {'type': 'string'},
+                'vector_id': {'type': 'string'},
+            }
+        },
+    },
+    tags=['Internal', 'Webhooks'],
+    exclude=True
+)
 @api_view(["POST"])
 @permission_classes([IsQStashAuthenticated])
 @log_webhook_call("vector_indexing")
@@ -255,7 +277,27 @@ def vector_indexing_webhook(request: Request) -> Response:
     
     return Response(result)
 
-
+@extend_schema(
+    summary="[内部API] Todo一括ベクトルインデックス作成",
+    description="QStashから呼ばれる内部エンドポイント",
+    request={
+        'type': 'object',
+        'properties': {
+            'user_id': {'type': 'integer'},
+        }
+    },
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'message': {'type': 'string'},
+                'indexed_count': {'type': 'integer'},
+            }
+        },
+    },
+    tags=['Internal', 'Webhooks'],
+    exclude=True
+)
 @api_view(["POST"])
 @permission_classes([IsQStashAuthenticated])
 @log_webhook_call("bulk_vector_indexing")

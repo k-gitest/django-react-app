@@ -3,7 +3,7 @@ import logging
 from django.conf import settings
 from django.utils.decorators import method_decorator
 from django_ratelimit.decorators import ratelimit
-from rest_framework import status
+from rest_framework import status, serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -188,7 +188,6 @@ class CustomRegisterView(RegisterView):
             **cookie_settings,
         )
 
-
 class CustomLogoutView(LogoutView):
     """
     カスタムログアウトビュー
@@ -199,22 +198,25 @@ class CustomLogoutView(LogoutView):
     エラーハンドリング:
         - 分析ログエラー: ErrorMonitor.capture_and_continueで隔離
     """
+
+    serializer_class = serializers.Serializer
     
-    @AuthSchemas.logout
-    def logout(self, request):
+    @AuthSchemas.logout 
+    def post(self, request, *args, **kwargs):
         """
         ログアウト処理
         
         ログアウト前にユーザーを特定して分析ログを記録。
         エラーは統一エラーハンドラーが処理。
         """
+
         # ログアウト前にユーザーを特定して記録
         user = getattr(request, "user", None)
         if user and user.is_authenticated:
             # 分析ログのエラーは UserAuthService._log_analytics_safely で隔離
             UserAuthService.handle_logout(request)
         
-        return super().logout(request)
+        return super().post(request, *args, **kwargs)
 
 
 # ============================================================================

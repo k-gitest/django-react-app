@@ -1,4 +1,4 @@
-from drf_spectacular.utils import extend_schema, OpenApiParameter
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
 from apps.common.rest_schemas import CommonSchemas
 from .serializers import TodoSerializer
 
@@ -10,8 +10,25 @@ class TodoSchemas:
         description="ログインユーザーに紐づくTodoアイテムの一覧を取得します。",
         responses={
             200: TodoSerializer(many=True),
-            **CommonSchemas.COMMON_RESPONSES
+            401: {
+                'type': 'object',
+                'properties': {
+                    'error': {'type': 'string'},
+                    'detail': {'type': 'string'},
+                }
+            },
         },
+        examples=[
+            OpenApiExample(
+                'Unauthorized',
+                value={
+                    'error': 'authentication_failed',
+                    'detail': '認証情報が提供されていません。'
+                },
+                response_only=True,
+                status_codes=['401'],
+            ),
+        ],
         tags=['Todos']
     )
     
@@ -25,9 +42,25 @@ class TodoSchemas:
         request=TodoSerializer,
         responses={
             201: TodoSerializer,
-            400: CommonSchemas.ERROR_400,
-            **CommonSchemas.COMMON_RESPONSES
+            400: {
+                'type': 'object',
+                'properties': {
+                    'error': {'type': 'string'},
+                    'detail': {'type': 'string'},
+                }
+            },
         },
+        examples=[
+            OpenApiExample(
+                'Validation Error',
+                value={
+                    'error': 'validation_error',
+                    'detail': 'リクエストデータが不正です',
+                },
+                response_only=True,
+                status_codes=['400'],
+            ),
+        ],
         tags=['Todos']
     )
     
@@ -35,9 +68,21 @@ class TodoSchemas:
         summary="Todo詳細取得",
         description="指定されたIDのTodoアイテムの詳細を取得します。",
         responses={
-            200: TodoSerializer,
-            404: CommonSchemas.ERROR_404,
-            **CommonSchemas.COMMON_RESPONSES
+            200: TodoSerializer,  # ✅ Serializerはそのまま使える
+            401: {  # ✅ 型定義に変更
+                'type': 'object',
+                'properties': {
+                    'error': {'type': 'string'},
+                    'detail': {'type': 'string'},
+                }
+            },
+            404: {  # ✅ 型定義に変更
+                'type': 'object',
+                'properties': {
+                    'error': {'type': 'string'},
+                    'detail': {'type': 'string'},
+                }
+            },
         },
         tags=['Todos']
     )
@@ -52,9 +97,20 @@ class TodoSchemas:
         request=TodoSerializer,
         responses={
             200: TodoSerializer,
-            400: CommonSchemas.ERROR_400,
-            404: CommonSchemas.ERROR_404,
-            **CommonSchemas.COMMON_RESPONSES
+            400: {
+                'type': 'object',
+                'properties': {
+                    'error': {'type': 'string'},
+                    'detail': {'type': 'string'},
+                }
+            },
+            404: {
+                'type': 'object',
+                'properties': {
+                    'error': {'type': 'string'},
+                    'detail': {'type': 'string'},
+                }
+            },
         },
         tags=['Todos']
     )
@@ -69,9 +125,20 @@ class TodoSchemas:
         request=TodoSerializer,
         responses={
             200: TodoSerializer,
-            400: CommonSchemas.ERROR_400,
-            404: CommonSchemas.ERROR_404,
-            **CommonSchemas.COMMON_RESPONSES
+            400: {
+                'type': 'object',
+                'properties': {
+                    'error': {'type': 'string'},
+                    'detail': {'type': 'string'},
+                }
+            },
+            404: {
+                'type': 'object',
+                'properties': {
+                    'error': {'type': 'string'},
+                    'detail': {'type': 'string'},
+                }
+            },
         },
         tags=['Todos']
     )
@@ -84,9 +151,14 @@ class TodoSchemas:
         削除後、非同期でベクトルインデックスからも削除されます（QStash経由）。
         """,
         responses={
-            204: None,
-            404: CommonSchemas.ERROR_404,
-            **CommonSchemas.COMMON_RESPONSES
+            204: None,  # ✅ 204はNone
+            404: {
+                'type': 'object',
+                'properties': {
+                    'error': {'type': 'string'},
+                    'detail': {'type': 'string'},
+                }
+            },
         },
         tags=['Todos']
     )
@@ -100,12 +172,11 @@ class TodoSchemas:
                 'items': {
                     'type': 'object',
                     'properties': {
-                        'priority': {'type': 'string', 'enum': ['HIGH', 'MEDIUM', 'LOW']},
+                        'priority': {'type': 'string'},
                         'count': {'type': 'integer'},
                     }
                 }
             },
-            **CommonSchemas.COMMON_RESPONSES
         },
         tags=['Todos', 'Statistics']
     )
@@ -124,7 +195,6 @@ class TodoSchemas:
                     'range_81_100': {'type': 'integer'},
                 }
             },
-            **CommonSchemas.COMMON_RESPONSES
         },
         tags=['Todos', 'Statistics']
     )
@@ -171,19 +241,29 @@ class TodoSchemas:
                             'type': 'object',
                             'properties': {
                                 'id': {'type': 'integer'},
-                                'score': {'type': 'number', 'format': 'float'},
-                                'title': {'type': 'string'},
-                                'priority': {'type': 'string', 'enum': ['HIGH', 'MEDIUM', 'LOW']},
-                                'progress': {'type': 'integer'},
+                                'score': {'type': 'number'},
+                                'todo_title': {'type': 'string'},
                             }
                         }
                     },
                     'count': {'type': 'integer'},
                 }
             },
-            400: CommonSchemas.ERROR_400,
-            **CommonSchemas.COMMON_RESPONSES
         },
+        examples=[
+            OpenApiExample(
+                'Success',
+                value={
+                    'query': '明日の会議',
+                    'results': [
+                        {'id': 1, 'score': 0.95, 'todo_title': '会議資料作成'}
+                    ],
+                    'count': 1
+                },
+                response_only=True,
+                status_codes=['200'],
+            ),
+        ],
         tags=['Todos', 'Search']
     )
     
@@ -201,10 +281,16 @@ class TodoSchemas:
                 'type': 'object',
                 'properties': {
                     'message': {'type': 'string'},
-                    'status': {'type': 'string', 'enum': ['queued']},
+                    'status': {'type': 'string'},
                 }
             },
-            **CommonSchemas.COMMON_RESPONSES
+            401: {  # ✅ 型定義に変更
+                'type': 'object',
+                'properties': {
+                    'error': {'type': 'string'},
+                    'detail': {'type': 'string'},
+                }
+            },
         },
         tags=['Todos', 'Indexing']
     )

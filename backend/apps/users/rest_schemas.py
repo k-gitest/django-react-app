@@ -30,16 +30,39 @@ class AuthSchemas:
                     'user': {
                         'type': 'object',
                         'properties': {
-                            'pk': {'type': 'integer', 'description': 'ユーザーID'},
+                            'id': {'type': 'integer', 'description': 'ユーザーID'},
                             'email': {'type': 'string', 'format': 'email'},
                             'first_name': {'type': 'string'},
                             'last_name': {'type': 'string'},
-                        }
+                            'is_staff': {'type': 'boolean'},
+                        },
+                        'required': ['pk', 'email', 'is_staff'],
                     },
                     'access': {'type': 'string', 'description': 'アクセストークン（Cookieにも設定される）'},
                     'refresh': {'type': 'string', 'description': 'リフレッシュトークン（Cookieにも設定される）'},
                 },
-                'example': {
+                'required': ['user', 'access', 'refresh'],
+            },
+            400: {
+                'type': 'object',
+                'properties': {
+                    'non_field_errors': {
+                        'type': 'array',
+                        'items': {'type': 'string'}
+                    }
+                }
+            },
+            429: {
+                'type': 'object',
+                'properties': {
+                    'detail': {'type': 'string'}
+                }
+            },
+        },
+        examples=[  # ✅ 例はexamplesパラメータで指定
+            OpenApiExample(
+                'Success',
+                value={
                     'user': {
                         'pk': 1,
                         'email': 'user@example.com',
@@ -48,18 +71,27 @@ class AuthSchemas:
                     },
                     'access': 'eyJ0eXAiOiJKV1QiLCJhbGc...',
                     'refresh': 'eyJ0eXAiOiJKV1QiLCJhbGc...'
-                }
-            },
-            400: OpenApiExample(
-                'Bad Request',
+                },
+                response_only=True,
+                status_codes=['200'],
+            ),
+            OpenApiExample(
+                'Bad Request - Invalid Credentials',
                 value={
                     'non_field_errors': ['メールアドレスまたはパスワードが正しくありません。']
                 },
                 response_only=True,
+                status_codes=['400'],
             ),
-            429: CommonSchemas.ERROR_429,
-            **CommonSchemas.COMMON_RESPONSES
-        },
+            OpenApiExample(
+                'Too Many Requests',
+                value={
+                    'detail': 'リクエストが多すぎます。しばらく時間を置いてから再度お試しください。'
+                },
+                response_only=True,
+                status_codes=['429'],
+            ),
+        ],
         tags=['Authentication']
     )
     
@@ -99,7 +131,26 @@ class AuthSchemas:
                     'access': {'type': 'string', 'description': 'アクセストークン（Cookieにも設定される）'},
                     'refresh': {'type': 'string', 'description': 'リフレッシュトークン（Cookieにも設定される）'},
                 },
-                'example': {
+            },
+            400: {
+                'type': 'object',
+                'properties': {
+                    'error': {'type': 'string'},
+                    'detail': {'type': 'string'},
+                    'data': {'type': 'object'},
+                }
+            },
+            429: {
+                'type': 'object',
+                'properties': {
+                    'detail': {'type': 'string'}
+                }
+            },
+        },
+        examples=[
+            OpenApiExample(
+                'Success',
+                value={
                     'user': {
                         'pk': 1,
                         'email': 'user@example.com',
@@ -108,9 +159,11 @@ class AuthSchemas:
                     },
                     'access': 'eyJ0eXAiOiJKV1QiLCJhbGc...',
                     'refresh': 'eyJ0eXAiOiJKV1QiLCJhbGc...'
-                }
-            },
-            400: OpenApiExample(
+                },
+                response_only=True,
+                status_codes=['201'],
+            ),
+            OpenApiExample(
                 'User Already Exists',
                 value={
                     'error': 'user_already_exists',
@@ -118,10 +171,17 @@ class AuthSchemas:
                     'data': {'field': 'email'}
                 },
                 response_only=True,
+                status_codes=['400'],
             ),
-            429: CommonSchemas.ERROR_429,
-            **CommonSchemas.COMMON_RESPONSES
-        },
+            OpenApiExample(
+                'Too Many Requests',
+                value={
+                    'detail': 'リクエストが多すぎます。'
+                },
+                response_only=True,
+                status_codes=['429'],
+            ),
+        ],
         tags=['Authentication']
     )
     
@@ -142,14 +202,37 @@ class AuthSchemas:
         """,
         request=None,
         responses={
-            200: OpenApiExample(
+            200: {
+                'type': 'object',
+                'properties': {
+                    'detail': {'type': 'string'}
+                }
+            },
+            401: {
+                'type': 'object',
+                'properties': {
+                    'error': {'type': 'string'},
+                    'detail': {'type': 'string'},
+                }
+            },
+        },
+        examples=[
+            OpenApiExample(
                 'Success',
                 value={'detail': 'ログアウトしました。'},
                 response_only=True,
+                status_codes=['200'],
             ),
-            401: CommonSchemas.ERROR_401,
-            **CommonSchemas.COMMON_RESPONSES
-        },
+            OpenApiExample(
+                'Unauthorized',
+                value={
+                    'error': 'authentication_failed',
+                    'detail': '認証情報が提供されていません。'
+                },
+                response_only=True,
+                status_codes=['401'],
+            ),
+        ],
         tags=['Authentication']
     )
 
@@ -180,37 +263,71 @@ class UserWebhookSchemas:
                 'type': 'object',
                 'properties': {
                     'message': {'type': 'string'},
-                    'message_id': {'type': 'string', 'description': 'ResendのメッセージID'},
-                },
-                'example': {
-                    'message': 'Email sent successfully',
-                    'message_id': 're_abc123xyz'
+                    'message_id': {'type': 'string'},
                 }
             },
-            400: OpenApiExample(
+            400: {
+                'type': 'object',
+                'properties': {
+                    'email': {
+                        'type': 'array',
+                        'items': {'type': 'string'}
+                    },
+                    'first_name': {
+                        'type': 'array',
+                        'items': {'type': 'string'}
+                    },
+                }
+            },
+            401: {
+                'type': 'object',
+                'properties': {
+                    'detail': {'type': 'string'}
+                }
+            },
+            500: {
+                'type': 'object',
+                'properties': {
+                    'error': {'type': 'string'},
+                    'detail': {'type': 'string'},
+                }
+            },
+        },
+        examples=[
+            OpenApiExample(
+                'Success',
+                value={
+                    'message': 'Email sent successfully',
+                    'message_id': 're_abc123xyz'
+                },
+                response_only=True,
+                status_codes=['200'],
+            ),
+            OpenApiExample(
                 'Bad Request',
                 value={
                     'email': ['この項目は必須です。'],
                     'first_name': ['この項目は必須です。']
                 },
                 response_only=True,
+                status_codes=['400'],
             ),
-            401: OpenApiExample(
+            OpenApiExample(
                 'Unauthorized',
-                value={
-                    'detail': 'QStash署名検証に失敗しました。'
-                },
+                value={'detail': 'QStash署名検証に失敗しました。'},
                 response_only=True,
+                status_codes=['401'],
             ),
-            500: OpenApiExample(
+            OpenApiExample(
                 'Internal Server Error',
                 value={
                     'error': 'email_delivery_error',
                     'detail': 'メール送信に失敗しました。'
                 },
                 response_only=True,
+                status_codes=['500'],
             ),
-        },
+        ],
         tags=['Internal', 'Webhooks'],
         # ドキュメントから除外する場合は以下を追加
         # exclude=True

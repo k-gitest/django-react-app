@@ -40,6 +40,10 @@ class TodoQueryService:
         Returns:
             QuerySet[Todo]: ユーザーのTodoリスト
         """
+        # ユーザーが認証されていない（AnonymousUser）場合は、空のリストを返す
+        if not user or user.is_anonymous:
+            return Todo.objects.none()
+        
         return Todo.objects.filter(user=user)
     
     @staticmethod

@@ -1,0 +1,1474 @@
+openapi: 3.0.3
+info:
+  title: Django React App API
+  version: 1.0.0
+  description: Django/React モノレポベースのSPAアプリケーション
+paths:
+  /api/v1/auth/login/:
+    post:
+      operationId: auth_login_create
+      description: "\n        メールアドレスとパスワードでログインします。\n        \n        **機能:**\n
+        \       - HttpOnly CookieにJWTトークンを設定\n        - ログイン履歴を記録（MotherDuck Analytics）\n
+        \       \n        **レート制限:** 5回/5分\n        \n        **成功時の動作:**\n        1.
+        アクセストークン（5分間有効）をCookieに設定\n        2. リフレッシュトークン（1日間有効）をCookieに設定\n        3.
+        ログインイベントをMotherDuckに記録\n        "
+      summary: ログイン
+      tags:
+      - Authentication
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
+      security:
+      - jwtHeaderAuth: []
+      - jwtCookieAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                        description: ユーザーID
+                      email:
+                        type: string
+                        format: email
+                      first_name:
+                        type: string
+                      last_name:
+                        type: string
+                      is_staff:
+                        type: boolean
+                    required:
+                    - pk
+                    - email
+                    - is_staff
+                  access:
+                    type: string
+                    description: アクセストークン（Cookieにも設定される）
+                  refresh:
+                    type: string
+                    description: リフレッシュトークン（Cookieにも設定される）
+                required:
+                - user
+                - access
+                - refresh
+              examples:
+                Success:
+                  value:
+                    user:
+                      pk: 1
+                      email: user@example.com
+                      first_name: John
+                      last_name: Doe
+                    access: eyJ0eXAiOiJKV1QiLCJhbGc...
+                    refresh: eyJ0eXAiOiJKV1QiLCJhbGc...
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  non_field_errors:
+                    type: array
+                    items:
+                      type: string
+              examples:
+                BadRequest-InvalidCredentials:
+                  value:
+                    non_field_errors:
+                    - メールアドレスまたはパスワードが正しくありません。
+                  summary: Bad Request - Invalid Credentials
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+              examples:
+                TooManyRequests:
+                  value:
+                    detail: リクエストが多すぎます。しばらく時間を置いてから再度お試しください。
+                  summary: Too Many Requests
+          description: ''
+  /api/v1/auth/logout/:
+    get:
+      operationId: auth_logout_retrieve
+      description: |-
+        カスタムログアウトビュー
+
+        機能:
+            - 分析ログ記録（MotherDuck）
+
+        エラーハンドリング:
+            - 分析ログエラー: ErrorMonitor.capture_and_continueで隔離
+      tags:
+      - auth
+      security:
+      - jwtHeaderAuth: []
+      - jwtCookieAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: auth_logout_create
+      description: "\n        ログアウトし、JWTトークンをブラックリスト化します。\n        \n        **機能:**\n
+        \       - リフレッシュトークンをブラックリスト化（再利用不可）\n        - Cookieからトークンを削除\n        -
+        ログアウトイベントを記録（MotherDuck Analytics）\n        \n        **成功時の動作:**\n        1.
+        リフレッシュトークンをブラックリストに追加\n        2. アクセストークン・リフレッシュトークンのCookieを削除\n        3.
+        ログアウトイベントをMotherDuckに記録\n        "
+      summary: ログアウト
+      tags:
+      - Authentication
+      security:
+      - jwtHeaderAuth: []
+      - jwtCookieAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+              examples:
+                Success:
+                  value:
+                    detail: ログアウトしました。
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  detail:
+                    type: string
+              examples:
+                Unauthorized:
+                  value:
+                    error: authentication_failed
+                    detail: 認証情報が提供されていません。
+          description: ''
+  /api/v1/auth/password/change/:
+    post:
+      operationId: auth_password_change_create
+      description: |-
+        Calls Django Auth SetPasswordForm save method.
+
+        Accepts the following POST parameters: new_password1, new_password2
+        Returns the success/fail message.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordChangeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PasswordChangeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PasswordChangeRequest'
+        required: true
+      security:
+      - jwtHeaderAuth: []
+      - jwtCookieAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestAuthDetail'
+          description: ''
+  /api/v1/auth/password/reset/:
+    post:
+      operationId: auth_password_reset_create
+      description: |-
+        Calls Django Auth PasswordResetForm save method.
+
+        Accepts the following POST parameters: email
+        Returns the success/fail message.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+        required: true
+      security:
+      - jwtHeaderAuth: []
+      - jwtCookieAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestAuthDetail'
+          description: ''
+  /api/v1/auth/password/reset/confirm/:
+    post:
+      operationId: auth_password_reset_confirm_create
+      description: |-
+        Password reset e-mail link is confirmed, therefore
+        this resets the user's password.
+
+        Accepts the following POST parameters: token, uid,
+            new_password1, new_password2
+        Returns the success/fail message.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetConfirmRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PasswordResetConfirmRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PasswordResetConfirmRequest'
+        required: true
+      security:
+      - jwtHeaderAuth: []
+      - jwtCookieAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestAuthDetail'
+          description: ''
+  /api/v1/auth/registration/:
+    post:
+      operationId: auth_registration_create
+      description: |-
+        カスタム登録ビュー
+
+        機能:
+            - レート制限（3回/1時間）
+            - JWT Cookie自動発行
+            - ウェルカムメール送信（QStash経由、非同期）
+            - 分析ログ記録（MotherDuck、非同期）
+
+        エラーハンドリング:
+            - メールアドレス重複: UserAlreadyExistsError → 統一エラーハンドラーが処理
+            - ウェルカムメール送信エラー: ErrorMonitor.capture_and_continueで隔離
+            - 分析ログエラー: ErrorMonitor.capture_and_continueで隔離
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomRegisterRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CustomRegisterRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CustomRegisterRequest'
+        required: true
+      security:
+      - jwtHeaderAuth: []
+      - jwtCookieAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomRegister'
+          description: ''
+  /api/v1/auth/send-welcome-email:
+    post:
+      operationId: auth_send_welcome_email_create
+      description: "\n        QStashから呼ばれる内部エンドポイント。直接呼び出し不可。\n        \n        **セキュリティ:**\n
+        \       - QStash署名検証（HMAC-SHA256）\n        - IPアドレス制限なし（署名のみで認証）\n        \n
+        \       **リトライ:**\n        - QStashが自動リトライ（最大3回）\n        - 5秒、10秒、15秒の間隔\n
+        \       \n        **エラー時の動作:**\n        - 500エラー: QStashが自動リトライ\n        -
+        400エラー: リトライなし（データ不正）\n        "
+      summary: '[内部API] ウェルカムメール送信'
+      tags:
+      - Internal
+      - Webhooks
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WelcomeEmailWebhookRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/WelcomeEmailWebhookRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/WelcomeEmailWebhookRequest'
+        required: true
+      security:
+      - jwtHeaderAuth: []
+      - jwtCookieAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  message_id:
+                    type: string
+              examples:
+                Success:
+                  value:
+                    message: Email sent successfully
+                    message_id: re_abc123xyz
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  email:
+                    type: array
+                    items:
+                      type: string
+                  first_name:
+                    type: array
+                    items:
+                      type: string
+              examples:
+                BadRequest:
+                  value:
+                    email:
+                    - この項目は必須です。
+                    first_name:
+                    - この項目は必須です。
+                  summary: Bad Request
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+              examples:
+                Unauthorized:
+                  value:
+                    detail: QStash署名検証に失敗しました。
+          description: ''
+        '500':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  detail:
+                    type: string
+              examples:
+                InternalServerError:
+                  value:
+                    error: email_delivery_error
+                    detail: メール送信に失敗しました。
+                  summary: Internal Server Error
+          description: ''
+  /api/v1/auth/token/refresh/:
+    post:
+      operationId: auth_token_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/v1/auth/token/verify/:
+    post:
+      operationId: auth_token_verify_create
+      description: |-
+        Takes a token and indicates if it is valid.  This view provides no
+        information about a token's fitness for a particular use.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenVerifyRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenVerifyRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenVerifyRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/user/:
+    get:
+      operationId: auth_user_retrieve
+      description: |-
+        Reads and updates UserModel fields
+        Accepts GET, PUT, PATCH methods.
+
+        Default accepted fields: username, first_name, last_name
+        Default display fields: pk, username, email, first_name, last_name
+        Read-only fields: pk, email
+
+        Returns UserModel fields.
+      tags:
+      - auth
+      security:
+      - jwtHeaderAuth: []
+      - jwtCookieAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomUser'
+          description: ''
+    put:
+      operationId: auth_user_update
+      description: |-
+        Reads and updates UserModel fields
+        Accepts GET, PUT, PATCH methods.
+
+        Default accepted fields: username, first_name, last_name
+        Default display fields: pk, username, email, first_name, last_name
+        Read-only fields: pk, email
+
+        Returns UserModel fields.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomUserRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CustomUserRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CustomUserRequest'
+      security:
+      - jwtHeaderAuth: []
+      - jwtCookieAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomUser'
+          description: ''
+    patch:
+      operationId: auth_user_partial_update
+      description: |-
+        Reads and updates UserModel fields
+        Accepts GET, PUT, PATCH methods.
+
+        Default accepted fields: username, first_name, last_name
+        Default display fields: pk, username, email, first_name, last_name
+        Read-only fields: pk, email
+
+        Returns UserModel fields.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCustomUserRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedCustomUserRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedCustomUserRequest'
+      security:
+      - jwtHeaderAuth: []
+      - jwtCookieAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomUser'
+          description: ''
+  /api/v1/todos/:
+    get:
+      operationId: todos_list
+      description: ログインユーザーに紐づくTodoアイテムの一覧を取得します。
+      summary: Todoリスト取得
+      tags:
+      - Todos
+      security:
+      - jwtHeaderAuth: []
+      - jwtCookieAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Todo'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  detail:
+                    type: string
+              examples:
+                Unauthorized:
+                  value:
+                    error: authentication_failed
+                    detail: 認証情報が提供されていません。
+          description: ''
+    post:
+      operationId: todos_create
+      description: "\n        新しいTodoアイテムを作成します。\n        \n        作成後、非同期でベクトルインデックスに追加されます（QStash経由）。\n
+        \       "
+      summary: Todo作成
+      tags:
+      - Todos
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TodoRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TodoRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TodoRequest'
+        required: true
+      security:
+      - jwtHeaderAuth: []
+      - jwtCookieAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Todo'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  detail:
+                    type: string
+              examples:
+                ValidationError:
+                  value:
+                    error: validation_error
+                    detail: リクエストデータが不正です
+                  summary: Validation Error
+          description: ''
+  /api/v1/todos/{id}/:
+    get:
+      operationId: todos_retrieve
+      description: 指定されたIDのTodoアイテムの詳細を取得します。
+      summary: Todo詳細取得
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this todo.
+        required: true
+      tags:
+      - Todos
+      security:
+      - jwtHeaderAuth: []
+      - jwtCookieAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Todo'
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  detail:
+                    type: string
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  detail:
+                    type: string
+          description: ''
+    put:
+      operationId: todos_update
+      description: "\n        指定されたIDのTodoアイテムを更新します。\n        \n        更新後、非同期でベクトルインデックスが更新されます（QStash経由）。\n
+        \       "
+      summary: Todo更新（全体）
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this todo.
+        required: true
+      tags:
+      - Todos
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TodoRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TodoRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TodoRequest'
+        required: true
+      security:
+      - jwtHeaderAuth: []
+      - jwtCookieAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Todo'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  detail:
+                    type: string
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  detail:
+                    type: string
+          description: ''
+    patch:
+      operationId: todos_partial_update
+      description: "\n        指定されたIDのTodoアイテムの一部を更新します。\n        \n        更新後、非同期でベクトルインデックスが更新されます（QStash経由）。\n
+        \       "
+      summary: Todo更新（部分）
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this todo.
+        required: true
+      tags:
+      - Todos
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTodoRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedTodoRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedTodoRequest'
+      security:
+      - jwtHeaderAuth: []
+      - jwtCookieAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Todo'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  detail:
+                    type: string
+          description: ''
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  detail:
+                    type: string
+          description: ''
+    delete:
+      operationId: todos_destroy
+      description: "\n        指定されたIDのTodoアイテムを削除します。\n        \n        削除後、非同期でベクトルインデックスからも削除されます（QStash経由）。\n
+        \       "
+      summary: Todo削除
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this todo.
+        required: true
+      tags:
+      - Todos
+      security:
+      - jwtHeaderAuth: []
+      - jwtCookieAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+        '404':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  detail:
+                    type: string
+          description: ''
+  /api/v1/todos/bulk-index/:
+    post:
+      operationId: todos_bulk_index_create
+      description: "\n        既存のTodoをベクトルインデックスに一括追加します。\n        \n        非同期処理（QStash経由）でバックグラウンド実行されます。\n
+        \       初期データ投入やリインデックス時に使用。\n        "
+      summary: 一括ベクトルインデックス
+      tags:
+      - Todos
+      - Indexing
+      security:
+      - jwtHeaderAuth: []
+      - jwtCookieAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  status:
+                    type: string
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  detail:
+                    type: string
+          description: ''
+  /api/v1/todos/progress-stats/:
+    get:
+      operationId: todos_progress_stats_retrieve
+      description: 進捗率の分布を20%刻みで取得します。Redisキャッシュを使用（15分間）。
+      summary: 進捗分布統計
+      tags:
+      - Todos
+      - Statistics
+      security:
+      - jwtHeaderAuth: []
+      - jwtCookieAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  range_0_20:
+                    type: integer
+                  range_21_40:
+                    type: integer
+                  range_41_60:
+                    type: integer
+                  range_61_80:
+                    type: integer
+                  range_81_100:
+                    type: integer
+          description: ''
+  /api/v1/todos/search/:
+    get:
+      operationId: todos_search_retrieve
+      description: "\n        自然言語でTodoを検索します。\n        \n        Google Gemini APIによるベクトル検索を使用し、\n
+        \       「明日の会議関連」などの曖昧な検索が可能です。\n        "
+      summary: セマンティック検索
+      parameters:
+      - in: query
+        name: min_score
+        schema:
+          type: number
+          format: double
+        description: '最小類似度スコア（デフォルト: 0.5、範囲: 0.0-1.0）'
+      - in: query
+        name: q
+        schema:
+          type: string
+        description: '検索クエリ（例: "明日の会議関連"）'
+        required: true
+      - in: query
+        name: top_k
+        schema:
+          type: integer
+        description: '取得件数（デフォルト: 5、最大: 20）'
+      tags:
+      - Todos
+      - Search
+      security:
+      - jwtHeaderAuth: []
+      - jwtCookieAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  query:
+                    type: string
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                        score:
+                          type: number
+                        todo_title:
+                          type: string
+                  count:
+                    type: integer
+              examples:
+                Success:
+                  value:
+                    query: 明日の会議
+                    results:
+                    - id: 1
+                      score: 0.95
+                      todo_title: 会議資料作成
+                    count: 1
+          description: ''
+  /api/v1/todos/stats/:
+    get:
+      operationId: todos_stats_retrieve
+      description: 優先度ごとのTodo件数を取得します。Redisキャッシュを使用（15分間）。
+      summary: 優先度別統計
+      tags:
+      - Todos
+      - Statistics
+      security:
+      - jwtHeaderAuth: []
+      - jwtCookieAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    priority:
+                      type: string
+                    count:
+                      type: integer
+          description: ''
+  /api/v1/webhooks/send-welcome-email:
+    post:
+      operationId: webhooks_send_welcome_email_create
+      description: "\n        QStashから呼ばれる内部エンドポイント。直接呼び出し不可。\n        \n        **セキュリティ:**\n
+        \       - QStash署名検証（HMAC-SHA256）\n        - IPアドレス制限なし（署名のみで認証）\n        \n
+        \       **リトライ:**\n        - QStashが自動リトライ（最大3回）\n        - 5秒、10秒、15秒の間隔\n
+        \       \n        **エラー時の動作:**\n        - 500エラー: QStashが自動リトライ\n        -
+        400エラー: リトライなし（データ不正）\n        "
+      summary: '[内部API] ウェルカムメール送信'
+      tags:
+      - Internal
+      - Webhooks
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WelcomeEmailWebhookRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/WelcomeEmailWebhookRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/WelcomeEmailWebhookRequest'
+        required: true
+      security:
+      - jwtHeaderAuth: []
+      - jwtCookieAuth: []
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  message_id:
+                    type: string
+              examples:
+                Success:
+                  value:
+                    message: Email sent successfully
+                    message_id: re_abc123xyz
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  email:
+                    type: array
+                    items:
+                      type: string
+                  first_name:
+                    type: array
+                    items:
+                      type: string
+              examples:
+                BadRequest:
+                  value:
+                    email:
+                    - この項目は必須です。
+                    first_name:
+                    - この項目は必須です。
+                  summary: Bad Request
+          description: ''
+        '401':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+              examples:
+                Unauthorized:
+                  value:
+                    detail: QStash署名検証に失敗しました。
+          description: ''
+        '500':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  detail:
+                    type: string
+              examples:
+                InternalServerError:
+                  value:
+                    error: email_delivery_error
+                    detail: メール送信に失敗しました。
+                  summary: Internal Server Error
+          description: ''
+components:
+  schemas:
+    CustomRegister:
+      type: object
+      description: |-
+        emailベース認証用のカスタム登録シリアライザ
+
+        - usernameフィールドを削除（emailを主キーとして使用）
+        - first_name/last_nameフィールドを追加
+        - サービス層経由でユーザー作成
+
+        エラーハンドリング:
+            - メールアドレス重複: UserAlreadyExistsError → 統一エラーハンドラーが処理
+            - その他のエラー: 統一エラーハンドラーが処理
+      properties:
+        email:
+          type: string
+          format: email
+        first_name:
+          type: string
+          description: ユーザーの名
+          maxLength: 150
+        last_name:
+          type: string
+          description: ユーザーの姓
+          maxLength: 150
+      required:
+      - email
+    CustomRegisterRequest:
+      type: object
+      description: |-
+        emailベース認証用のカスタム登録シリアライザ
+
+        - usernameフィールドを削除（emailを主キーとして使用）
+        - first_name/last_nameフィールドを追加
+        - サービス層経由でユーザー作成
+
+        エラーハンドリング:
+            - メールアドレス重複: UserAlreadyExistsError → 統一エラーハンドラーが処理
+            - その他のエラー: 統一エラーハンドラーが処理
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+        password1:
+          type: string
+          writeOnly: true
+          minLength: 1
+        password2:
+          type: string
+          writeOnly: true
+          minLength: 1
+        first_name:
+          type: string
+          description: ユーザーの名
+          maxLength: 150
+        last_name:
+          type: string
+          description: ユーザーの姓
+          maxLength: 150
+      required:
+      - email
+      - password1
+      - password2
+    CustomUser:
+      type: object
+      description: |-
+        現在のユーザー情報を返すシリアライザ
+
+        読み取り専用フィールド:
+            - id: ユーザーID
+            - email: メールアドレス
+            - is_staff: スタッフ権限
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+          title: メールアドレス
+        first_name:
+          type: string
+          title: 名
+          maxLength: 150
+        last_name:
+          type: string
+          title: 姓
+          maxLength: 150
+        is_staff:
+          type: boolean
+          readOnly: true
+          title: スタッフ権限
+          description: ユーザーが管理サイトにログイン可能かどうかを示します。
+      required:
+      - email
+      - id
+      - is_staff
+    CustomUserRequest:
+      type: object
+      description: |-
+        現在のユーザー情報を返すシリアライザ
+
+        読み取り専用フィールド:
+            - id: ユーザーID
+            - email: メールアドレス
+            - is_staff: スタッフ権限
+      properties:
+        first_name:
+          type: string
+          title: 名
+          maxLength: 150
+        last_name:
+          type: string
+          title: 姓
+          maxLength: 150
+    LoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+      required:
+      - password
+    PasswordChangeRequest:
+      type: object
+      properties:
+        new_password1:
+          type: string
+          minLength: 1
+          maxLength: 128
+        new_password2:
+          type: string
+          minLength: 1
+          maxLength: 128
+      required:
+      - new_password1
+      - new_password2
+    PasswordResetConfirmRequest:
+      type: object
+      description: Serializer for confirming a password reset attempt.
+      properties:
+        new_password1:
+          type: string
+          minLength: 1
+          maxLength: 128
+        new_password2:
+          type: string
+          minLength: 1
+          maxLength: 128
+        uid:
+          type: string
+          minLength: 1
+        token:
+          type: string
+          minLength: 1
+      required:
+      - new_password1
+      - new_password2
+      - token
+      - uid
+    PasswordResetRequest:
+      type: object
+      description: Serializer for requesting a password reset e-mail.
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+      required:
+      - email
+    PatchedCustomUserRequest:
+      type: object
+      description: |-
+        現在のユーザー情報を返すシリアライザ
+
+        読み取り専用フィールド:
+            - id: ユーザーID
+            - email: メールアドレス
+            - is_staff: スタッフ権限
+      properties:
+        first_name:
+          type: string
+          title: 名
+          maxLength: 150
+        last_name:
+          type: string
+          title: 姓
+          maxLength: 150
+    PatchedTodoRequest:
+      type: object
+      description: |-
+        Todoの作成・更新用シリアライザー
+
+        - userはread_only（API側でログインユーザーを自動紐付け）
+        - バリデーションエラーは統一エラーハンドラーで処理
+      properties:
+        todo_title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        priority:
+          $ref: '#/components/schemas/PriorityEnum'
+        progress:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+    PriorityEnum:
+      enum:
+      - LOW
+      - MEDIUM
+      - HIGH
+      type: string
+      description: |-
+        * `LOW` - 低
+        * `MEDIUM` - 中
+        * `HIGH` - 高
+    RestAuthDetail:
+      type: object
+      properties:
+        detail:
+          type: string
+          readOnly: true
+      required:
+      - detail
+    Todo:
+      type: object
+      description: |-
+        Todoの作成・更新用シリアライザー
+
+        - userはread_only（API側でログインユーザーを自動紐付け）
+        - バリデーションエラーは統一エラーハンドラーで処理
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        user:
+          type: string
+          format: email
+          title: メールアドレス
+          readOnly: true
+        todo_title:
+          type: string
+          maxLength: 255
+        priority:
+          $ref: '#/components/schemas/PriorityEnum'
+        progress:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - todo_title
+      - updated_at
+      - user
+    TodoRequest:
+      type: object
+      description: |-
+        Todoの作成・更新用シリアライザー
+
+        - userはread_only（API側でログインユーザーを自動紐付け）
+        - バリデーションエラーは統一エラーハンドラーで処理
+      properties:
+        todo_title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        priority:
+          $ref: '#/components/schemas/PriorityEnum'
+        progress:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+      required:
+      - todo_title
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+      required:
+      - access
+      - refresh
+    TokenRefreshRequest:
+      type: object
+      properties:
+        refresh:
+          type: string
+          minLength: 1
+      required:
+      - refresh
+    TokenVerifyRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          writeOnly: true
+          minLength: 1
+      required:
+      - token
+    WelcomeEmailWebhookRequest:
+      type: object
+      description: |-
+        ウェルカムメール送信Webhookのペイロードバリデーション
+
+        QStashから呼ばれるWebhook用のバリデーター
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+        first_name:
+          type: string
+          minLength: 1
+          maxLength: 150
+      required:
+      - email
+      - first_name
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    jwtCookieAuth:
+      type: apiKey
+      in: cookie
+      name: access-token
+    jwtHeaderAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

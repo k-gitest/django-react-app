@@ -2,6 +2,7 @@ import logging
 
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
+from drf_spectacular.utils import extend_schema
 
 from apps.common.permissions import IsQStashAuthenticated
 from apps.common.error_decorators import log_webhook_call
@@ -12,7 +13,28 @@ from .services import AnalyticsWebhookService
 
 logger = logging.getLogger(__name__)
 
-
+@extend_schema(
+    summary="[内部API] 分析イベント記録",
+    description="QStashから呼ばれる内部エンドポイント",
+    request={
+        'type': 'object',
+        'properties': {
+            'event_type': {'type': 'string'},
+            'user_id': {'type': 'integer'},
+            'event_data': {'type': 'object'},
+        }
+    },
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'message': {'type': 'string'},
+            }
+        },
+    },
+    tags=['Internal', 'Webhooks'],
+    exclude=True  # 公開ドキュメントから除外
+)
 @api_view(["POST"])
 @permission_classes([IsQStashAuthenticated])
 @log_webhook_call(webhook_name="analytics_event")
