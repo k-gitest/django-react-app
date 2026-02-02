@@ -37,7 +37,7 @@ export const CREATE_TODO = gql`
  */
 export const UPDATE_TODO = gql`
   ${TODO_FRAGMENT}
-  mutation UpdateTodo($id: GlobalID!, $input: TodoUpdateInput!) {
+  mutation UpdateTodo($id: ID!, $input: TodoUpdateInput!) {
     updateTodo(id: $id, input: $input) {
       __typename
       ... on TodoType {
@@ -67,7 +67,7 @@ export const UPDATE_TODO = gql`
  * Todo削除
  */
 export const DELETE_TODO = gql`
-  mutation DeleteTodo($id: GlobalID!) {
+  mutation DeleteTodo($id: ID!) {
     deleteTodo(id: $id) {
       __typename
       ... on Success {
