@@ -4,7 +4,7 @@ GraphQL User Query定義
 import strawberry
 from typing import Optional
 
-from apps.users.service import UserQueryService
+from apps.users.user_service import UserQueryService
 from apps.graphql_api.types.user import UserType
 from apps.graphql_api.types.common import AuthenticationError
 from apps.graphql_api.permissions import IsAuthenticated

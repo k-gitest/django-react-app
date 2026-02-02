@@ -6,6 +6,17 @@ from datetime import datetime
 from typing import Optional
 
 from apps.users.models import CustomUser
+from apps.graphql_api.types.common import (
+    ValidationError,
+    AuthenticationError,
+    AuthorizationError,
+    NotFoundError,
+    ConflictError,
+    RateLimitError,
+    ExternalServiceError,
+    InternalError,
+    Success,
+)
 
 
 # ============================================================================
@@ -121,12 +132,12 @@ class ChangePasswordInput:
 AuthResult = strawberry.union(
     "AuthResult",
     types=(
-        "AuthPayload",
-        "ValidationError",
-        "ConflictError",
-        "RateLimitError",
-        "ExternalServiceError",
-        "InternalError",
+        AuthPayload,
+        ValidationError,
+        ConflictError,
+        RateLimitError,
+        ExternalServiceError,
+        InternalError,
     )
 )
 
@@ -134,9 +145,7 @@ AuthResult = strawberry.union(
 LogoutResult = strawberry.union(
     "LogoutResult",
     types=(
-        "Success",
-        "AuthenticationError",
-        "InternalError",
+        Success, AuthenticationError, InternalError,
     )
 )
 
@@ -144,9 +153,6 @@ LogoutResult = strawberry.union(
 ChangePasswordResult = strawberry.union(
     "ChangePasswordResult",
     types=(
-        "Success",
-        "ValidationError",
-        "AuthenticationError",
-        "InternalError",
+        Success, ValidationError, AuthenticationError, InternalError,
     )
 )

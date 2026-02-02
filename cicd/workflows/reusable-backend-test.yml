@@ -155,13 +155,29 @@ jobs:
           fi
           
           echo "✅ OpenAPI schema generated successfully"
-          echo "Schema size: $(du -h schema.yml | cut -f1)"
+          echo "OpenAPI schema size: $(du -h schema.yml | cut -f1)"
+          echo "GraphQL schema size: $(du -h schema.graphql | cut -f1)"
       
+      # Open APIスキーマバリデーション
       - name: Validate OpenAPI Schema
         uses: char0n/swagger-editor-validate@v1
         with:
           definition-file: backend/schema.yml
         continue-on-error: true
+
+      # GraphQLスキーマバリデーション
+    - name: Validate GraphQL Schema
+      run: |
+        cd backend
+        pip install graphql-core
+        
+        python -c "
+        from graphql import build_schema
+        with open('schema.graphql') as f:
+            schema = build_schema(f.read())
+        print('✅ GraphQL schema is valid')
+        "
+      continue-on-error: true
       
       # スキーマをアーティファクトとしてアップロード
       - name: Upload OpenAPI Schema

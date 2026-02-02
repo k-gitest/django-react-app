@@ -12,9 +12,10 @@
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui --project=chromium --project=auth_chromium --ui-host=0.0.0.0",
     "e2e:debug": "playwright test --debug",
-    "codegen": "graphql-codegen",
-    "codegen:watch": "graphql-codegen --watch",
-    "generate:api": "openapi-typescript http://localhost:8000/api/schema/ -o src/types/api.d.ts"
+    "generate:graphql": "graphql-codegen --config codegen.yml",
+    "generate:api": "openapi-typescript http://localhost:8000/api/schema/ -o src/types/api.d.ts",
+    "generate:api:local": "openapi-typescript ../backend/schema.yml -o src/types/api.d.ts",
+    "generate:types": "npm run generate:api:local && npm run generate:graphql:local"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -56,6 +57,8 @@
     "@eslint/js": "^9.39.1",
     "@graphql-codegen/cli": "^5.0.3",
     "@graphql-codegen/client-preset": "^4.5.1",
+    "@graphql-codegen/typescript": "^5.0.7",
+    "@graphql-codegen/typescript-operations": "^5.0.7",
     "@playwright/test": "^1.57.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",

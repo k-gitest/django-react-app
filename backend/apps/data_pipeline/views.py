@@ -2,6 +2,7 @@ import logging
 
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
+from drf_spectacular.utils import extend_schema
 
 from apps.common.permissions import IsQStashAuthenticated
 from apps.common.error_decorators import log_webhook_call
@@ -10,7 +11,22 @@ from .services import DltPipelineService
 
 logger = logging.getLogger(__name__)
 
-
+@extend_schema(
+    summary="[内部API] DLTパイプライン実行",
+    description="QStashから呼ばれる内部エンドポイント",
+    request=None,
+    responses={
+        200: {
+            'type': 'object',
+            'properties': {
+                'message': {'type': 'string'},
+                'pipeline_result': {'type': 'object'},
+            }
+        },
+    },
+    tags=['Internal', 'Webhooks'],
+    exclude=True
+)
 @api_view(["POST"])
 @permission_classes([IsQStashAuthenticated])
 @log_webhook_call(webhook_name="dlt_pipeline")

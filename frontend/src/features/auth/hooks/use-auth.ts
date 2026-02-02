@@ -9,6 +9,7 @@ import { useAuthStore } from '@/hooks/use-session-store';
 import { useApiMutation } from '@/hooks/use-tanstack-query';
 import { useNavigate } from 'react-router-dom';
 import { queryClient } from '@/lib/queryClient';
+import type { ApiRes } from '@/types/api-utils';
 
 /**
  * 認証関連の操作を提供するカスタムフック
@@ -24,6 +25,7 @@ export const useAuth = () => {
 
   // 成功時の型
   type SuccessType = TokenResponse;
+  type LoginRes = ApiRes<"/api/v1/auth/login/", "post">;
   // エラー時の型
   type ErrorType = Error | ApiError;
 
@@ -50,7 +52,7 @@ export const useAuth = () => {
   });
 
   // --- 2. サインイン用 ---
-  const signInMutation = useApiMutation<SuccessType, ErrorType, { data: Account }>({
+  const signInMutation = useApiMutation<LoginRes, ErrorType, { data: Account }>({
     mutationFn: ({ data }) => loginService(data),
     onSuccess: async (data) => {
       // 単純に以下のinvalidateだと結構待つので先にレスポンスからユーザー情報をセットする

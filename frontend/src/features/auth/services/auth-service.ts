@@ -1,5 +1,6 @@
 import { apiClient } from '@/lib/api-client';
 import type { Account, TokenResponse, UserInfo } from '../types/auth';
+import type { ApiRes, ApiReq } from '@/types/api-utils';
 
 /**
  * ユーザー情報取得
@@ -31,13 +32,12 @@ export const fetchMe = async (): Promise<UserInfo> => {
  * @throws {ApiError} 500 - サーバーエラー
  * @throws {NetworkError} ネットワークエラー
  */
-export const loginService = async (credentials: Account): Promise<TokenResponse> => {
-  return apiClient.post('auth/login/', {
-    json: {
-      email: credentials.email,
-      password: credentials.password,
-    },
-  }).json<TokenResponse>();
+export const loginService = async (
+  credentials: ApiReq<"/api/v1/auth/login/", "post">
+): Promise<ApiRes<"/api/v1/auth/login/", "post">> => {
+  return apiClient
+    .post('api/v1/auth/login/', { json: credentials })
+    .json<ApiRes<"/api/v1/auth/login/", "post">>();
 };
 
 /**

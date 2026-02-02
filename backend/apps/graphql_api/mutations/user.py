@@ -8,7 +8,7 @@ from django.conf import settings
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.users.service import UserRegistrationService
+from apps.users.user_service import UserRegistrationService
 from apps.users.models import CustomUser
 from apps.graphql_api.types.user import (
     AuthPayload,
@@ -261,7 +261,7 @@ class UserMutation:
             return validation_errors[0]
         
         # パスワード変更
-        from apps.users.service import UserCommandService
+        from apps.users.user_service import UserCommandService
         UserCommandService.change_password(user, input.new_password)
         
         return Success(message="パスワードを変更しました")
