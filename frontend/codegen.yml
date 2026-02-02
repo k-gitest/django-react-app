@@ -1,4 +1,9 @@
-schema: ../schema.graphql
+schema: 
+  - ../schema.graphql
+  - | # 仮想的にスカラー定義を追加
+      scalar GlobalID
+      scalar DateTime
+      scalar Date
 documents: 'src/graphql/**/*.ts'
 generates:
   src/graphql/types.ts:
@@ -12,3 +17,7 @@ generates:
       withComponent: false
       scalars:
         DateTime: string
+        GlobalID: string
+        Date: string
+      # ✅ enum ではなく type Priority = 'HIGH' | 'LOW' ... 形式で出力する
+      enumsAsTypes: true

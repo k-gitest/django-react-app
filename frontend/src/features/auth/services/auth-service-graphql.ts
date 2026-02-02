@@ -8,7 +8,7 @@ import type {
   LogoutMutation,
   RegisterInput,
   LoginInput,
-  UserType,
+  //UserType,
   AuthPayload,
 } from '@/graphql/types';
 import type { Account, TokenResponse, UserInfo } from '../types/auth';
@@ -102,6 +102,7 @@ export const logoutServiceGraphQL = async (): Promise<void> => {
 /**
  * GraphQL UserType → UserInfo に変換
  */
+/*
 function graphqlUserToUserInfo(graphqlUser: UserType): UserInfo {
   return {
     id: graphqlUser.id,
@@ -111,7 +112,21 @@ function graphqlUserToUserInfo(graphqlUser: UserType): UserInfo {
     is_staff: graphqlUser.isStaff,
   };
 }
-
+*/
+function graphqlUserToUserInfo(
+  graphqlUser: 
+    | NonNullable<GetMeQuery['me']> 
+    | Extract<LoginMutation['login'], { __typename: 'AuthPayload' }>['user']
+): UserInfo {
+  // ここで graphqlUser が確実に id, email 等を持つ型として扱えるようになります
+  return {
+    id: Number(graphqlUser.id),
+    email: graphqlUser.email,
+    is_staff: graphqlUser.isStaff,
+    first_name: graphqlUser.firstName ?? undefined,
+    last_name: graphqlUser.lastName ?? undefined,
+  };
+}
 /**
  * GraphQL AuthPayload → TokenResponse に変換
  */

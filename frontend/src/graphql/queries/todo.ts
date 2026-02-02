@@ -18,7 +18,7 @@ export const GET_TODOS = gql`
  */
 export const GET_TODO = gql`
   ${TODO_FRAGMENT}
-  query GetTodo($id: GlobalID!) {
+  query GetTodo($id: ID!) {
     todo(id: $id) {
       ...TodoFields
     }

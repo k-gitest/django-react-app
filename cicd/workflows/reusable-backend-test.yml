@@ -146,7 +146,8 @@ jobs:
           # OpenAPI
           python manage.py spectacular --color --file schema.yml
           # GraphQL
-          python manage.py graphql_schema --out schema.graphql
+          # python manage.py graphql_schema --out schema.graphql
+          python manage.py export_schema apps.graphql_api.schema --path schema.graphql
           
           # スキーマが正しく生成されたか確認
           if [ ! -f schema.yml ] || [ ! -f schema.graphql ]; then

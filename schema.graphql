@@ -1,0 +1,275 @@
+type AuthPayload {
+  user: UserType!
+  message: String!
+  Authpayload_Typename: String!
+}
+
+union AuthResult = AuthPayload | ValidationError | ConflictError | RateLimitError | ExternalServiceError | InternalError
+
+type AuthenticationError {
+  category: ErrorCategory!
+  message: String!
+  code: String!
+  Authenticationerror_Typename: String!
+}
+
+type AuthorizationError {
+  category: ErrorCategory!
+  message: String!
+  code: String!
+  Authorizationerror_Typename: String!
+}
+
+input ChangePasswordInput {
+  """現在のパスワード"""
+  oldPassword: String!
+
+  """新しいパスワード"""
+  newPassword: String!
+
+  """新しいパスワード（確認）"""
+  newPasswordConfirm: String!
+}
+
+union ChangePasswordResult = Success | ValidationError | AuthenticationError | InternalError
+
+type ConflictError {
+  category: ErrorCategory!
+  message: String!
+  conflictingField: String
+  code: String!
+  Conflicterror_Typename: String!
+}
+
+"""Date with time (isoformat)"""
+scalar DateTime
+
+union DeleteResult = Success | AuthenticationError | AuthorizationError | NotFoundError | ExternalServiceError | InternalError
+
+enum ErrorCategory {
+  VALIDATION
+  AUTHENTICATION
+  AUTHORIZATION
+  NOT_FOUND
+  CONFLICT
+  RATE_LIMIT
+  EXTERNAL_SERVICE
+  INTERNAL
+}
+
+type ExternalServiceError {
+  category: ErrorCategory!
+  message: String!
+  serviceName: String
+  code: String!
+  Externalserviceerror_Typename: String!
+}
+
+type InternalError {
+  category: ErrorCategory!
+  message: String!
+  code: String!
+  debugInfo: String
+  Internalerror_Typename: String!
+}
+
+input LoginInput {
+  """メールアドレス"""
+  email: String!
+
+  """パスワード"""
+  password: String!
+}
+
+union LogoutResult = Success | AuthenticationError | InternalError
+
+type Mutation {
+  createTodo(input: TodoCreateInput!): TodoResult!
+  updateTodo(id: ID!, input: TodoUpdateInput!): TodoResult!
+  deleteTodo(id: ID!): DeleteResult!
+  bulkIndexTodos: SuccessExternalServiceErrorInternalError!
+  register(input: RegisterInput!): AuthResult!
+  login(input: LoginInput!): AuthResult!
+  logout: LogoutResult!
+  changePassword(input: ChangePasswordInput!): ChangePasswordResult!
+}
+
+"""An object with a Globally Unique ID"""
+interface Node {
+  """The Globally Unique ID of this object"""
+  id: ID!
+}
+
+type NotFoundError {
+  category: ErrorCategory!
+  message: String!
+  resourceType: String
+  resourceId: String
+  code: String!
+  Notfounderror_Typename: String!
+}
+
+"""Information to aid in pagination."""
+type PageInfo {
+  """When paginating forwards, are there more items?"""
+  hasNextPage: Boolean!
+
+  """When paginating backwards, are there more items?"""
+  hasPreviousPage: Boolean!
+
+  """When paginating backwards, the cursor to continue."""
+  startCursor: String
+
+  """When paginating forwards, the cursor to continue."""
+  endCursor: String
+}
+
+enum PriorityEnum {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+type PriorityStatsType {
+  priority: PriorityEnum!
+  count: Int!
+}
+
+type ProgressStatsType {
+  range020: Int!
+  range2140: Int!
+  range4160: Int!
+  range6180: Int!
+  range81100: Int!
+}
+
+type Query {
+  todos: [TodoType!]!
+  todosConnection(first: Int = 10, after: String = null): TodoConnection!
+  todo(id: ID!): TodoType
+  priorityStats: [PriorityStatsType!]!
+  progressStats: ProgressStatsType!
+  searchTodos(input: TodoSearchInput!): [SearchResultType!]!
+  me: UserType
+  user(id: Int!): UserType
+}
+
+type RateLimitError {
+  category: ErrorCategory!
+  message: String!
+  retryAfter: Int
+  code: String!
+  Ratelimiterror_Typename: String!
+}
+
+input RegisterInput {
+  """メールアドレス（ログインID）"""
+  email: String!
+
+  """パスワード（8文字以上）"""
+  password: String!
+
+  """パスワード確認"""
+  passwordConfirm: String!
+
+  """名"""
+  firstName: String = ""
+
+  """姓"""
+  lastName: String = ""
+}
+
+type SearchResultType {
+  id: Int!
+  todoTitle: String!
+  priority: PriorityEnum!
+  progress: Int!
+  score: Float!
+}
+
+type Success {
+  message: String!
+  success: Boolean!
+  Success_Typename: String!
+}
+
+union SuccessExternalServiceErrorInternalError = Success | ExternalServiceError | InternalError
+
+type TodoConnection {
+  pageInfo: PageInfo!
+  edges: [TodoEdge!]!
+
+  """ユーザーのTodo総数"""
+  totalCount: Int!
+}
+
+input TodoCreateInput {
+  """タスクのタイトル（1-200文字）"""
+  todoTitle: String!
+
+  """優先度"""
+  priority: PriorityEnum! = MEDIUM
+
+  """進捗率（0-100）"""
+  progress: Int! = 0
+}
+
+type TodoEdge {
+  """A cursor for use in pagination"""
+  cursor: String!
+  node: TodoType!
+}
+
+union TodoResult = TodoType | ValidationError | AuthenticationError | AuthorizationError | NotFoundError | ConflictError | ExternalServiceError | InternalError
+
+input TodoSearchInput {
+  """検索クエリ（自然言語）"""
+  query: String!
+
+  """返す結果数（1-100）"""
+  topK: Int! = 5
+
+  """最小類似度スコア（0.0-1.0）"""
+  minScore: Float! = 0.5
+}
+
+type TodoType implements Node {
+  id: ID!
+  todoTitle: String!
+  priority: PriorityEnum!
+  progress: Int!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+
+  """TodoのオーナーのEmailアドレス"""
+  userEmail: String!
+}
+
+input TodoUpdateInput {
+  """タスクのタイトル（1-200文字）"""
+  todoTitle: String = null
+
+  """優先度"""
+  priority: PriorityEnum = null
+
+  """進捗率（0-100）"""
+  progress: Int = null
+}
+
+type UserType {
+  id: Int!
+  email: String!
+  firstName: String!
+  lastName: String!
+  isStaff: Boolean!
+  dateJoined: DateTime!
+  fullName: String!
+}
+
+type ValidationError {
+  category: ErrorCategory!
+  message: String!
+  field: String
+  code: String!
+  Validationerror_Typename: String!
+}
