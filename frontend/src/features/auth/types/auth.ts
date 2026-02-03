@@ -41,10 +41,12 @@ export interface Account {
 // ============================================================================
 // 認証ストアの型定義（Cookie専用）
 // ============================================================================
+// GET /api/v1/auth/user/ の 200 OK レスポンスの型を抽出
+export type User = ApiRes<'/api/v1/auth/user/', 'get'>;
 export interface AuthState {
-  user: UserInfo | null;
+  user: User | null;
   isInitialized: boolean;
-  setUser: (user: UserInfo | null) => void;
+  setUser: (user: User | null) => void;
   logout: () => void;
   setInitialized: (value: boolean) => void;
 }

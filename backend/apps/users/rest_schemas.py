@@ -36,7 +36,7 @@ class AuthSchemas:
                             'last_name': {'type': 'string'},
                             'is_staff': {'type': 'boolean'},
                         },
-                        'required': ['pk', 'email', 'is_staff'],
+                        'required': ['id', 'email', 'is_staff'],
                     },
                     'access': {'type': 'string', 'description': 'アクセストークン（Cookieにも設定される）'},
                     'refresh': {'type': 'string', 'description': 'リフレッシュトークン（Cookieにも設定される）'},

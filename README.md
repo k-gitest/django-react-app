@@ -1782,6 +1782,265 @@ REDIS_URL=rediss://default:password@region.upstash.io:6379
 
 ---
 
+### 設計判断：openapi-typescriptを採用
+
+本プロジェクトでは、OpenAPIスキーマからTypeScript型を生成する際に、**openapi-typescript**を採用し、**Orval**は不採用としました。
+
+#### openapi-typescriptとは
+
+[openapi-typescript](https://github.com/drwpow/openapi-typescript)は、OpenAPIスキーマから**型定義のみ**を生成する軽量なツールです。
+
+| 機能 | 説明 |
+|------|------|
+| TypeScript型定義 | `paths`, `components`等の型を生成 |
+| シンプルな設計 | 型生成のみに特化 |
+| ゼロ依存 | 軽量で高速 |
+
+---
+
+#### Orvalとの比較
+
+[Orval](https://orval.dev/)は、OpenAPIスキーマから型定義だけでなく、APIクライアント、React Query hooks、MSWハンドラーを自動生成できる多機能ツールです。
+
+| 項目 | openapi-typescript（採用） | Orval |
+|------|--------------------------|-------|
+| **型定義** | ✅ 自動生成 | ✅ 自動生成 |
+| **APIクライアント** | ❌ 手動実装 | ✅ 自動生成（`postAuthLogin()`等） |
+| **React Query hooks** | ❌ 手動実装 | ✅ 自動生成（`useGetAuthUser()`等） |
+| **MSWハンドラー** | ❌ 手動実装 | ✅ 自動生成（Faker.js使用） |
+| **バンドルサイズ** | ⭐ 軽量 | やや重い |
+| **学習コスト** | ⭐ 低い | 中程度 |
+| **カスタマイズ性** | ⭐ 高い | 中程度 |
+
+---
+
+#### Orval不採用の理由
+
+##### 1. MSWハンドラーは「テストシナリオ」である
+
+Orvalが生成するMSWハンドラーは、Faker.jsを使ってランダムな値を返します：
+```typescript
+// ❌ Orval生成（ランダム値）
+export const getPostAuthLoginMockHandler = () => {
+  return http.post('**/auth/login/', () => {
+    return HttpResponse.json({
+      user: { 
+        id: faker.string.uuid(),        // ← 毎回違う値
+        email: faker.internet.email()   // ← 毎回違う値
+      }
+    })
+  })
+}
+```
+
+しかし、実際のテストでは**特定のシナリオ**を表現する必要があります：
+```typescript
+// ✅ 現在の実装（シナリオを明確に表現）
+export const authHandlers = [
+  http.post(`**/auth/login/`, async ({ request }) => {
+    const body = await request.json();
+    
+    // シナリオ1: 正常ログイン
+    if (body.email === 'test@example.com') {
+      return HttpResponse.json(mockToken, { status: 200 });
+    }
+    
+    // シナリオ2: パスワード間違い
+    if (body.password === 'wrong') {
+      return HttpResponse.json(
+        { detail: 'パスワードが正しくありません。' },
+        { status: 400 }
+      );
+    }
+    
+    // シナリオ3: レート制限
+    if (body.email === 'rate-limited@example.com') {
+      return HttpResponse.json(
+        { detail: 'リクエストが多すぎます。' },
+        { status: 429 }
+      );
+    }
+  }),
+];
+```
+
+**Orvalの問題点**:
+- ❌ エラーケース（401, 400, 429）を表現できない
+- ❌ 条件分岐（email/passwordによる挙動変更）ができない
+- ❌ 特定の値でアサーションできない
+- ❌ テストシナリオを明示的に表現できない
+
+---
+
+##### 2. 不要な中間層の増加
+
+Orvalを導入すると、レイヤードアーキテクチャに不要な中間層が増えます：
+```typescript
+// ❌ Orval導入後
+useAuth (Hook)
+  ↓
+auth-service (Service)
+  ↓
+postAuthLogin (Orval生成) ← 中間層
+  ↓
+customInstance (Mutator) ← さらに中間層
+  ↓
+apiClient (ky)
+  ↓
+Backend API
+
+// ✅ 現在の構成
+useAuth (Hook)
+  ↓
+auth-service (Service)
+  ↓
+apiClient (ky)
+  ↓
+Backend API
+```
+
+**問題点**:
+- ❌ デバッグが困難（中間層が多い）
+- ❌ リクエストボディの変換ロジックが不透明
+- ❌ エラーハンドリングが複雑化
+- ❌ カスタマイズが難しい
+
+現在の実装は明確で保守しやすい：
+```typescript
+// ✅ 現在の実装（明確）
+export const loginService = async (
+  credentials: ApiReq<"/api/v1/auth/login/", "post">
+): Promise<ApiRes<"/api/v1/auth/login/", "post">> => {
+  return apiClient.post('auth/login/', {
+    json: credentials,
+  }).json<ApiRes<"/api/v1/auth/login/", "post">>();
+};
+```
+
+---
+
+##### 3. 既存ツールとの重複
+
+本プロジェクトでは既に以下のツールを使用しており、Orvalと機能が重複します：
+
+| コンポーネント | 現在 | Orval導入後 |
+|--------------|------|------------|
+| HTTPクライアント | apiClient (ky) | customInstance + apiClient |
+| データフェッチ | TanStack Query | Orval生成hooks |
+| 型定義 | openapi-typescript | Orval生成型 |
+| MSWハンドラー | 手動実装（シナリオ明確） | Orval生成（ランダム値） |
+
+移行コストがメリットを上回りません。
+
+---
+
+##### 4. プロジェクトの設計哲学との不整合
+
+本プロジェクトは以下の原則を重視しています：
+
+| 原則 | openapi-typescript | Orval |
+|------|-------------------|-------|
+| シンプルで理解しやすい | ✅ 型定義のみ自動生成 | ❌ 多機能だがブラックボックス化 |
+| 適切な抽象化 | ✅ 必要最小限 | ❌ 過剰な自動化 |
+| チーム開発を想定 | ✅ 標準的なTS/React | ❌ Orval固有の知識が必要 |
+| 保守性 | ✅ コードが明確 | ❌ 生成コードの変更が困難 |
+
+---
+
+#### Orvalが有効なケース（本プロジェクトには該当しない）
+
+Orvalは以下のようなプロジェクトには有効です：
+
+| ケース | 理由 |
+|--------|------|
+| 巨大なAPI（100+ エンドポイント） | 手動実装のコストが高い |
+| 複数チームでの開発 | 統一されたAPIクライアントが必要 |
+| 短期プロジェクト | 開発速度を最優先 |
+| API仕様が頻繁に変わる | 手動更新が追いつかない |
+
+**本プロジェクトの状況**:
+- ✅ API数が少ない（auth, todos, webhooks）
+- ✅ 単一チーム（または個人開発）
+- ✅ 長期保守を重視
+- ✅ API仕様は安定している
+
+---
+
+#### 採用アプローチ：openapi-typescript + 手動実装
+
+本プロジェクトでは、以下の構成を採用しています：
+```
+openapi-typescript: 型定義のみ自動生成（シンプル）
+  ↓
+apiClient (ky): HTTP通信を薄くラップ
+  ↓
+auth-service: ビジネスロジックを集約
+  ↓
+useAuth (TanStack Query): データフェッチを制御
+  ↓
+MSWハンドラー: テストシナリオを明確に表現
+```
+
+**メリット**:
+- ✅ バックエンドのAPIスキーマと常に同期
+- ✅ 型エラーでスキーマ変更を検知
+- ✅ テストシナリオを細かく制御可能
+- ✅ IDEの補完が効く
+- ✅ デバッグが容易
+- ✅ 学習コストが低い
+
+---
+
+#### MSWハンドラーに型を適用
+
+手動実装のMSWハンドラーにも、OpenAPI生成型を適用することで型安全性を確保：
+```typescript
+// tests/mocks/handlers/auth.handlers.ts
+import type { components } from '@/types/api';
+
+type UserInfo = components['schemas']['UserDetails'];
+type TokenResponse = components['schemas']['TokenObtainPair'];
+
+export const mockUser: UserInfo = {
+  pk: 1,
+  email: 'test@example.com',
+  first_name: 'Test',
+  last_name: 'User',
+};
+
+export const mockToken: TokenResponse = {
+  access: 'access-token',
+  refresh: 'refresh-token',
+  user: mockUser,
+};
+
+export const authHandlers = [
+  http.get(`**/auth/user/`, () =>
+    HttpResponse.json(mockUser, { status: 200 })
+  ),
+
+  http.post(`**/auth/login/`, async ({ request }) => {
+    const body = await request.json();
+    
+    if (body.email === 'test@example.com' && body.password === 'password') {
+      return HttpResponse.json(mockToken, { status: 200 });
+    }
+    
+    return HttpResponse.json(
+      { detail: 'Invalid credentials' },
+      { status: 401 }
+    );
+  }),
+];
+```
+
+**これにより**:
+- ✅ バックエンドのスキーマ変更を型エラーで検知
+- ✅ モックデータの型安全性を確保
+- ✅ テストシナリオの表現力を維持
+
+---
+
 ### 技術スタック
 
 | コンポーネント | ツール | 用途 |
@@ -2117,6 +2376,14 @@ Swagger UIはCookie認証のテストに制限があります。以下の方法�
 - ✅ Postman/Insomnia（Cookieサポートあり）
 - ✅ フロントエンドアプリケーション
 - ✅ curl コマンド（--cookie オプション使用）
+
+#### ⚠️ スキーマ生成時の警告について
+
+`python manage.py spectacular` 実行時に、`dj-rest-auth` 関連のシリアライザーで警告（Warning）が出ることがあります。
+
+- **原因**: `dj-rest-auth` の内部ロジックが動的にシリアライザーを生成するため、`drf-spectacular` が一意の名前を特定できないことに起因します。
+- **対応**: この警告を解消するためにライブラリをラップすると、実行時の認証エラーを招くリスクがあるため、**「警告は許容し、生成された型の正確性を優先する」**方針をとっています。
+- **実害**: フロントエンドの型生成（`api.d.ts`）には影響ありません。
 
 ---
 

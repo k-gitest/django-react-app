@@ -56,7 +56,7 @@ paths:
                       is_staff:
                         type: boolean
                     required:
-                    - pk
+                    - id
                     - email
                     - is_staff
                   access:

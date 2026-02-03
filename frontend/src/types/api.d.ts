@@ -696,7 +696,7 @@ export interface operations {
                     "application/json": {
                         user: {
                             /** @description ユーザーID */
-                            id?: number;
+                            id: number;
                             /** Format: email */
                             email: string;
                             first_name?: string;
