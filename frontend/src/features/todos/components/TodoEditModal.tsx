@@ -16,7 +16,7 @@ export const TodoEditModal = ({ todo, open, onOpenChange }: TodoEditModalProps) 
   if (!todo) return null;
 
   const handleSubmit = async (values: TodoFormValues) => {
-    await updateTodo({ id: todo.id, data: values });
+    await updateTodo({ id: todo.id, ...values });
     onOpenChange(false);
   };
 

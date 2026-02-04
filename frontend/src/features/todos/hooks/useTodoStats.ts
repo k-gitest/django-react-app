@@ -8,6 +8,8 @@ type TodoStatsData = {
   fill: string;
 }[];
 
+//type StatsRes = Awaited<ReturnType<typeof todoService.getTodoStats>>;
+
 /*
 export const useTodoStats = () => {
   return useApiQuery<TodoStatsData>({
@@ -29,10 +31,11 @@ export const useTodoStats = () => {
     queryKey: ['todos', 'stats'],
     queryFn: async () => {
       const response = await todoService.getTodoStats();
-      return response.map(item => ({
-        priority: item.priority,
-        count: item.count,
-        fill: `var(--color-${item.priority.toLowerCase()})`
+      const safeResponse = response.data ?? [];
+      return safeResponse.map(item => ({
+        priority: item.priority ?? 'UNKNOWN',
+        count: item.count ?? 0,
+        fill: `var(--color-${(item.priority ?? 'unknown').toLowerCase()})`
       }));
     }
   });

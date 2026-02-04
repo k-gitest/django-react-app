@@ -32,7 +32,8 @@ export const TodoList = ({ showActions = true, limit }: { showActions?: boolean;
     }
   }, []);
 
-  const displayTodos = limit ? todos.slice(0, limit) : todos;
+  const safeTodos = todos?.data ?? [];
+  const displayTodos = limit ? safeTodos.slice(0, limit) : safeTodos;
 
   /*
   if (isLoading) {
@@ -54,7 +55,7 @@ export const TodoList = ({ showActions = true, limit }: { showActions?: boolean;
   }
   */
 
-  if (todos.length === 0) {
+  if (safeTodos.length === 0) {
     return <p className="text-center text-gray-500">まだタスクがありません。新しいタスクを追加しましょう！</p>;
   }
 

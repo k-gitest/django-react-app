@@ -19,8 +19,9 @@ export const todoService = {
     return await apiClient.POST('/api/v1/todos/', { body: data });
   },
 
-  updateTodo: async (id: number, data: UpdateTodoInput) => {
-    const res = await apiClient.PATCH('/api/v1/todos/{id}/', { params: { path: { id } }, body: data });
+  updateTodo: async (data: UpdateTodoInput) => {
+    const { id, ...body } = data;
+    const res = await apiClient.PATCH('/api/v1/todos/{id}/', { params: { path: { id } }, body: body });
     return res;
   },
 

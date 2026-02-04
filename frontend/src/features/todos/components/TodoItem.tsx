@@ -28,7 +28,7 @@ const PRIORITY_CONFIG: Record<Priority, {
 
 export const TodoItem = memo(({ todo, onToggleComplete, onEdit, onDelete, showActions = true }: TodoItemProps) => {
   const isCompleted = todo.progress === 100;
-  const priorityConfig = PRIORITY_CONFIG[todo.priority];
+  const priorityConfig = PRIORITY_CONFIG[todo.priority || 'MEDIUM'];
 
   return (
     <Card className="w-full">

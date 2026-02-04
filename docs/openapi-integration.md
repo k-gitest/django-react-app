@@ -269,7 +269,7 @@ Orvalは以下のようなプロジェクトには有効です：
 ```
 openapi-typescript: 型定義のみ自動生成（シンプル）
   ↓
-apiClient (ky): HTTP通信を薄くラップ
+apiClient: HTTP通信を薄くラップ
   ↓
 auth-service: ビジネスロジックを集約
   ↓
@@ -335,6 +335,35 @@ export const authHandlers = [
 - ✅ バックエンドのスキーマ変更を型エラーで検知
 - ✅ モックデータの型安全性を確保
 - ✅ テストシナリオの表現力を維持
+
+### HTTPクライアントの選択：openapi-fetch
+
+本プロジェクトでは、OpenAPI統合を最大限に活用するため、**openapi-fetch**を採用しています。
+
+#### 技術スタック
+
+| コンポーネント | 役割 |
+|--------------|------|
+| **drf-spectacular** | DjangoからOpenAPIスキーマを生成 |
+| **openapi-typescript** | スキーマからTypeScript型を生成 |
+| **openapi-fetch** | 型安全なHTTPクライアント |
+| **Middleware** | エラーハンドリング・ログ記録 |
+
+#### データフロー
+```
+1. Backend: drf-spectacular
+   ↓ schema.yml
+2. openapi-typescript
+   ↓ api.d.ts
+3. openapi-fetch
+   ↓ client.POST("/path", {...})
+4. Middleware
+   ↓ エラーハンドリング
+5. Service Layer
+   ↓ 型安全なAPIコール
+6. TanStack Query
+   ↓ リトライ・キャッシュ管理
+```
 
 ---
 
@@ -887,6 +916,7 @@ cat schema.yml
 #### 依存関係のインストール
 ```bash
 cd frontend
+npm install openapi-fetch
 npm install -D openapi-typescript
 ```
 
@@ -902,218 +932,287 @@ npm install -D openapi-typescript
 
 ---
 
-### 2. 型定義の生成
-```bash
-# バックエンドが起動している場合
-npm run generate:api
+### 2. クライアントのセットアップ
 
-# ローカルファイルから生成する場合
-npm run generate:api:local
-```
-
-生成される型定義：
+#### api-client.ts の作成
 ```typescript
-// frontend/src/types/api.d.ts（自動生成）
+// frontend/src/lib/api-client.ts
+import createClient, { type Middleware } from "openapi-fetch";
+import type { paths } from "@/types/api";
+import { BASE_API_URL } from "@/lib/constants";
+import { ApiError } from "@/errors/api-error";
+import { NetworkError } from "@/errors/network-error";
 
-export interface paths {
-  '/api/v1/todos/': {
-    get: {
-      responses: {
-        200: {
-          content: {
-            'application/json': components['schemas']['Todo'][];
-          };
-        };
-      };
-    };
-    post: {
-      requestBody: {
-        content: {
-          'application/json': components['schemas']['TodoRequest'];
-        };
-      };
-      responses: {
-        201: {
-          content: {
-            'application/json': components['schemas']['Todo'];
-          };
-        };
-      };
-    };
-  };
-}
+/**
+ * OpenAPI型付きクライアント
+ */
+export const client = createClient<paths>({
+  baseUrl: BASE_API_URL,
+  credentials: "include",
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
 
-export interface components {
-  schemas: {
-    Todo: {
-      id: number;
-      todo_title: string;
-      priority: 'HIGH' | 'MEDIUM' | 'LOW';
-      progress: number;
-      created_at: string;
-      updated_at: string;
-    };
-    TodoRequest: {
-      todo_title: string;
-      priority?: 'HIGH' | 'MEDIUM' | 'LOW';
-      progress?: number;
-    };
-  };
-}
+/**
+ * ログ出力ミドルウェア（開発時のみ）
+ */
+const loggerMiddleware: Middleware = {
+  async onRequest({ request }) {
+    if (import.meta.env.DEV) {
+      console.log(`🚀 [API] ${request.method} ${request.url}`);
+    }
+    return request;
+  },
+};
+
+/**
+ * HTTPエラーハンドリング (4xx, 5xx)
+ */
+const httpErrorMiddleware: Middleware = {
+  async onResponse({ response }) {
+    if (!response.ok) {
+      const errorBody = await response.clone().json().catch(() => null);
+      throw new ApiError(
+        response.status,
+        errorBody?.detail || errorBody?.message || response.statusText,
+        errorBody,
+        new Error(response.statusText)
+      );
+    }
+    return response;
+  },
+};
+
+/**
+ * 通信エラーハンドリング (オフライン, タイムアウト)
+ */
+const networkErrorMiddleware: Middleware = {
+  async onError({ error }) {
+    const message = error instanceof Error 
+      ? error.message 
+      : "ネットワークエラーが発生しました";
+    throw new NetworkError(message, error instanceof Error ? error : undefined);
+  },
+};
+
+// ミドルウェアの登録（上から順に適用）
+client.use(loggerMiddleware);
+client.use(httpErrorMiddleware);
+client.use(networkErrorMiddleware);
+
+export const apiClient = client;
 ```
 
 ---
 
-### 3. サービス層での型適用
-```typescript
-// frontend/src/features/todo/services/todo-service.ts
+### 3. 型ユーティリティ（オプション）
 
-import type { components } from '@/types/api';
+openapi-fetchでは基本的に型ユーティリティは不要ですが、既存のコードとの互換性のために残すこともできます：
+```typescript
+// frontend/src/types/api-utils.ts
+import type { paths } from './api';
+
+/**
+ * レスポンス型抽出（後方互換用）
+ * openapi-fetchでは不要だが、既存コードのために残す
+ */
+export type ApiRes
+  P extends keyof paths,
+  M extends keyof paths[P] & string
+> = paths[P][M] extends { responses: { 200: { content: { "application/json": infer T } } } }
+  ? T
+  : paths[P][M] extends { responses: { 201: { content: { "application/json": infer T } } } }
+  ? T
+  : void;
+
+/**
+ * リクエスト型抽出（後方互換用）
+ */
+export type ApiReq
+  P extends keyof paths,
+  M extends keyof paths[P] & string
+> = paths[P][M] extends { requestBody?: { content: { "application/json": infer T } } }
+  ? Exclude<T, undefined> 
+  : Record<string, never>;
+```
+
+**推奨**: 新規コードでは`ApiReq`/`ApiRes`を使わず、直接`paths`から型を取得してください。
+
+---
+
+### 4. サービス層の実装
+
+#### 基本的な実装
+```typescript
+// frontend/src/features/auth/services/auth-service.ts
 import { apiClient } from '@/lib/api-client';
 
-// OpenAPIから自動生成された型を使用
-type Todo = components['schemas']['Todo'];
-type TodoCreate = components['schemas']['TodoRequest'];
+/**
+ * ログイン
+ * 
+ * 型は完全に自動推論される
+ */
+export const loginService = async (credentials: {
+  email: string;
+  password: string;
+}) => {
+  const { data } = await apiClient.POST("/api/v1/auth/login/", {
+    body: credentials,
+  });
+  return data; // data は TokenResponse 型として推論される
+};
+
+/**
+ * サインアップ
+ */
+export const signupService = async (credentials: {
+  email: string;
+  password: string;
+}) => {
+  const { data } = await apiClient.POST("/api/v1/auth/registration/", {
+    body: {
+      email: credentials.email,
+      password1: credentials.password,
+      password2: credentials.password,
+    },
+  });
+  return data;
+};
+
+/**
+ * ログアウト
+ */
+export const logoutService = async () => {
+  await apiClient.POST("/api/v1/auth/logout/", {
+    body: {},
+  });
+};
+
+/**
+ * ユーザー情報取得
+ */
+export const fetchMe = async () => {
+  const { data } = await apiClient.GET("/api/v1/auth/user/");
+  return data; // data は UserInfo 型として推論される
+};
+```
+
+#### Todoサービス
+```typescript
+// frontend/src/features/todo/services/todo-service.ts
+import { apiClient } from '@/lib/api-client';
+import type { CreateTodoInput, UpdateTodoInput } from '../types';
 
 export const todoService = {
   /**
    * Todoリスト取得
    */
-  async list(): Promise<Todo[]> {
-    return apiClient.get('todos/').json<Todo[]>();
+  getTodos: async () => {
+    return await apiClient.GET('/api/v1/todos/');
   },
-  
+
   /**
    * Todo作成
    */
-  async create(data: TodoCreate): Promise<Todo> {
-    return apiClient.post('todos/', { json: data }).json<Todo>();
+  createTodo: async (data: CreateTodoInput) => {
+    return await apiClient.POST('/api/v1/todos/', { body: data });
   },
-  
+
   /**
    * Todo更新
    */
-  async update(id: number, data: Partial<TodoCreate>): Promise<Todo> {
-    return apiClient.patch(`todos/${id}/`, { json: data }).json<Todo>();
+  updateTodo: async (data: UpdateTodoInput) => {
+    const { id, ...body } = data;
+    return await apiClient.PATCH('/api/v1/todos/{id}/', { 
+      params: { path: { id } }, 
+      body: body 
+    });
   },
-  
+
   /**
    * Todo削除
    */
-  async delete(id: number): Promise<void> {
-    await apiClient.delete(`todos/${id}/`);
+  deleteTodo: async (id: number) => {
+    await apiClient.DELETE('/api/v1/todos/{id}/', { 
+      params: { path: { id } } 
+    });
   },
-  
-  /**
-   * セマンティック検索
-   */
-  async search(params: {
-    q: string;
-    top_k?: number;
-    min_score?: number;
-  }): Promise<{
-    query: string;
-    results: Array<Todo & { score: number }>;
-    count: number;
-  }> {
-    return apiClient
-      .get('todos/search/', { searchParams: params })
-      .json();
-  },
-  
+
   /**
    * 優先度別統計
    */
-  async getStats(): Promise<Array<{
-    priority: 'HIGH' | 'MEDIUM' | 'LOW';
-    count: number;
-  }>> {
-    return apiClient.get('todos/stats/').json();
+  getTodoStats: async () => {
+    return await apiClient.GET('/api/v1/todos/stats/');
   },
-};
-```
-```typescript
-// frontend/src/features/auth/services/auth-service.ts
 
-import type { components } from '@/types/api';
-import { apiClient } from '@/lib/api-client';
-
-type LoginRequest = components['schemas']['Login'];
-type RegisterRequest = components['schemas']['Register'];
-type UserInfo = components['schemas']['UserDetails'];
-
-export const authService = {
   /**
-   * ログイン
+   * 進捗分布統計
    */
-  async login(credentials: LoginRequest): Promise<UserInfo> {
-    const response = await apiClient
-      .post('auth/login/', { json: credentials })
-      .json<{ user: UserInfo }>();
-    
-    return response.user;
-  },
-  
-  /**
-   * 新規登録
-   */
-  async register(data: RegisterRequest): Promise<UserInfo> {
-    const response = await apiClient
-      .post('auth/registration/', { json: data })
-      .json<{ user: UserInfo }>();
-    
-    return response.user;
-  },
-  
-  /**
-   * ログアウト
-   */
-  async logout(): Promise<void> {
-    await apiClient.post('auth/logout/');
-  },
-  
-  /**
-   * ユーザー情報取得
-   */
-  async getMe(): Promise<UserInfo> {
-    return apiClient.get('auth/user/').json<UserInfo>();
+  getProgressStats: async () => {
+    return await apiClient.GET('/api/v1/todos/progress-stats/');
   },
 };
 ```
 
 ---
 
-### 4. コンポーネントでの使用
+### 5. 型定義の取得
+
+#### 直接pathsから型を取得（推奨）
 ```typescript
-// frontend/src/features/todo/components/TodoList.tsx
+// frontend/src/features/todo/types/index.ts
+import type { paths } from '@/types/api';
 
-import { useQuery } from '@tanstack/react-query';
-import type { components } from '@/types/api';
-import { todoService } from '../services/todo-service';
+// レスポンス型の取得
+type TodosPath = paths['/api/v1/todos/'];
+export type TodoListResponse = TodosPath['get']['responses']['200']['content']['application/json'];
+export type Todo = TodoListResponse[number];
 
-type Todo = components['schemas']['Todo'];
+// リクエスト型の取得
+export type CreateTodoInput = TodosPath['post']['requestBody']['content']['application/json'];
+export type UpdateTodoInput = paths['/api/v1/todos/{id}/']['patch']['requestBody']['content']['application/json'] & { id: number };
 
-export const TodoList = () => {
-  const { data: todos, isLoading } = useQuery({
-    queryKey: ['todos'],
-    queryFn: todoService.list,
+// その他
+export type Priority = Todo['priority'];
+```
+
+#### ApiReq/ApiResを使用（後方互換）
+```typescript
+// frontend/src/features/todo/types/index.ts
+import type { ApiRes, ApiReq } from '@/types/api-utils';
+
+export type Todo = NonNullable<ApiRes<'/api/v1/todos/', 'get'> extends Array<infer T> ? T : never>;
+export type CreateTodoInput = ApiReq<'/api/v1/todos/', 'post'>;
+export type UpdateTodoInput = { id: number } & ApiReq<'/api/v1/todos/{id}/', 'patch'>;
+```
+
+---
+
+### 6. フック層での使用
+```typescript
+// frontend/src/features/auth/hooks/use-auth.ts
+import { loginService } from '../services/auth-service';
+import { useApiMutation } from '@/hooks/use-tanstack-query';
+
+export const useAuth = () => {
+  // ✅ サービスの戻り値から型を自動推論
+  type LoginRes = Awaited<ReturnType<typeof loginService>>;
+  type LoginReq = Parameters<typeof loginService>[0];
+
+  const signInMutation = useApiMutation<LoginRes, Error, LoginReq>({
+    mutationFn: (data) => loginService(data),
+    onSuccess: async (data) => {
+      // data の型は自動推論される
+      if (data?.user) {
+        useAuthStore.getState().setUser(data.user);
+        queryClient.setQueryData(['auth', 'me'], data.user);
+      }
+      navigate('/dashboard');
+    },
   });
-  
-  if (isLoading) {
-    return <div>Loading...</div>;
-  }
-  
-  return (
-    <div>
-      {todos?.map((todo: Todo) => (
-        <div key={todo.id}>
-          <h3>{todo.todo_title}</h3>
-          <span>{todo.priority}</span>
-          <progress value={todo.progress} max={100} />
-        </div>
-      ))}
-    </div>
-  );
+
+  return { signIn: signInMutation.mutateAsync };
 };
 ```
 
@@ -1285,6 +1384,61 @@ interface Todo {
   title: string;
   // ...
 }
+```
+
+### 5. openapi-fetchでの型定義
+
+✅ **推奨（シンプル）**:
+```typescript
+// サービスの戻り値から型を推論
+type LoginRes = Awaited<ReturnType<typeof loginService>>;
+type LoginReq = Parameters<typeof loginService>[0];
+```
+
+✅ **推奨（明示的）**:
+```typescript
+// pathsから直接型を取得
+import type { paths } from '@/types/api';
+
+type TodosPath = paths['/api/v1/todos/'];
+type Todo = TodosPath['get']['responses']['200']['content']['application/json'][number];
+```
+
+❌ **非推奨**:
+```typescript
+// 手動で型を定義
+interface Todo {
+  id: number;
+  title: string;
+  // ...
+}
+```
+
+---
+
+### 6. リトライはTanStack Queryで制御
+
+✅ **推奨**:
+```typescript
+// HTTPクライアント層ではリトライしない
+const { data } = await apiClient.GET('/api/v1/todos/');
+
+// TanStack Queryでリトライを制御
+const { data } = useQuery({
+  queryKey: ['todos'],
+  queryFn: todoService.getTodos,
+  retry: 3,
+  retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+});
+```
+
+❌ **非推奨**:
+```typescript
+// HTTPクライアント層でリトライを実装
+const client = createClient({
+  // ...
+  retry: 3, // openapi-fetchにはこの機能はない
+});
 ```
 
 ---

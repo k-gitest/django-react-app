@@ -1,5 +1,5 @@
 import { todoService } from '../services/todo-service';
-import type { Todo, UpdateTodoInput, CreateTodoInput } from '../types';
+import type { Todo, CreateTodoInput } from '../types';
 import { useApiMutation } from '@/hooks/use-tanstack-query';
 import { useApiSuspenseQuery } from '@/hooks/use-suspense-query';
 import { queryClient } from '@/lib/queryClient';
@@ -14,7 +14,7 @@ export const useTodos = () => {
   type DeleteRes = Awaited<ReturnType<typeof todoService.deleteTodo>>;
 
   type CreateReq = Parameters<typeof todoService.createTodo>[0];
-  type UpdateReq = { id: number; data: UpdateTodoInput };
+  type UpdateReq = Parameters<typeof todoService.updateTodo>[0];
   type DeleteReq = Parameters<typeof todoService.deleteTodo>[0];
 
   //type Todo = NonNullable<GetRes['data']>[number];
@@ -76,14 +76,14 @@ export const useTodos = () => {
 
   // 更新
   const updateMutation = useApiMutation<UpdateRes, Error | ApiError, UpdateReq, { previousTodos: Todo[] | undefined }>({
-    mutationFn: ({ id, data }) => todoService.updateTodo(id, data),
-    onMutate: async ({ id, data }) => {
+    mutationFn: (data) => todoService.updateTodo(data),
+    onMutate: async (data) => {
       await queryClient.cancelQueries({ queryKey: TODO_QUERY_KEY });
       const previousTodos = queryClient.getQueryData<Todo[]>(TODO_QUERY_KEY);
 
       queryClient.setQueryData<Todo[]>(TODO_QUERY_KEY, (old = []) => {
         return old.map((todo) =>
-          todo.id === id
+          todo.id === data.id
             ? { ...todo, ...data, updated_at: new Date().toISOString() }
             : todo
         );
@@ -139,9 +139,12 @@ export const useTodos = () => {
     return createMutation.mutateAsync( data );
   };
 
-  const updateTodo = async ({ id, data }: { id: number; data: UpdateTodoInput }) => {
-    return updateMutation.mutateAsync({ id, data });
+  /*
+  const updateTodo = async (data: UpdateTodoInput) => {
+    return updateMutation.mutateAsync(data);
   };
+  */
+  const updateTodo = updateMutation.mutateAsync;
 
   const deleteTodo = async (id: number) => {
     return deleteMutation.mutateAsync( id );
