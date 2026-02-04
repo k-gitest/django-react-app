@@ -44,7 +44,7 @@ Django/React モノレポベースのSPAアプリケーション
 - **状態管理**: Zustand 5.0.9, TanStack Query 5.90.12
 - **フォーム**: React Hook Form 7.68.0, Zod 4.1.13
 - **UI**: Tailwind CSS 4.1.17, shadcn/ui
-- **HTTPクライアント**: Ky 1.14.1, graphql-request 7.1.2
+- **HTTPクライアント**: openapi-fetch 0.15.0, graphql-request 7.1.2
 - **型定義・パース**: Zod 4.1.13, graphql 16.10.0
 - **テスト**: Playwright 1.57.0, Vitest 4.0.15, MSW 2.12.4, playwright-msw 3.0.1
 - **Linter**: ESLint 9.39.1
@@ -197,12 +197,14 @@ Django/React モノレポベースのSPAアプリケーション
 │   │   │
 │   │   ├── hooks/             # 共通カスタムフック
 │   │   ├── lib/               # ユーティリティ・クライアント
-│   │   │   ├── api-client.ts  # Kyベースのクライアント
-│   │   │   ├── graphql-client.ts
+│   │   │   ├── api-client.ts  # openapi-fetchベースのクライアント
+│   │   │   ├── graphql-client.ts # graphql-requestベースのクライアント
 │   │   │   ├── ky-client.ts
 │   │   │   └── queryClient.ts
 │   │   ├── schemas/           # Zodスキーマ
 │   │   ├── types/             # TypeScript型定義
+│   │   │   ├── api.d.ts       # OpenAPI自動生成型
+│   │   │   └── api-utils.ts   # 型ユーティリティ
 │   │   ├── errors/            # エラーハンドリング
 │   │   │    ├── api-errors.ts
 │   │   │    ├── error-handlers.ts
@@ -1782,9 +1784,149 @@ REDIS_URL=rediss://default:password@region.upstash.io:6379
 
 ---
 
-### 設計判断：openapi-typescriptを採用
+### 設計判断：openapi-typescript + openapi-fetchを採用
 
-本プロジェクトでは、OpenAPIスキーマからTypeScript型を生成する際に、**openapi-typescript**を採用し、**Orval**は不採用としました。
+本プロジェクトでは、OpenAPIスキーマからTypeScript型を生成する際に、**openapi-typescript**で型定義を生成し、**openapi-fetch**でHTTP通信を実装するアプローチを採用しました。
+
+#### 採用したスタック
+
+| コンポーネント | 用途 |
+|--------------|------|
+| **openapi-typescript** | OpenAPIスキーマからTypeScript型定義を生成 |
+| **openapi-fetch** | 型安全なFetchクライアント（openapi-typescript公式） |
+| **Middleware** | エラーハンドリング、ログ記録（kyの`hooks`に相当） |
+
+#### なぜkyではなくopenapi-fetchなのか？
+
+##### 1. 型定義の冗長性を完全に削減
+
+**ky時代の問題**:
+```typescript
+// ❌ 同じパス文字列を4回書く必要があった
+export const loginService = async (
+  credentials: ApiReq<"/api/v1/auth/login/", "post">
+): Promise<ApiRes<"/api/v1/auth/login/", "post">> => {
+  return apiClient.post('api/v1/auth/login/', { json: credentials })
+    .json<ApiRes<"/api/v1/auth/login/", "post">>();
+};
+```
+
+**openapi-fetch導入後**:
+```typescript
+// ✅ パスは1回だけ、戻り値は自動推論
+export const loginService = async (credentials: {
+  email: string;
+  password: string;
+}) => {
+  const { data } = await client.POST("/api/v1/auth/login/", {
+    body: credentials,
+  });
+  return data; // 型は自動推論される
+};
+```
+
+##### 2. 複雑な型ユーティリティが不要
+
+**ky時代**:
+```typescript
+// ❌ パスを文字列で書き、型も手動で指定する必要がある
+export const listTodos = async () => {
+  return apiClient.get('api/v1/todos/').json<Todo[]>();
+};
+```
+
+**openapi-fetch**:
+```typescript
+// ✅ 型ユーティリティ不要、直接pathsから型を取得
+export const listTodos = async () => {
+  const { data, error } = await client.GET("/api/v1/todos/");
+  return data; // 自動的に Todo[] 型として推論される
+};
+```
+
+##### 3. IDEの補完が圧倒的に向上
+
+**ky時代**:
+```typescript
+apiClient.post('auth/login/', {...})
+              ↑
+// パス文字列を手動入力、補完なし
+```
+
+**openapi-fetch**:
+```typescript
+client.POST("/api/v1/auth/login/", {...})
+            ↑
+// IDEがパス候補を自動補完
+// メソッドとパスの組み合わせが型チェックされる
+```
+
+##### 4. Middlewareによる拡張性
+
+**ky時代**:
+```typescript
+const baseKyClient = ky.create({
+  hooks: {
+    beforeError: [
+      async (error) => {
+        // エラー処理
+      },
+    ],
+  },
+});
+```
+
+**openapi-fetch**:
+```typescript
+const httpErrorMiddleware: Middleware = {
+  async onResponse({ response }) {
+    if (!response.ok) {
+      throw new ApiError(...);
+    }
+    return response;
+  },
+};
+
+client.use(httpErrorMiddleware);
+```
+
+**メリット**:
+- ✅ ライブラリの標準機能として提供
+- ✅ IDEの補完が優れている
+- ✅ 型の維持が自動的
+
+##### 5. 公式ライブラリである安心感
+
+- ✅ openapi-typescriptと同じ作者
+- ✅ 長期的なメンテナンスが期待できる
+- ✅ OpenAPI仕様に完全準拠
+
+#### エラーハンドリングとリトライの分離
+
+| 機能 | 担当 | 理由 |
+|------|------|------|
+| **エラーハンドリング** | openapi-fetch Middleware | HTTPレイヤーの責務 |
+| **リトライ** | TanStack Query | 状態管理レイヤーの責務 |
+```typescript
+// エラーハンドリング: Middleware
+const httpErrorMiddleware: Middleware = {
+  async onResponse({ response }) {
+    if (!response.ok) {
+      throw new ApiError(...);
+    }
+    return response;
+  }
+};
+
+client.use(httpErrorMiddleware);
+
+// リトライ: TanStack Query
+const { data } = useQuery({
+  queryKey: ['todos'],
+  queryFn: todoService.list,
+  retry: 3, // ← ここで制御
+});
+```
 
 #### openapi-typescriptとは
 
@@ -2199,11 +2341,11 @@ type TodoCreate = components['schemas']['TodoRequest'];
 
 export const todoService = {
   async list(): Promise<Todo[]> {
-    return apiClient.get('todos/').json<Todo[]>();
+    return apiClient.GET('/api/v1/todos/');
   },
   
   async create(data: TodoCreate): Promise<Todo> {
-    return apiClient.post('todos/', { json: data }).json<Todo>();
+    return apiClient.POST('/api/v1/todos/', { body: data });
   },
   
   async search(params: { q: string }): Promise<{
@@ -2212,8 +2354,7 @@ export const todoService = {
     count: number;
   }> {
     return apiClient
-      .get('todos/search/', { searchParams: params })
-      .json();
+      .GET('/api/v1/todos/search/', { params: { query: params} })
   },
 };
 ```
@@ -2863,26 +3004,115 @@ Renderの提供する専用DBサービスを避けたのは、移植性の高い
 
 ## HTTPクライアント戦略
 
-### 採用：Ky
+### 採用：openapi-fetch + Middleware
 
 **選定経緯**:
 
-当初、カスタム`FetchClient`を実装していましたが、以下の理由からライブラリ採用に方針転換：
+当初、`ky`を採用していましたが、OpenAPI統合を強化するため、**openapi-fetch**に移行しました。
 
-> **核心的な気づき**: 「目的はアプリケーション開発であり、HTTPクライアント開発ではない」
+#### なぜkyからopenapi-fetchに移行したのか？
 
-**Ky採用の理由**:
+**移行の決め手**:
 
-| 項目 | Axios | **Ky（採用）** |
-|---|---|---|
-| バンドルサイズ | ~13KB | ~5KB ⭐ |
-| API設計 | XMLHttpRequest風 | Fetch API風 ⭐ |
-| リトライ | プラグイン必要 | 標準機能 ⭐ |
-| 学習コスト | 低い | 低い（Fetch APIベース） ⭐ |
+| 項目 | ky（旧） | **openapi-fetch（現在）** |
+|------|---------|--------------------------|
+| **型定義の同期** | 手動で型を指定 (脆弱) | OpenAPI定義から自動推論 (堅牢) ⭐ |
+| **記述量** | パス文字列を4回記述 | 1回だけ（補完付き） ⭐ |
+| **Service層の責務** | 型のアノテーションが主 | ビジネスロジックの記述に集中 ⭐ |
+| **開発体験** | パスを間違えても実行時まで不明 | 未定義のパスは型エラーで即座に判明 ⭐ |
+
+**型安全の連鎖**:
+Service層の引数・返り値は `openapi-fetch` が解決し、Hooks層はそれを `Parameters<typeof ...>` で抽出します。これにより、バックエンドの変更が自動的にUI層まで通知される仕組みを構築しています。
+
+**移行前の冗長性**:
+```typescript
+// ❌ kyでの実装（同じパスを4回書く）
+export const loginService = async (
+  credentials: ApiReq<"/api/v1/auth/login/", "post">  // 1回目
+): Promise<ApiRes<"/api/v1/auth/login/", "post">> => { // 2回目
+  return apiClient
+    .post('api/v1/auth/login/', { json: credentials })  // 3回目
+    .json<ApiRes<"/api/v1/auth/login/", "post">>();    // 4回目
+};
+```
+
+**移行後のシンプルさ**:
+```typescript
+// ✅ openapi-fetchでの実装（パスは1回だけ）
+export const loginService = async (credentials: {
+  email: string;
+  password: string;
+}) => {
+  const { data } = await client.POST("/api/v1/auth/login/", {
+    body: credentials,
+  });
+  return data; // 型は自動推論される
+};
+```
+
+#### Middlewareによるエラーハンドリング
+
+openapi-fetchでは、**Middleware**（kyの`hooks`に相当）でエラーハンドリングを実装：
+```typescript
+// lib/api-client.ts
+import createClient, { type Middleware } from "openapi-fetch";
+import type { paths } from "@/types/api";
+
+export const client = createClient<paths>({
+  baseUrl: BASE_API_URL,
+  credentials: "include",
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
+
+// HTTPエラーハンドリング
+const httpErrorMiddleware: Middleware = {
+  async onResponse({ response }) {
+    if (!response.ok) {
+      const errorBody = await response.clone().json().catch(() => null);
+      throw new ApiError(
+        response.status,
+        errorBody?.detail || errorBody?.message || response.statusText,
+        errorBody,
+        new Error(response.statusText)
+      );
+    }
+    return response;
+  },
+};
+
+// ミドルウェアを登録
+client.use(httpErrorMiddleware);
+```
+
+**メリット**:
+- ✅ kyの`hooks`と同等の機能
+- ✅ 型安全性が向上（自動推論）
+- ✅ IDEの補完が優れている
+- ✅ openapi-typescriptとの完全な統合
+
+#### リトライはTanStack Queryに任せる
+
+HTTPクライアント層ではリトライを実装せず、**TanStack Query**に責務を分離：
+
+| 機能 | 担当 | 理由 |
+|------|------|------|
+| **エラーハンドリング** | openapi-fetch Middleware | HTTPレイヤーの責務 |
+| **リトライ** | TanStack Query | 状態管理レイヤーの責務 |
+```typescript
+// リトライはTanStack Queryで制御
+const { data } = useQuery({
+  queryKey: ['todos'],
+  queryFn: todoService.list,
+  retry: 3, // ← ここで制御
+  retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+});
+```
 
 ### 実装方針
 
-Service層でラップすることで、プロジェクト全体への影響を最小化しています。
+Service層でopenapi-fetchをラップすることで、プロジェクト全体への影響を最小化しています。
 
 ---
 
