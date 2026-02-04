@@ -1,5 +1,5 @@
 import { todoService } from '../services/todo-service';
-import type { UpdateTodoInput, Todo, CreateTodoInput } from '../types';
+import type { Todo, UpdateTodoInput, CreateTodoInput } from '../types';
 import { useApiMutation } from '@/hooks/use-tanstack-query';
 import { useApiSuspenseQuery } from '@/hooks/use-suspense-query';
 import { queryClient } from '@/lib/queryClient';
@@ -8,6 +8,17 @@ import { ApiError } from '@/errors/api-error';
 export const TODO_QUERY_KEY = ['todos'] as const;
 
 export const useTodos = () => {
+  type GetRes = Awaited<ReturnType<typeof todoService.getTodos>>;
+  type CreateRes = Awaited<ReturnType<typeof todoService.createTodo>>;
+  type UpdateRes = Awaited<ReturnType<typeof todoService.updateTodo>>;
+  type DeleteRes = Awaited<ReturnType<typeof todoService.deleteTodo>>;
+
+  type CreateReq = Parameters<typeof todoService.createTodo>[0];
+  type UpdateReq = { id: number; data: UpdateTodoInput };
+  type DeleteReq = Parameters<typeof todoService.deleteTodo>[0];
+
+  //type Todo = NonNullable<GetRes['data']>[number];
+
   // 一覧取得
   /*
   const todosQuery = useApiQuery<Todo[]>({
@@ -15,16 +26,16 @@ export const useTodos = () => {
     queryFn: todoService.getTodos,
   });
   */
-  const todosQuery = useApiSuspenseQuery<Todo[]>({
+  const todosQuery = useApiSuspenseQuery<GetRes>({
     queryKey: TODO_QUERY_KEY,
     queryFn: todoService.getTodos,
     staleTime: 1000 * 5, // 5秒間はデータを新鮮とみなす（頻繁な再ロードによるSuspense化を防止）
   });
 
   // 作成
-  const createMutation = useApiMutation<Todo, Error | ApiError, { data: CreateTodoInput }, { previousTodos: Todo[] | undefined }>({
-    mutationFn: ({ data }) => todoService.createTodo(data),
-    onMutate: async ({ data }) => {
+  const createMutation = useApiMutation<CreateRes, Error | ApiError, CreateReq, { previousTodos: Todo[] | undefined }>({
+    mutationFn: ( data ) => todoService.createTodo(data),
+    onMutate: async ( data ) => {
       // 1. 進行中のクエリをキャンセル
       await queryClient.cancelQueries({ queryKey: TODO_QUERY_KEY });
 
@@ -64,7 +75,7 @@ export const useTodos = () => {
   });
 
   // 更新
-  const updateMutation = useApiMutation<Todo, Error | ApiError, { id: number; data: UpdateTodoInput }, { previousTodos: Todo[] | undefined }>({
+  const updateMutation = useApiMutation<UpdateRes, Error | ApiError, UpdateReq, { previousTodos: Todo[] | undefined }>({
     mutationFn: ({ id, data }) => todoService.updateTodo(id, data),
     onMutate: async ({ id, data }) => {
       await queryClient.cancelQueries({ queryKey: TODO_QUERY_KEY });
@@ -96,9 +107,9 @@ export const useTodos = () => {
   });
 
   // 削除
-  const deleteMutation = useApiMutation<void, Error | ApiError, { id: number }, { previousTodos: Todo[] | undefined }>({
-    mutationFn: ({ id }) => todoService.deleteTodo(id),
-    onMutate: async ({ id }) => {
+  const deleteMutation = useApiMutation<DeleteRes, Error | ApiError, DeleteReq, { previousTodos: Todo[] | undefined }>({
+    mutationFn: ( id ) => todoService.deleteTodo(id),
+    onMutate: async ( id ) => {
       await queryClient.cancelQueries({ queryKey: TODO_QUERY_KEY });
       const previousTodos = queryClient.getQueryData<Todo[]>(TODO_QUERY_KEY);
 
@@ -125,7 +136,7 @@ export const useTodos = () => {
 
   // メソッド実装
   const createTodo = async (data: CreateTodoInput) => {
-    return createMutation.mutateAsync({ data });
+    return createMutation.mutateAsync( data );
   };
 
   const updateTodo = async ({ id, data }: { id: number; data: UpdateTodoInput }) => {
@@ -133,7 +144,7 @@ export const useTodos = () => {
   };
 
   const deleteTodo = async (id: number) => {
-    return deleteMutation.mutateAsync({ id });
+    return deleteMutation.mutateAsync( id );
   };
 
   return {

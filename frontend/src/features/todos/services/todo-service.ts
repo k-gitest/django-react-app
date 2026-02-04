@@ -1,35 +1,38 @@
 import { apiClient } from '@/lib/api-client';
-import type { CreateTodoInput, Todo, UpdateTodoInput } from '../types';
+import type { CreateTodoInput, UpdateTodoInput } from '../types';
 
+/*
 type TodoStatsResponse = {
   priority: string;
   count: number;
 }[];
 
 type ProgressStatsResponse = Record<string, number>;
+*/
 
 export const todoService = {
-  getTodos: async (): Promise<Todo[]> => {
-    return await apiClient.get('todos/').json();
+  getTodos: async () => {
+    return await apiClient.GET('/api/v1/todos/');
   },
 
-  createTodo: async (data: CreateTodoInput): Promise<Todo> => {
-    return await apiClient.post('todos/', { json: data }).json();
+  createTodo: async (data: CreateTodoInput) => {
+    return await apiClient.POST('/api/v1/todos/', { body: data });
   },
 
-  updateTodo: async (id: number, data: UpdateTodoInput): Promise<Todo> => {
-    return await apiClient.patch(`todos/${id}/`, { json: data }).json();
+  updateTodo: async (id: number, data: UpdateTodoInput) => {
+    const res = await apiClient.PATCH('/api/v1/todos/{id}/', { params: { path: { id } }, body: data });
+    return res;
   },
 
-  deleteTodo: async (id: number): Promise<void> => {
-    await apiClient.delete(`todos/${id}/`);
+  deleteTodo: async (id: number) => {
+    await apiClient.DELETE('/api/v1/todos/{id}/', { params: { path: { id } } });
   },
 
-  getTodoStats: async (): Promise<TodoStatsResponse> => {
-    return await apiClient.get('todos/stats/').json();
+  getTodoStats: async () => {
+    return await apiClient.GET('/api/v1/todos/stats/');
   },
 
-  getProgressStats: async (): Promise<ProgressStatsResponse> => {
-    return await apiClient.get('todos/progress-stats/').json();
+  getProgressStats: async () => {
+    return await apiClient.GET('/api/v1/todos/progress-stats/');
   },
 };
