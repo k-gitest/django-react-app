@@ -343,7 +343,7 @@ export type ValidationError = {
   message: Scalars['String']['output'];
 };
 
-export type TodoFieldsFragment = { __typename?: 'TodoType', id: string, todoTitle: string, priority: PriorityEnum, progress: number, createdAt: string, updatedAt: string };
+export type TodoFieldsFragment = { __typename?: 'TodoType', id: string, todoTitle: string, priority: PriorityEnum, progress: number, createdAt: string, updatedAt: string, userEmail: string };
 
 export type UserFieldsFragment = { __typename?: 'UserType', id: number, email: string, firstName: string, lastName: string, isStaff: boolean, dateJoined: string };
 
@@ -359,7 +359,7 @@ export type CreateTodoMutation = { __typename?: 'Mutation', createTodo:
     | { __typename: 'ExternalServiceError' }
     | { __typename: 'InternalError', category: ErrorCategory, message: string, code: string }
     | { __typename: 'NotFoundError' }
-    | { __typename: 'TodoType', id: string, todoTitle: string, priority: PriorityEnum, progress: number, createdAt: string, updatedAt: string }
+    | { __typename: 'TodoType', id: string, todoTitle: string, priority: PriorityEnum, progress: number, createdAt: string, updatedAt: string, userEmail: string }
     | { __typename: 'ValidationError', category: ErrorCategory, message: string, field?: string | null, code: string }
    };
 
@@ -376,7 +376,7 @@ export type UpdateTodoMutation = { __typename?: 'Mutation', updateTodo:
     | { __typename: 'ExternalServiceError' }
     | { __typename: 'InternalError', category: ErrorCategory, message: string, code: string }
     | { __typename: 'NotFoundError', category: ErrorCategory, message: string, code: string }
-    | { __typename: 'TodoType', id: string, todoTitle: string, priority: PriorityEnum, progress: number, createdAt: string, updatedAt: string }
+    | { __typename: 'TodoType', id: string, todoTitle: string, priority: PriorityEnum, progress: number, createdAt: string, updatedAt: string, userEmail: string }
     | { __typename: 'ValidationError', category: ErrorCategory, message: string, field?: string | null, code: string }
    };
 
@@ -443,14 +443,14 @@ export type LogoutMutation = { __typename?: 'Mutation', logout:
 export type GetTodosQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type GetTodosQuery = { __typename?: 'Query', todos: Array<{ __typename?: 'TodoType', id: string, todoTitle: string, priority: PriorityEnum, progress: number, createdAt: string, updatedAt: string }> };
+export type GetTodosQuery = { __typename?: 'Query', todos: Array<{ __typename?: 'TodoType', id: string, todoTitle: string, priority: PriorityEnum, progress: number, createdAt: string, updatedAt: string, userEmail: string }> };
 
 export type GetTodoQueryVariables = Exact<{
   id: Scalars['ID']['input'];
 }>;
 
 
-export type GetTodoQuery = { __typename?: 'Query', todo?: { __typename?: 'TodoType', id: string, todoTitle: string, priority: PriorityEnum, progress: number, createdAt: string, updatedAt: string } | null };
+export type GetTodoQuery = { __typename?: 'Query', todo?: { __typename?: 'TodoType', id: string, todoTitle: string, priority: PriorityEnum, progress: number, createdAt: string, updatedAt: string, userEmail: string } | null };
 
 export type GetTodoStatsQueryVariables = Exact<{ [key: string]: never; }>;
 

@@ -1,4 +1,4 @@
-import { todoService } from '../services/todo-service';
+import { todoService } from '../services/index';
 import type { Todo, CreateTodoInput } from '../types';
 import { useApiMutation } from '@/hooks/use-tanstack-query';
 import { useApiSuspenseQuery } from '@/hooks/use-suspense-query';
