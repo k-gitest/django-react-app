@@ -897,7 +897,7 @@ REST APIと並行して**GraphQL API**を提供しています。環境変数の
 │    │   └─ auth-service.ts                                  │
 │    │       │                                               │
 │    │       └─ API_MODE で自動切り替え                       │
-│    │           ├─ REST: ky-client                          │
+│    │           ├─ REST: openapi-fetch                      │
 │    │           └─ GraphQL: graphql-request                 │
 │    │                                                        │
 │    └─ Unified Error Handling                               │
@@ -2027,7 +2027,7 @@ postAuthLogin (Orval生成) ← 中間層
   ↓
 customInstance (Mutator) ← さらに中間層
   ↓
-apiClient (ky)
+apiClient
   ↓
 Backend API
 
@@ -2036,7 +2036,7 @@ useAuth (Hook)
   ↓
 auth-service (Service)
   ↓
-apiClient (ky)
+apiClient
   ↓
 Backend API
 ```
@@ -2067,7 +2067,7 @@ export const loginService = async (
 
 | コンポーネント | 現在 | Orval導入後 |
 |--------------|------|------------|
-| HTTPクライアント | apiClient (ky) | customInstance + apiClient |
+| HTTPクライアント | apiClient (openapi-fetch) | customInstance + apiClient |
 | データフェッチ | TanStack Query | Orval生成hooks |
 | 型定義 | openapi-typescript | Orval生成型 |
 | MSWハンドラー | 手動実装（シナリオ明確） | Orval生成（ランダム値） |
@@ -2114,7 +2114,7 @@ Orvalは以下のようなプロジェクトには有効です：
 ```
 openapi-typescript: 型定義のみ自動生成（シンプル）
   ↓
-apiClient (ky): HTTP通信を薄くラップ
+apiClient (openapi-fetch): HTTP通信を薄くラップ
   ↓
 auth-service: ビジネスロジックを集約
   ↓

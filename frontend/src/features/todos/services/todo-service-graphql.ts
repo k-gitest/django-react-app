@@ -25,7 +25,6 @@ import type { CreateTodoInput, Todo, UpdateTodoInput } from '../types/index';
 
 /**
  * GraphQL API実装
- * 外部には公開しない（todo-service.ts経由で使用）
  * 
  * 責務:
  * - GraphQL型 ⇔ 統一型（Todo）の変換
@@ -54,7 +53,7 @@ export const todoServiceGraphQL = {
     return graphqlToTodo(todo as TodoType);
   },
 
-  updateTodo: async (id: number, input: UpdateTodoInput): Promise<Todo> => {
+  updateTodo: async (input: UpdateTodoInput): Promise<Todo> => {
     const graphqlInput: TodoUpdateInput = {};
     if (input.todo_title !== undefined) graphqlInput.todoTitle = input.todo_title;
     if (input.priority !== undefined) {
@@ -62,7 +61,7 @@ export const todoServiceGraphQL = {
     }
     if (input.progress !== undefined) graphqlInput.progress = input.progress;
 
-    const globalId = btoa(`TodoType:${id}`);
+    const globalId = btoa(`TodoType:${input.id}`);
 
     const todo = await gqlMutation<UpdateTodoMutation, 'updateTodo'>(
       UPDATE_TODO,
@@ -83,7 +82,6 @@ export const todoServiceGraphQL = {
     );
   },
 
-  // ✅ 修正箇所: 改行をなくし、Promise<Array<{...}>> の形に整えました
   getTodoStats: async (): Promise<Array<{ priority: string; count: number }>> => {
     const data = await gqlRequest<GetTodoStatsQuery>(GET_TODO_STATS);
 

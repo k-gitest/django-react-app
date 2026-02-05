@@ -12,5 +12,6 @@ export const TODO_FRAGMENT = gql`
     progress
     createdAt
     updatedAt
+    userEmail
   }
 `;
