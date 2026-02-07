@@ -55,17 +55,14 @@ export interface paths {
         put?: never;
         /**
          * ログアウト
-         * @description ログアウトし、JWTトークンをブラックリスト化します。
+         * @description 現在のセッションからログアウトします。
          *
          *             **機能:**
-         *             - リフレッシュトークンをブラックリスト化（再利用不可）
-         *             - Cookieからトークンを削除
+         *             - リフレッシュトークンをブラックリストに追加
+         *             - Cookieをクリア
          *             - ログアウトイベントを記録（MotherDuck Analytics）
          *
-         *             **成功時の動作:**
-         *             1. リフレッシュトークンをブラックリストに追加
-         *             2. アクセストークン・リフレッシュトークンのCookieを削除
-         *             3. ログアウトイベントをMotherDuckに記録
+         *             **注意:** ログアウト後は、再度ログインが必要です。
          */
         post: operations["auth_logout_create"];
         delete?: never;
@@ -152,18 +149,22 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * @description カスタム登録ビュー
+         * 新規登録
+         * @description 新規ユーザーを登録します。
          *
-         *     機能:
-         *         - レート制限（3回/1時間）
-         *         - JWT Cookie自動発行
-         *         - ウェルカムメール送信（QStash経由、非同期）
-         *         - 分析ログ記録（MotherDuck、非同期）
+         *             **機能:**
+         *             - HttpOnly CookieにJWTトークンを自動設定
+         *             - ウェルカムメールを非同期送信（QStash経由）
+         *             - 登録イベントを記録（MotherDuck Analytics）
          *
-         *     エラーハンドリング:
-         *         - メールアドレス重複: UserAlreadyExistsError → 統一エラーハンドラーが処理
-         *         - ウェルカムメール送信エラー: ErrorMonitor.capture_and_continueで隔離
-         *         - 分析ログエラー: ErrorMonitor.capture_and_continueで隔離
+         *             **レート制限:** 3回/1時間
+         *
+         *             **成功時の動作:**
+         *             1. ユーザー作成
+         *             2. アクセストークン（5分間有効）をCookieに設定
+         *             3. リフレッシュトークン（1日間有効）をCookieに設定
+         *             4. ウェルカムメールを非同期で送信（失敗してもユーザー作成は成功）
+         *             5. 登録イベントをMotherDuckに記録（失敗してもユーザー作成は成功）
          */
         post: operations["auth_registration_create"];
         delete?: never;
@@ -490,11 +491,6 @@ export interface components {
             /** @description リフレッシュトークン（Cookieにも設定される） */
             readonly refresh: string;
         };
-        CustomRegister: {
-            user: components["schemas"]["CustomUser"];
-            access: string;
-            refresh: string;
-        };
         /**
          * @description emailベース認証用のカスタム登録シリアライザ
          *
@@ -751,17 +747,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        detail?: string;
-                    };
-                };
-            };
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error?: string;
+                        /** @example ログアウトしました。 */
                         detail?: string;
                     };
                 };
@@ -863,7 +849,29 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CustomRegister"];
+                    "application/json": components["schemas"]["AuthResponse"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error?: string;
+                        detail?: string;
+                        data?: Record<string, never>;
+                    };
+                };
+            };
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        detail?: string;
+                    };
                 };
             };
         };

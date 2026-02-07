@@ -106,11 +106,9 @@ paths:
           description: No response body
     post:
       operationId: auth_logout_create
-      description: "\n        ログアウトし、JWTトークンをブラックリスト化します。\n        \n        **機能:**\n
-        \       - リフレッシュトークンをブラックリスト化（再利用不可）\n        - Cookieからトークンを削除\n        -
-        ログアウトイベントを記録（MotherDuck Analytics）\n        \n        **成功時の動作:**\n        1.
-        リフレッシュトークンをブラックリストに追加\n        2. アクセストークン・リフレッシュトークンのCookieを削除\n        3.
-        ログアウトイベントをMotherDuckに記録\n        "
+      description: "\n        現在のセッションからログアウトします。\n        \n        **機能:**\n        -
+        リフレッシュトークンをブラックリストに追加\n        - Cookieをクリア\n        - ログアウトイベントを記録（MotherDuck
+        Analytics）\n        \n        **注意:** ログアウト後は、再度ログインが必要です。\n        "
       summary: ログアウト
       tags:
       - Authentication
@@ -129,26 +127,7 @@ paths:
                 properties:
                   detail:
                     type: string
-              examples:
-                Success:
-                  value:
-                    detail: ログアウトしました。
-          description: ''
-        '401':
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                  detail:
-                    type: string
-              examples:
-                Unauthorized:
-                  value:
-                    error: authentication_failed
-                    detail: 認証情報が提供されていません。
+                    example: ログアウトしました。
           description: ''
   /api/v1/auth/password/change/:
     post:
@@ -259,21 +238,15 @@ paths:
   /api/v1/auth/registration/:
     post:
       operationId: auth_registration_create
-      description: |-
-        カスタム登録ビュー
-
-        機能:
-            - レート制限（3回/1時間）
-            - JWT Cookie自動発行
-            - ウェルカムメール送信（QStash経由、非同期）
-            - 分析ログ記録（MotherDuck、非同期）
-
-        エラーハンドリング:
-            - メールアドレス重複: UserAlreadyExistsError → 統一エラーハンドラーが処理
-            - ウェルカムメール送信エラー: ErrorMonitor.capture_and_continueで隔離
-            - 分析ログエラー: ErrorMonitor.capture_and_continueで隔離
+      description: "\n        新規ユーザーを登録します。\n        \n        **機能:**\n        -
+        HttpOnly CookieにJWTトークンを自動設定\n        - ウェルカムメールを非同期送信（QStash経由）\n        -
+        登録イベントを記録（MotherDuck Analytics）\n        \n        **レート制限:** 3回/1時間\n        \n
+        \       **成功時の動作:**\n        1. ユーザー作成\n        2. アクセストークン（5分間有効）をCookieに設定\n
+        \       3. リフレッシュトークン（1日間有効）をCookieに設定\n        4. ウェルカムメールを非同期で送信（失敗してもユーザー作成は成功）\n
+        \       5. 登録イベントをMotherDuckに記録（失敗してもユーザー作成は成功）\n        "
+      summary: 新規登録
       tags:
-      - auth
+      - Authentication
       requestBody:
         content:
           application/json:
@@ -297,7 +270,53 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CustomRegister'
+                $ref: '#/components/schemas/AuthResponse'
+              examples:
+                Success:
+                  value:
+                    user:
+                      id: 1
+                      email: user@example.com
+                      first_name: John
+                      last_name: Doe
+                      is_staff: false
+                    access: eyJ0eXAiOiJKV1QiLCJhbGc...
+                    refresh: eyJ0eXAiOiJKV1QiLCJhbGc...
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  detail:
+                    type: string
+                  data:
+                    type: object
+              examples:
+                UserAlreadyExists:
+                  value:
+                    error: user_already_exists
+                    detail: メールアドレス user@example.com は既に登録されています
+                    data:
+                      field: email
+                  summary: User Already Exists
+          description: ''
+        '429':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+              examples:
+                TooManyRequests:
+                  value:
+                    detail: リクエストが多すぎます。
+                  summary: Too Many Requests
           description: ''
   /api/v1/auth/send-welcome-email:
     post:
@@ -1120,19 +1139,6 @@ components:
       - access
       - refresh
       - user
-    CustomRegister:
-      type: object
-      properties:
-        user:
-          $ref: '#/components/schemas/CustomUser'
-        access:
-          type: string
-        refresh:
-          type: string
-      required:
-      - user
-      - access
-      - refresh
     CustomRegisterRequest:
       type: object
       description: |-

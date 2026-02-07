@@ -3,13 +3,14 @@ import logging
 from django.conf import settings
 from django.utils.decorators import method_decorator
 from django_ratelimit.decorators import ratelimit
-from rest_framework import status, serializers
+from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from dj_rest_auth.registration.views import RegisterView
 from dj_rest_auth.views import LoginView, LogoutView
+from drf_spectacular.utils import extend_schema_view
 
 from apps.common.permissions import IsQStashAuthenticated
 from apps.common.error_decorators import log_webhook_call
@@ -17,7 +18,7 @@ from apps.common.error_decorators import log_webhook_call
 from .email_service import UserEmailService
 from .user_service import UserAuthService
 from .serializers import WelcomeEmailWebhookSerializer
-from .rest_schemas import AuthSchemas, UserWebhookSchemas
+from .rest_schemas import get_register_schema, get_login_schema, get_logout_schema, user_webhook_send_welcome_email_schema
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,7 @@ def apply_ratelimit(**kwargs):
 # ============================================================================
 # 認証ビュー
 # ============================================================================
+@extend_schema_view(post=get_login_schema())
 @method_decorator(
     apply_ratelimit(key="ip", rate="5/5m", method="POST", block=True),
     name="dispatch"
@@ -59,7 +61,6 @@ class CustomLoginView(LoginView):
         - 分析ログエラー: ErrorMonitor.capture_and_continueで隔離（UserAuthService内）
     """
 
-    @AuthSchemas.login
     def post(self, request, *args, **kwargs):
         """
         ログイン処理
@@ -102,7 +103,7 @@ class CustomLoginView(LoginView):
             'refresh': getattr(self, 'refresh_token', None),
         }
 
-
+@extend_schema_view(post=get_register_schema())
 @method_decorator(
     apply_ratelimit(key="ip", rate="3/1h", method="POST", block=True),
     name="dispatch"
@@ -123,7 +124,6 @@ class CustomRegisterView(RegisterView):
         - 分析ログエラー: ErrorMonitor.capture_and_continueで隔離
     """
 
-    @AuthSchemas.register
     def create(self, request, *args, **kwargs):
         """
         ユーザー登録処理
@@ -148,7 +148,6 @@ class CustomRegisterView(RegisterView):
         
         エラーは統一エラーハンドラーが処理するため、try-catchは不要。
         """
-        # Serializer.save() → UserRegistrationService.register_user()
         # エラーは統一エラーハンドラーへ伝播
         user = serializer.save(self.request)
         self.user = user
@@ -167,15 +166,6 @@ class CustomRegisterView(RegisterView):
         CustomUserSerializerを使って、id と is_staff を含む
         完全なユーザー情報を返す。
         
-        Args:
-            user: CustomUserオブジェクト
-        
-        Returns:
-            dict: {
-                'user': { id, email, first_name, last_name, is_staff },
-                'access': str,
-                'refresh': str
-            }
         """
         from .serializers import CustomUserSerializer
         
@@ -215,6 +205,7 @@ class CustomRegisterView(RegisterView):
             **cookie_settings,
         )
 
+@extend_schema_view(post=get_logout_schema())
 class CustomLogoutView(LogoutView):
     """
     カスタムログアウトビュー
@@ -228,7 +219,6 @@ class CustomLogoutView(LogoutView):
 
     serializer_class = serializers.Serializer
     
-    @AuthSchemas.logout 
     def post(self, request, *args, **kwargs):
         """
         ログアウト処理
@@ -250,7 +240,7 @@ class CustomLogoutView(LogoutView):
 # Webhook エンドポイント
 # ============================================================================
 
-@UserWebhookSchemas.send_welcome_email
+@user_webhook_send_welcome_email_schema()
 @api_view(["POST"])
 @permission_classes([IsQStashAuthenticated])
 @log_webhook_call(webhook_name="send_welcome_email")

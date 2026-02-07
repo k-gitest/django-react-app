@@ -523,12 +523,264 @@ class CommonSchemas:
 
 ### 3. アプリケーション別のスキーマ定義
 
-#### Todoアプリケーション
+#### スキーマ定義の設計判断：関数 vs クラス属性
+
+本プロジェクトでは、アプリケーションの特性に応じて**関数**と**クラス属性**を使い分けています。
+
+##### 認証アプリケーション：関数による遅延評価
+
+認証APIでは、`get_serializer_class`をオーバーライドしてリクエストとレスポンスで異なるシリアライザーを使用するため、**関数**でスキーマを定義します。
+
+**なぜ関数にするのか？**
+
+| 方式 | 評価タイミング | 問題 |
+|------|-------------|------|
+| **クラス属性** | ファイル読み込み時 | ❌ シリアライザーがまだ読み込まれていない可能性<br>❌ `extend_schema_view`との組み合わせで循環参照 |
+| **関数** | 呼び出し時（View適用時） | ✅ 確実にシリアライザーが読み込まれている<br>✅ 循環参照を回避 |
+
+**実装例**:
+```python
+# backend/apps/users/rest_schemas.py
+
+from drf_spectacular.utils import extend_schema, OpenApiExample
+
+def get_register_schema():
+    """
+    登録APIのスキーマ定義を返す
+    
+    関数にすることで、インポート時ではなく使用時に評価される。
+    これにより、CustomRegisterSerializerとAuthResponseSerializerが
+    確実に読み込まれた後にスキーマが構築される。
+    """
+    from .serializers import CustomRegisterSerializer, AuthResponseSerializer
+    
+    return extend_schema(
+        summary="新規登録",
+        description="""
+        新規ユーザーを登録します。
+        
+        **機能:**
+        - HttpOnly CookieにJWTトークンを自動設定
+        - ウェルカムメールを非同期送信（QStash経由）
+        - 登録イベントを記録（MotherDuck Analytics）
+        
+        **レート制限:** 3回/1時間
+        """,
+        request=CustomRegisterSerializer,  # リクエスト用
+        responses={
+            201: AuthResponseSerializer,    # レスポンス用
+            400: {
+                'type': 'object',
+                'properties': {
+                    'error': {'type': 'string'},
+                    'detail': {'type': 'string'},
+                    'data': {'type': 'object'},
+                }
+            },
+            429: {
+                'type': 'object',
+                'properties': {
+                    'detail': {'type': 'string'}
+                }
+            },
+        },
+        examples=[
+            OpenApiExample(
+                'Success',
+                value={
+                    'user': {
+                        'id': 1,
+                        'email': 'user@example.com',
+                        'first_name': 'John',
+                        'last_name': 'Doe',
+                        'is_staff': False
+                    },
+                    'access': 'eyJ0eXAiOiJKV1QiLCJhbGc...',
+                    'refresh': 'eyJ0eXAiOiJKV1QiLCJhbGc...'
+                },
+                response_only=True,
+                status_codes=['201'],
+            ),
+            OpenApiExample(
+                'User Already Exists',
+                value={
+                    'error': 'user_already_exists',
+                    'detail': 'メールアドレス user@example.com は既に登録されています',
+                    'data': {'field': 'email'}
+                },
+                response_only=True,
+                status_codes=['400'],
+            ),
+            OpenApiExample(
+                'Too Many Requests',
+                value={
+                    'detail': 'リクエストが多すぎます。'
+                },
+                response_only=True,
+                status_codes=['429'],
+            ),
+        ],
+        tags=['Authentication']
+    )
+
+
+def get_login_schema():
+    """ログインAPIのスキーマ定義を返す"""
+    from .serializers import LoginSerializer, AuthResponseSerializer
+    
+    return extend_schema(
+        summary="ログイン",
+        description="""
+        メールアドレスとパスワードでログインします。
+        
+        **機能:**
+        - HttpOnly CookieにJWTトークンを設定
+        - ログイン履歴を記録（MotherDuck Analytics）
+        
+        **レート制限:** 5回/5分
+        """,
+        request=LoginSerializer,
+        responses={
+            200: AuthResponseSerializer,
+            400: {
+                'type': 'object',
+                'properties': {
+                    'non_field_errors': {
+                        'type': 'array',
+                        'items': {'type': 'string'}
+                    }
+                }
+            },
+            429: {
+                'type': 'object',
+                'properties': {
+                    'detail': {'type': 'string'}
+                }
+            },
+        },
+        examples=[
+            OpenApiExample(
+                'Success',
+                value={
+                    'user': {
+                        'id': 1,
+                        'email': 'user@example.com',
+                        'first_name': 'John',
+                        'last_name': 'Doe',
+                        'is_staff': False
+                    },
+                    'access': 'eyJ0eXAiOiJKV1QiLCJhbGc...',
+                    'refresh': 'eyJ0eXAiOiJKV1QiLCJhbGc...'
+                },
+                response_only=True,
+                status_codes=['200'],
+            ),
+            OpenApiExample(
+                'Bad Request - Invalid Credentials',
+                value={
+                    'non_field_errors': ['メールアドレスまたはパスワードが正しくありません。']
+                },
+                response_only=True,
+                status_codes=['400'],
+            ),
+            OpenApiExample(
+                'Too Many Requests',
+                value={
+                    'detail': 'リクエストが多すぎます。しばらく時間を置いてから再度お試しください。'
+                },
+                response_only=True,
+                status_codes=['429'],
+            ),
+        ],
+        tags=['Authentication']
+    )
+
+
+def get_logout_schema():
+    """ログアウトAPIのスキーマ定義を返す"""
+    return extend_schema(
+        summary="ログアウト",
+        description="""
+        現在のセッションからログアウトします。
+        
+        **機能:**
+        - リフレッシュトークンをブラックリストに追加
+        - Cookieをクリア
+        - ログアウトイベントを記録（MotherDuck Analytics）
+        
+        **注意:** ログアウト後は、再度ログインが必要です。
+        """,
+        request=None,
+        responses={
+            200: {
+                'type': 'object',
+                'properties': {
+                    'detail': {
+                        'type': 'string',
+                        'example': 'ログアウトしました。'
+                    }
+                }
+            },
+        },
+        tags=['Authentication']
+    )
+```
+
+**Viewへのデコレーター適用**:
+```python
+# backend/apps/users/views.py
+
+from drf_spectacular.utils import extend_schema_view
+from .rest_schemas import get_register_schema, get_login_schema, get_logout_schema
+
+@extend_schema_view(post=get_register_schema())  # ← 関数を呼び出す
+@method_decorator(...)
+class CustomRegisterView(RegisterView):
+    """カスタム登録ビュー"""
+    
+    def create(self, request, *args, **kwargs):
+        # ...
+        pass
+
+
+@extend_schema_view(post=get_login_schema())  # ← 関数を呼び出す
+@method_decorator(...)
+class CustomLoginView(LoginView):
+    """カスタムログインビュー"""
+    
+    def post(self, request, *args, **kwargs):
+        # ...
+        pass
+
+
+@extend_schema_view(post=get_logout_schema())  # ← 関数を呼び出す
+class CustomLogoutView(LogoutView):
+    """カスタムログアウトビュー"""
+    
+    def post(self, request, *args, **kwargs):
+        # ...
+        pass
+```
+
+---
+
+##### TodoアプリケーションとCommon：クラス属性のまま
+
+TodoアプリケーションとCommon（共通定義）では、従来通り**クラス属性**で定義しています。これらは以下の理由で問題ありません：
+
+**問題が発生しない理由**:
+- ✅ ViewSetで直接使われている（`@extend_schema_view`を使わない）
+- ✅ シンプルな`ModelSerializer`を使用
+- ✅ リクエストとレスポンスで同じシリアライザー
+- ✅ 循環参照の問題が発生していない
+- ✅ スキーマが正しく生成されている
+
+**実装例（Todos）**:
 ```python
 # backend/apps/todos/rest_schemas.py
 
 from drf_spectacular.utils import extend_schema, OpenApiParameter
-from apps.common.schemas import CommonSchemas
+from apps.common.rest_schemas import CommonSchemas
 from .serializers import TodoSerializer
 
 class TodoSchemas:
@@ -560,340 +812,49 @@ class TodoSchemas:
         tags=['Todos']
     )
     
-    retrieve = extend_schema(
-        summary="Todo詳細取得",
-        description="指定されたIDのTodoアイテムの詳細を取得します。",
-        responses={
-            200: TodoSerializer,
-            404: CommonSchemas.ERROR_404,
-            **CommonSchemas.COMMON_RESPONSES
-        },
-        tags=['Todos']
-    )
-    
-    update = extend_schema(
-        summary="Todo更新（全体）",
-        description="""
-        指定されたIDのTodoアイテムを更新します。
-        
-        更新後、非同期でベクトルインデックスが更新されます（QStash経由）。
-        """,
-        request=TodoSerializer,
-        responses={
-            200: TodoSerializer,
-            400: CommonSchemas.ERROR_400,
-            404: CommonSchemas.ERROR_404,
-            **CommonSchemas.COMMON_RESPONSES
-        },
-        tags=['Todos']
-    )
-    
-    partial_update = extend_schema(
-        summary="Todo更新（部分）",
-        description="""
-        指定されたIDのTodoアイテムの一部を更新します。
-        
-        更新後、非同期でベクトルインデックスが更新されます（QStash経由）。
-        """,
-        request=TodoSerializer,
-        responses={
-            200: TodoSerializer,
-            400: CommonSchemas.ERROR_400,
-            404: CommonSchemas.ERROR_404,
-            **CommonSchemas.COMMON_RESPONSES
-        },
-        tags=['Todos']
-    )
-    
-    destroy = extend_schema(
-        summary="Todo削除",
-        description="""
-        指定されたIDのTodoアイテムを削除します。
-        
-        削除後、非同期でベクトルインデックスからも削除されます（QStash経由）。
-        """,
-        responses={
-            204: None,
-            404: CommonSchemas.ERROR_404,
-            **CommonSchemas.COMMON_RESPONSES
-        },
-        tags=['Todos']
-    )
-    
-    stats = extend_schema(
-        summary="優先度別統計",
-        description="優先度ごとのTodo件数を取得します。Redisキャッシュを使用（15分間）。",
-        responses={
-            200: {
-                'type': 'array',
-                'items': {
-                    'type': 'object',
-                    'properties': {
-                        'priority': {'type': 'string', 'enum': ['HIGH', 'MEDIUM', 'LOW']},
-                        'count': {'type': 'integer'},
-                    }
-                }
-            },
-            **CommonSchemas.COMMON_RESPONSES
-        },
-        tags=['Todos', 'Statistics']
-    )
-    
-    search = extend_schema(
-        summary="セマンティック検索",
-        description="""
-        自然言語でTodoを検索します。
-        
-        Google Gemini APIによるベクトル検索を使用し、
-        「明日の会議関連」などの曖昧な検索が可能です。
-        """,
-        parameters=[
-            OpenApiParameter(
-                name='q',
-                type=str,
-                location=OpenApiParameter.QUERY,
-                required=True,
-                description='検索クエリ（例: "明日の会議関連"）'
-            ),
-            OpenApiParameter(
-                name='top_k',
-                type=int,
-                location=OpenApiParameter.QUERY,
-                required=False,
-                description='取得件数（デフォルト: 5、最大: 20）'
-            ),
-            OpenApiParameter(
-                name='min_score',
-                type=float,
-                location=OpenApiParameter.QUERY,
-                required=False,
-                description='最小類似度スコア（デフォルト: 0.5、範囲: 0.0-1.0）'
-            ),
-        ],
-        responses={
-            200: {
-                'type': 'object',
-                'properties': {
-                    'query': {'type': 'string'},
-                    'results': {
-                        'type': 'array',
-                        'items': {
-                            'type': 'object',
-                            'properties': {
-                                'id': {'type': 'integer'},
-                                'score': {'type': 'number', 'format': 'float'},
-                                'title': {'type': 'string'},
-                                'priority': {'type': 'string', 'enum': ['HIGH', 'MEDIUM', 'LOW']},
-                                'progress': {'type': 'integer'},
-                            }
-                        }
-                    },
-                    'count': {'type': 'integer'},
-                }
-            },
-            400: CommonSchemas.ERROR_400,
-            **CommonSchemas.COMMON_RESPONSES
-        },
-        tags=['Todos', 'Search']
-    )
+    # ... その他のエンドポイント
 ```
 
-#### 認証アプリケーション
-```python
-# backend/apps/users/rest_schemas.py
-
-from drf_spectacular.utils import extend_schema, OpenApiExample
-from apps.common.schemas import CommonSchemas
-from dj_rest_auth.serializers import LoginSerializer
-from .serializers import CustomRegisterSerializer
-
-class AuthSchemas:
-    """認証関連のOpenAPIスキーマ定義"""
-    
-    login = extend_schema(
-        summary="ログイン",
-        description="""
-        メールアドレスとパスワードでログインします。
-        
-        **機能:**
-        - HttpOnly CookieにJWTトークンを設定
-        - ログイン履歴を記録（MotherDuck Analytics）
-        
-        **レート制限:** 5回/5分
-        """,
-        request=LoginSerializer,
-        responses={
-            200: {
-                'type': 'object',
-                'properties': {
-                    'user': {
-                        'type': 'object',
-                        'properties': {
-                            'pk': {'type': 'integer'},
-                            'email': {'type': 'string', 'format': 'email'},
-                            'first_name': {'type': 'string'},
-                            'last_name': {'type': 'string'},
-                        }
-                    },
-                    'access': {'type': 'string'},
-                    'refresh': {'type': 'string'},
-                }
-            },
-            400: OpenApiExample(
-                'Bad Request',
-                value={
-                    'non_field_errors': ['メールアドレスまたはパスワードが正しくありません。']
-                },
-                response_only=True,
-            ),
-            429: CommonSchemas.ERROR_429,
-        },
-        tags=['Authentication']
-    )
-    
-    register = extend_schema(
-        summary="新規登録",
-        description="""
-        新規ユーザーを登録します。
-        
-        **機能:**
-        - HttpOnly CookieにJWTトークンを自動設定
-        - ウェルカムメールを非同期送信（QStash経由）
-        - 登録イベントを記録（MotherDuck Analytics）
-        
-        **レート制限:** 3回/1時間
-        """,
-        request=CustomRegisterSerializer,
-        responses={
-            201: {
-                'type': 'object',
-                'properties': {
-                    'user': {
-                        'type': 'object',
-                        'properties': {
-                            'pk': {'type': 'integer'},
-                            'email': {'type': 'string', 'format': 'email'},
-                            'first_name': {'type': 'string'},
-                            'last_name': {'type': 'string'},
-                        }
-                    },
-                    'access': {'type': 'string'},
-                    'refresh': {'type': 'string'},
-                }
-            },
-            400: OpenApiExample(
-                'User Already Exists',
-                value={
-                    'error': 'user_already_exists',
-                    'detail': 'メールアドレス user@example.com は既に登録されています',
-                    'data': {'field': 'email'}
-                },
-                response_only=True,
-            ),
-            429: CommonSchemas.ERROR_429,
-        },
-        tags=['Authentication']
-    )
-    
-    logout = extend_schema(
-        summary="ログアウト",
-        description="""
-        ログアウトし、JWTトークンをブラックリスト化します。
-        """,
-        request=None,
-        responses={
-            200: OpenApiExample(
-                'Success',
-                value={'detail': 'ログアウトしました。'},
-                response_only=True,
-            ),
-            **CommonSchemas.COMMON_RESPONSES
-        },
-        tags=['Authentication']
-    )
-```
-
----
-
-### 4. Viewへのデコレーター適用
+**Viewへのデコレーター適用**:
 ```python
 # backend/apps/todos/views.py
 
-from rest_framework import viewsets
-from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-
-from .serializers import TodoSerializer
-from .service import TodoCommandService, TodoQueryService
 from .rest_schemas import TodoSchemas
 
 class TodoViewSet(viewsets.ModelViewSet):
     serializer_class = TodoSerializer
     permission_classes = [IsAuthenticated]
     
-    def get_queryset(self):
-        return TodoQueryService.get_user_todos(self.request.user)
-    
-    @TodoSchemas.list
+    @TodoSchemas.list  # ← クラス属性として直接参照
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
     
-    @TodoSchemas.create
+    @TodoSchemas.create  # ← クラス属性として直接参照
     def create(self, request, *args, **kwargs):
         return super().create(request, *args, **kwargs)
     
-    @TodoSchemas.retrieve
-    def retrieve(self, request, *args, **kwargs):
-        return super().retrieve(request, *args, **kwargs)
-    
-    @TodoSchemas.update
-    def update(self, request, *args, **kwargs):
-        return super().update(request, *args, **kwargs)
-    
-    @TodoSchemas.partial_update
-    def partial_update(self, request, *args, **kwargs):
-        return super().partial_update(request, *args, **kwargs)
-    
-    @TodoSchemas.destroy
-    def destroy(self, request, *args, **kwargs):
-        return super().destroy(request, *args, **kwargs)
-    
-    @TodoSchemas.stats
-    @action(detail=False, methods=["get"])
-    def stats(self, request):
-        # 実装...
-        pass
-    
-    @TodoSchemas.search
-    @action(detail=False, methods=["get"])
-    def search(self, request):
-        # 実装...
-        pass
+    # ...
 ```
-```python
-# backend/apps/users/views.py
 
-from dj_rest_auth.registration.views import RegisterView
-from dj_rest_auth.views import LoginView, LogoutView
+---
 
-from .rest_schemas import AuthSchemas
+##### 使い分けガイドライン
 
-class CustomLoginView(LoginView):
-    @AuthSchemas.login
-    def post(self, request, *args, **kwargs):
-        return super().post(request, *args, **kwargs)
+| 状況 | 推奨方式 | 理由 |
+|------|---------|------|
+| **`get_serializer_class`を使用** | 関数 | スキーマ生成が複雑化し、循環参照のリスクがあるため |
+| **リクエストとレスポンスで異なるシリアライザー** | 関数 | 循環参照を避け、確実にシリアライザーが読み込まれるため |
+| **`extend_schema_view`を使用** | 関数 | デコレーター適用時の評価タイミングを制御するため |
+| **スキーマ生成に問題が発生** | 関数 | 遅延評価で解決できるため |
+| **ViewSetでシンプルに使用** | クラス属性 | コードが読みやすく、問題が発生しないため |
+| **問題なく動作している** | クラス属性 | 不要な変更を避けるため |
 
-class CustomRegisterView(RegisterView):
-    @AuthSchemas.register
-    def create(self, request, *args, **kwargs):
-        return super().create(request, *args, **kwargs)
+**設計原則**:
+- ✅ 各アプリケーションの特性に応じた最適な方法を選択
+- ✅ 問題が発生していない場合は変更しない
+- ✅ 問題が発生した場合は関数化で解決
 
-class CustomLogoutView(LogoutView):
-    @AuthSchemas.logout
-    def logout(self, request):
-        return super().logout(request)
-```
+この設計により、保守性と実用性のバランスを保ちながら、型安全なAPI開発を実現しています。
 
 ---
 

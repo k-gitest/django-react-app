@@ -1,85 +1,16 @@
-from drf_spectacular.utils import extend_schema, OpenApiExample, inline_serializer
-from apps.common.rest_schemas import CommonSchemas
+from drf_spectacular.utils import extend_schema, OpenApiExample
 from dj_rest_auth.serializers import LoginSerializer
 from rest_framework import serializers
-from .serializers import CustomRegisterSerializer, CustomUserSerializer, AuthResponseSerializer, WelcomeEmailWebhookSerializer
+from .serializers import CustomRegisterSerializer, AuthResponseSerializer, WelcomeEmailWebhookSerializer
 
-class AuthSchemas:
-    """認証関連のOpenAPIスキーマ定義"""
+def get_register_schema():
+    """
+    登録APIのスキーマ定義を返す
     
-    login = extend_schema(
-        summary="ログイン",
-        description="""
-        メールアドレスとパスワードでログインします。
-        
-        **機能:**
-        - HttpOnly CookieにJWTトークンを設定
-        - ログイン履歴を記録（MotherDuck Analytics）
-        
-        **レート制限:** 5回/5分
-        
-        **成功時の動作:**
-        1. アクセストークン（5分間有効）をCookieに設定
-        2. リフレッシュトークン（1日間有効）をCookieに設定
-        3. ログインイベントをMotherDuckに記録
-        """,
-        request=LoginSerializer,
-        responses={
-            200: AuthResponseSerializer,
-            400: {
-                'type': 'object',
-                'properties': {
-                    'non_field_errors': {
-                        'type': 'array',
-                        'items': {'type': 'string'}
-                    }
-                }
-            },
-            429: {
-                'type': 'object',
-                'properties': {
-                    'detail': {'type': 'string'}
-                }
-            },
-        },
-        examples=[  # ✅ 例はexamplesパラメータで指定
-            OpenApiExample(
-                'Success',
-                value={
-                    'user': {
-                        'id': 1,
-                        'email': 'user@example.com',
-                        'first_name': 'John',
-                        'last_name': 'Doe',
-                        'is_staff': False
-                    },
-                    'access': 'eyJ0eXAiOiJKV1QiLCJhbGc...',
-                    'refresh': 'eyJ0eXAiOiJKV1QiLCJhbGc...'
-                },
-                response_only=True,
-                status_codes=['200'],
-            ),
-            OpenApiExample(
-                'Bad Request - Invalid Credentials',
-                value={
-                    'non_field_errors': ['メールアドレスまたはパスワードが正しくありません。']
-                },
-                response_only=True,
-                status_codes=['400'],
-            ),
-            OpenApiExample(
-                'Too Many Requests',
-                value={
-                    'detail': 'リクエストが多すぎます。しばらく時間を置いてから再度お試しください。'
-                },
-                response_only=True,
-                status_codes=['429'],
-            ),
-        ],
-        tags=['Authentication']
-    )
+    関数にすることで、インポート時ではなく使用時に評価される
+    """
     
-    register = extend_schema(
+    return extend_schema(
         summary="新規登録",
         description="""
         新規ユーザーを登録します。
@@ -154,63 +85,116 @@ class AuthSchemas:
         ],
         tags=['Authentication']
     )
+
+def get_login_schema():
+    """ログインAPIのスキーマ定義を返す"""
     
-    logout = extend_schema(
-        summary="ログアウト",
+    return extend_schema(
+        summary="ログイン",
         description="""
-        ログアウトし、JWTトークンをブラックリスト化します。
+        メールアドレスとパスワードでログインします。
         
         **機能:**
-        - リフレッシュトークンをブラックリスト化（再利用不可）
-        - Cookieからトークンを削除
-        - ログアウトイベントを記録（MotherDuck Analytics）
+        - HttpOnly CookieにJWTトークンを設定
+        - ログイン履歴を記録（MotherDuck Analytics）
+        
+        **レート制限:** 5回/5分
         
         **成功時の動作:**
-        1. リフレッシュトークンをブラックリストに追加
-        2. アクセストークン・リフレッシュトークンのCookieを削除
-        3. ログアウトイベントをMotherDuckに記録
+        1. アクセストークン（5分間有効）をCookieに設定
+        2. リフレッシュトークン（1日間有効）をCookieに設定
+        3. ログインイベントをMotherDuckに記録
         """,
-        request=None,
+        request=LoginSerializer,
         responses={
-            200: {
+            200: AuthResponseSerializer,
+            400: {
+                'type': 'object',
+                'properties': {
+                    'non_field_errors': {
+                        'type': 'array',
+                        'items': {'type': 'string'}
+                    }
+                }
+            },
+            429: {
                 'type': 'object',
                 'properties': {
                     'detail': {'type': 'string'}
-                }
-            },
-            401: {
-                'type': 'object',
-                'properties': {
-                    'error': {'type': 'string'},
-                    'detail': {'type': 'string'},
                 }
             },
         },
         examples=[
             OpenApiExample(
                 'Success',
-                value={'detail': 'ログアウトしました。'},
+                value={
+                    'user': {
+                        'id': 1,
+                        'email': 'user@example.com',
+                        'first_name': 'John',
+                        'last_name': 'Doe',
+                        'is_staff': False
+                    },
+                    'access': 'eyJ0eXAiOiJKV1QiLCJhbGc...',
+                    'refresh': 'eyJ0eXAiOiJKV1QiLCJhbGc...'
+                },
                 response_only=True,
                 status_codes=['200'],
             ),
             OpenApiExample(
-                'Unauthorized',
+                'Bad Request - Invalid Credentials',
                 value={
-                    'error': 'authentication_failed',
-                    'detail': '認証情報が提供されていません。'
+                    'non_field_errors': ['メールアドレスまたはパスワードが正しくありません。']
                 },
                 response_only=True,
-                status_codes=['401'],
+                status_codes=['400'],
+            ),
+            OpenApiExample(
+                'Too Many Requests',
+                value={
+                    'detail': 'リクエストが多すぎます。しばらく時間を置いてから再度お試しください。'
+                },
+                response_only=True,
+                status_codes=['429'],
             ),
         ],
         tags=['Authentication']
     )
 
 
-class UserWebhookSchemas:
+def get_logout_schema():
+    """ログアウトAPIのスキーマ定義を返す"""
+    return extend_schema(
+        summary="ログアウト",
+        description="""
+        現在のセッションからログアウトします。
+        
+        **機能:**
+        - リフレッシュトークンをブラックリストに追加
+        - Cookieをクリア
+        - ログアウトイベントを記録（MotherDuck Analytics）
+        
+        **注意:** ログアウト後は、再度ログインが必要です。
+        """,
+        request=serializers.Serializer,  # 空のリクエスト
+        responses={
+            200: {
+                'type': 'object',
+                'properties': {
+                    'detail': {
+                        'type': 'string',
+                        'example': 'ログアウトしました。'
+                    }
+                }
+            },
+        },
+        tags=['Authentication']
+    )
+
+def user_webhook_send_welcome_email_schema():
     """Webhook用スキーマ（内部API）"""
     
-    send_welcome_email = extend_schema(
+    return extend_schema(
         summary="[内部API] ウェルカムメール送信",
         description="""
         QStashから呼ばれる内部エンドポイント。直接呼び出し不可。

@@ -33,11 +33,19 @@ export const useAuth = () => {
   // --- 1. サインアップ用 ---
   const signUpMutation = useApiMutation<SignupRes, ErrorType, SignupReq>({
     mutationFn: ( data ) => signupService(data),
-    onSuccess: async () => {
+    onSuccess: async (user) => {
       // サインアップ成功後、ユーザー情報を取得
-      // ※ signupService が既にuser情報を返している場合は
-      //    response.user を直接使用することも可能
-      await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+      if(user){
+        // ユーザー情報を即座にStoreにセット
+        useAuthStore.getState().setUser(user);
+        // キャッシュも手動で更新
+        queryClient.setQueryData(['auth', 'me'], user);
+      }
+      // 初期化完了フラグを立ててガードを通す
+      useAuthStore.getState().setInitialized(true);
+
+      // 念のため無効化
+      queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
       navigate('/dashboard');
     },
     onError: (err) => {

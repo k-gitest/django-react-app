@@ -25,6 +25,23 @@ class CustomUserSerializer(serializers.ModelSerializer):
 
 
 # ============================================================================
+# 認証レスポンス用のシリアライザー
+# ============================================================================
+class AuthResponseSerializer(serializers.Serializer):
+    """
+    ログイン・登録APIの共通レスポンス用シリアライザー
+    
+    ログインと登録で同じレスポンス構造を使用するため、
+    共通のシリアライザーとして定義。
+    """
+    user = CustomUserSerializer(read_only=True, help_text='ユーザー情報')
+    access = serializers.CharField(read_only=True, help_text='アクセストークン（Cookieにも設定される）')
+    refresh = serializers.CharField(read_only=True, help_text='リフレッシュトークン（Cookieにも設定される）')
+
+    class Meta:
+        ref_name = 'AuthResponse' # スキーマ上の名前を固定
+
+# ============================================================================
 # 2. ユーザー作成（サインアップ）用のシリアライザー
 # ============================================================================
 class CustomRegisterSerializer(RegisterSerializer):
@@ -146,17 +163,3 @@ class WelcomeEmailWebhookSerializer(serializers.Serializer):
             'blank': 'first_name cannot be blank'
         }
     )
-
-class AuthResponseSerializer(serializers.Serializer):
-    """
-    ログイン・登録APIの共通レスポンス用シリアライザー
-    
-    ログインと登録で同じレスポンス構造を使用するため、
-    共通のシリアライザーとして定義。
-    """
-    user = CustomUserSerializer(read_only=True, help_text='ユーザー情報')
-    access = serializers.CharField(read_only=True, help_text='アクセストークン（Cookieにも設定される）')
-    refresh = serializers.CharField(read_only=True, help_text='リフレッシュトークン（Cookieにも設定される）')
-
-    class Meta:
-        ref_name = 'AuthResponse' # スキーマ上の名前を固定
