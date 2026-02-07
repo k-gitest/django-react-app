@@ -1,4 +1,4 @@
-import { AccountForm } from '@/features/auth/components/auth-form';
+import { AuthFormContainer } from '@/features/auth/components/auth-form-container';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import { MainWrapper } from '@/components/layout/main-wrapper';
@@ -7,7 +7,7 @@ const Register = () => {
   return (
     <MainWrapper>
       <div className="flex justify-center">
-        <AccountForm type="register" />
+        <AuthFormContainer type="register" />
       </div>
 
       <div className="flex justify-center p-4">

@@ -165,7 +165,7 @@ REST_AUTH = {
     "JWT_AUTH_SAMESITE": "None",
     "JWT_AUTH_SECURE": True,
     "SESSION_LOGIN": False,
-    "REGISTER_SERIALIZER": "dj_rest_auth.registration.serializers.RegisterSerializer",
+    #"REGISTER_SERIALIZER": "dj_rest_auth.registration.serializers.RegisterSerializer",
     "TOKEN_MODEL": None,
     # カスタムシリアライザ
     "USER_DETAILS_SERIALIZER": "apps.users.serializers.CustomUserSerializer",  # ユーザー情報取得用
@@ -366,4 +366,17 @@ SPECTACULAR_SETTINGS = {
     # レスポンス設定
     'COMPONENT_SPLIT_REQUEST': True,
     'SCHEMA_PATH_PREFIX': '/api/v1',
+    'APPEND_COMPONENTS': {
+        "schemas": {
+            "CustomRegister": {
+                "type": "object",
+                "properties": {
+                    "user": { "$ref": "#/components/schemas/CustomUser" },
+                    "access": { "type": "string" },
+                    "refresh": { "type": "string" }
+                },
+                "required": ["user", "access", "refresh"]
+            }
+        }
+    },
 }

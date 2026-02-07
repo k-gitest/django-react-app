@@ -70,35 +70,37 @@ class CustomLoginView(LoginView):
         response = super().post(request, *args, **kwargs)
 
         # ログイン成功時のみ分析ログ記録
-        if response.status_code == 200:
-            user = self._get_user_from_response(response)
-            if user:
-                # 分析ログのエラーは UserAuthService._log_analytics_safely で隔離
-                UserAuthService.handle_login_success(user, request)
-
+        if response.status_code == 200 and hasattr(self, "user") and self.user:
+            # 分析ログのエラーは UserAuthService._log_analytics_safely で隔離
+            UserAuthService.handle_login_success(self.user, request)
+                
         return response
 
-    def _get_user_from_response(self, response):
+    def get_response_data(self, user):
         """
-        レスポンスからユーザーオブジェクトを安全に取得
+        CustomUserSerializerを使った統一レスポンス
+        ログイン成功時のレスポンスデータを構築
+        
+        CustomUserSerializerを使用して、RegisterViewと同じ構造で返す。
+        これにより、id と is_staff を含む完全なユーザー情報が返される。
         
         Args:
-            response: DRFレスポンスオブジェクト
+            user: CustomUserオブジェクト
         
         Returns:
-            CustomUser or None
+            dict: {
+                'user': { id, email, first_name, last_name, is_staff },
+                'access': str,
+                'refresh': str
+            }
         """
-        # self.userがある場合（dj-rest-authが設定）
-        if hasattr(self, "user") and self.user:
-            return self.user
-
-        # self.userが無い場合、レスポンスデータから取得
-        user_pk = response.data.get("user", {}).get("pk")
-        if user_pk:
-            from django.contrib.auth import get_user_model
-            return get_user_model().objects.filter(pk=user_pk).first()
-
-        return None
+        from .serializers import CustomUserSerializer
+        
+        return {
+            'user': CustomUserSerializer(user).data,
+            'access': getattr(self, 'access_token', None),
+            'refresh': getattr(self, 'refresh_token', None),
+        }
 
 
 @method_decorator(
@@ -157,6 +159,31 @@ class CustomRegisterView(RegisterView):
         self.refresh_token = str(refresh)
 
         return user
+
+    def get_response_data(self, user):
+        """
+        レスポンスデータの構築
+        
+        CustomUserSerializerを使って、id と is_staff を含む
+        完全なユーザー情報を返す。
+        
+        Args:
+            user: CustomUserオブジェクト
+        
+        Returns:
+            dict: {
+                'user': { id, email, first_name, last_name, is_staff },
+                'access': str,
+                'refresh': str
+            }
+        """
+        from .serializers import CustomUserSerializer
+        
+        return {
+            'user': CustomUserSerializer(user).data,
+            'access': self.access_token,
+            'refresh': self.refresh_token,
+        }
 
     def _set_jwt_cookies(self, response, access_token, refresh_token):
         """

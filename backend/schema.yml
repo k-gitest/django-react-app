@@ -38,45 +38,16 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  user:
-                    type: object
-                    properties:
-                      id:
-                        type: integer
-                        description: ユーザーID
-                      email:
-                        type: string
-                        format: email
-                      first_name:
-                        type: string
-                      last_name:
-                        type: string
-                      is_staff:
-                        type: boolean
-                    required:
-                    - id
-                    - email
-                    - is_staff
-                  access:
-                    type: string
-                    description: アクセストークン（Cookieにも設定される）
-                  refresh:
-                    type: string
-                    description: リフレッシュトークン（Cookieにも設定される）
-                required:
-                - user
-                - access
-                - refresh
+                $ref: '#/components/schemas/AuthResponse'
               examples:
                 Success:
                   value:
                     user:
-                      pk: 1
+                      id: 1
                       email: user@example.com
                       first_name: John
                       last_name: Doe
+                      is_staff: false
                     access: eyJ0eXAiOiJKV1QiLCJhbGc...
                     refresh: eyJ0eXAiOiJKV1QiLCJhbGc...
           description: ''
@@ -1124,32 +1095,44 @@ paths:
           description: ''
 components:
   schemas:
-    CustomRegister:
+    AuthResponse:
       type: object
       description: |-
-        emailベース認証用のカスタム登録シリアライザ
+        ログイン・登録APIの共通レスポンス用シリアライザー
 
-        - usernameフィールドを削除（emailを主キーとして使用）
-        - first_name/last_nameフィールドを追加
-        - サービス層経由でユーザー作成
-
-        エラーハンドリング:
-            - メールアドレス重複: UserAlreadyExistsError → 統一エラーハンドラーが処理
-            - その他のエラー: 統一エラーハンドラーが処理
+        ログインと登録で同じレスポンス構造を使用するため、
+        共通のシリアライザーとして定義。
       properties:
-        email:
+        user:
+          allOf:
+          - $ref: '#/components/schemas/CustomUser'
+          readOnly: true
+          description: ユーザー情報
+        access:
           type: string
-          format: email
-        first_name:
+          readOnly: true
+          description: アクセストークン（Cookieにも設定される）
+        refresh:
           type: string
-          description: ユーザーの名
-          maxLength: 150
-        last_name:
-          type: string
-          description: ユーザーの姓
-          maxLength: 150
+          readOnly: true
+          description: リフレッシュトークン（Cookieにも設定される）
       required:
-      - email
+      - access
+      - refresh
+      - user
+    CustomRegister:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/CustomUser'
+        access:
+          type: string
+        refresh:
+          type: string
+      required:
+      - user
+      - access
+      - refresh
     CustomRegisterRequest:
       type: object
       description: |-

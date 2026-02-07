@@ -6,14 +6,22 @@ import { TodoItem } from './TodoItem';
 import { useState, useCallback } from 'react';
 import { TodoEditModal } from './TodoEditModal';
 import type { Todo } from '../types';
+import type { TodoFormValues } from '../schemas';
 
 export const TodoList = ({ showActions = true, limit }: { showActions?: boolean; limit?: number; }) => {
   const { todos, updateTodo, deleteTodo } = useTodos();
 	const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
 
+  /*
   const handleToggleComplete = useCallback(async (todo: Todo) => {
     const newProgress = todo.progress === 100 ? 0 : 100;
     await updateTodo({ id: todo.id, data: { progress: newProgress } });
+  }, [updateTodo]);
+  */
+
+  const handleToggleComplete = useCallback(async (id: number | string, currentProgress: number) => {
+    const newProgress = currentProgress === 100 ? 0 : 100;
+    await updateTodo({ id: Number(id), progress: newProgress });
   }, [updateTodo]);
 
 	const handleEdit = useCallback((todo: Todo) => {
@@ -26,13 +34,20 @@ export const TodoList = ({ showActions = true, limit }: { showActions?: boolean;
     }
   }, [deleteTodo]);
 
+  const handleUpdateSubmit = useCallback(async (values: TodoFormValues) => {
+    if (!editingTodo) return;
+    await updateTodo({ id: editingTodo.id, ...values });
+  }, [editingTodo, updateTodo]);
+
   const handleModalClose = useCallback((open: boolean) => {
     if (!open) {
       setEditingTodo(null);
     }
   }, []);
 
-  const safeTodos = todos?.data ?? [];
+  // APIレスポンスが「配列そのまま」の場合と「{ data: [] }」の場合を許容し、
+  // 取得失敗時は空配列をデフォルトにする（データの正規化）
+  const safeTodos: Todo[] = Array.isArray(todos) ? todos : (todos?.data ?? []);
   const displayTodos = limit ? safeTodos.slice(0, limit) : safeTodos;
 
   /*
@@ -65,20 +80,28 @@ export const TodoList = ({ showActions = true, limit }: { showActions?: boolean;
 				{displayTodos.map((todo) => (
 					<TodoItem
 						key={todo.id}
-						todo={todo}
+						id={todo.id}
+            title={todo.todo_title}
+            priority={todo.priority ?? 'MEDIUM'}
+            progress={todo.progress ?? 0}
+            updatedAt={todo.updated_at}
             showActions={showActions}
-						onToggleComplete={handleToggleComplete}
-						onEdit={handleEdit}
-						onDelete={handleDelete}
+            onToggleComplete={() => handleToggleComplete(todo.id, todo.progress ?? 0)}
+            onEdit={() => handleEdit(todo)}
+            onDelete={() => handleDelete(todo.id)}
 					/>
 				))}
 			</div>
 			{/* ✅ 編集モードの時だけモーダルをレンダリング */}
-      {showActions && (
+      {showActions && editingTodo && (
         <TodoEditModal 
-          todo={editingTodo} 
-          open={!!editingTodo} 
-          onOpenChange={handleModalClose} 
+          id={editingTodo.id}
+          title={editingTodo.todo_title}
+          priority={editingTodo.priority ?? 'MEDIUM'}
+          progress={editingTodo.progress ?? 0}
+          open={true}
+          onOpenChange={handleModalClose}
+          onSubmit={handleUpdateSubmit}
         />
       )}
 		</>

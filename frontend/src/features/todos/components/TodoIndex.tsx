@@ -2,8 +2,17 @@ import { TodoList } from '@/features/todos/components/TodoList';
 import { TodoCreateForm } from '@/features/todos/components/TodoCreateForm';
 import { TodoStatsChart } from '@/features/todos/components/TodoStatsChart';
 import { TodoProgressChart } from '@/features/todos/components/TodoProgressChart';
+import { useTodos } from '@/features/todos/hooks/useTodos';
+import type { TodoFormValues } from '@/features/todos/schemas';
+import { useCallback } from 'react';
 
 export const TodoIndex = () => {
+  const { createTodo } = useTodos();
+
+  const handleCreateSubmit = useCallback(async (values: TodoFormValues) => {
+    await createTodo(values);
+  }, [createTodo]);
+
   return (
     <div className="container mx-auto py-8 px-4 space-y-8">
       {/* ヘッダーエリア */}
@@ -12,7 +21,7 @@ export const TodoIndex = () => {
           <h1 className="text-3xl font-bold tracking-tight">TODO</h1>
           <p className="text-muted-foreground">現在のタスク状況と進捗統計を確認できます。</p>
         </div>
-        <TodoCreateForm />
+        <TodoCreateForm onSubmit={handleCreateSubmit} />
       </div>
 
       {/* 統計エリア (Gridレイアウト) */}
