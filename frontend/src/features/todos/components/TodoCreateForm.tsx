@@ -2,9 +2,13 @@ import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
-import { useTodos } from '../hooks/useTodos';
+//import { useTodos } from '../hooks/useTodos';
 import { TodoForm } from './TodoForm';
 import type { TodoFormValues } from '../schemas';
+
+interface TodoCreateFormProps {
+  onSubmit: (values: TodoFormValues) => void | Promise<void>;
+}
 
 /**
  * Todo作成ダイアログ
@@ -13,12 +17,12 @@ import type { TodoFormValues } from '../schemas';
  * - Dialog の開閉状態を管理
  * - フォーム送信後にDialogを閉じる
  */
-export const TodoCreateForm = () => {
+export const TodoCreateForm = ({ onSubmit }: TodoCreateFormProps) => {
   const [open, setOpen] = useState(false);
-  const { createTodo } = useTodos();
+  //const { createTodo } = useTodos();
 
   const handleSubmit = async (values: TodoFormValues) => {
-    await createTodo(values);
+    await onSubmit(values);
     setOpen(false); // フォーム送信成功後にDialogを閉じる
   };
 

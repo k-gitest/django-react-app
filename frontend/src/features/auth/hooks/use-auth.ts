@@ -55,16 +55,16 @@ export const useAuth = () => {
   // --- 2. サインイン用 ---
   const signInMutation = useApiMutation<LoginRes, ErrorType, LoginReq>({
     mutationFn: ( data ) => loginService(data),
-    onSuccess: async (data) => {
+    onSuccess: async (user) => {
       // 単純に以下のinvalidateだと結構待つので先にレスポンスからユーザー情報をセットする
       // await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
 
       // 1. ログインAPIのレスポンス(data)に含まれるユーザー情報を即座にStoreにセット
       // これにより、AuthGuardが「userがいる」と即座に判断できるようになります
-      if (data?.user) {
-        useAuthStore.getState().setUser(data.user);
+      if (user) {
+        useAuthStore.getState().setUser(user);
         // 2. キャッシュも手動で更新（これによりinvalidateの再取得待ちを防ぐ）
-        queryClient.setQueryData(['auth', 'me'], data.user);
+        queryClient.setQueryData(['auth', 'me'], user);
       }
       // userの有無に関わらず、ログイン処理自体は成功しているので
       // 初期化完了フラグを立ててガードを通す

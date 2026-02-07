@@ -1,6 +1,6 @@
 import { TodoIndex } from "@/features/todos/components/TodoIndex"
 
-const Dashboard = () => {
+const TodoPage = () => {
     return (
         <>
             <TodoIndex />
@@ -8,4 +8,4 @@ const Dashboard = () => {
     )
 }
 
-export default Dashboard
+export default TodoPage

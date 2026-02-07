@@ -9,9 +9,9 @@ import type {
   RegisterInput,
   LoginInput,
   //UserType,
-  AuthPayload,
+  //AuthPayload,
 } from '@/graphql/types';
-import type { Account, TokenResponse, UserInfo } from '../types/auth';
+import type { Account, UserInfo } from '../types/auth';
 
 /**
  * GraphQL API実装
@@ -37,7 +37,7 @@ export const fetchMeGraphQL = async (): Promise<UserInfo> => {
 /**
  * ログイン
  */
-export const loginServiceGraphQL = async (credentials: Account): Promise<TokenResponse> => {
+export const loginServiceGraphQL = async (credentials: Account): Promise<UserInfo> => {
   const input: LoginInput = {
     email: credentials.email,
     password: credentials.password,
@@ -49,13 +49,17 @@ export const loginServiceGraphQL = async (credentials: Account): Promise<TokenRe
     'login'
   );
 
-  return graphqlAuthToTokenResponse(authPayload as AuthPayload);
+  if (authPayload.__typename !== 'AuthPayload') {
+    throw new Error('ログインに失敗しました'); // 実際にはErrorHandlerが処理
+  }
+
+  return graphqlUserToUserInfo(authPayload.user);
 };
 
 /**
  * サインアップ
  */
-export const signupServiceGraphQL = async (credentials: Account): Promise<TokenResponse> => {
+export const signupServiceGraphQL = async (credentials: Account): Promise<UserInfo> => {
   const input: RegisterInput = {
     email: credentials.email,
     password: credentials.password,
@@ -70,7 +74,11 @@ export const signupServiceGraphQL = async (credentials: Account): Promise<TokenR
     'register'
   );
 
-  return graphqlAuthToTokenResponse(authPayload as AuthPayload);
+  if (authPayload.__typename !== 'AuthPayload') {
+    throw new Error('サインアップに失敗しました'); // 実際にはErrorHandlerが処理
+  }
+
+  return graphqlUserToUserInfo(authPayload.user);
 };
 
 /**
@@ -130,6 +138,7 @@ function graphqlUserToUserInfo(
 /**
  * GraphQL AuthPayload → TokenResponse に変換
  */
+/*
 function graphqlAuthToTokenResponse(authPayload: AuthPayload): TokenResponse {
   return {
     user: graphqlUserToUserInfo(authPayload.user),
@@ -139,3 +148,4 @@ function graphqlAuthToTokenResponse(authPayload: AuthPayload): TokenResponse {
     refresh: '',
   };
 }
+*/

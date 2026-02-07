@@ -8,7 +8,7 @@ import * as graphql from './todo-service-graphql';
 const useGraphQL = {
   getTodos: true,
   createTodo: false,
-  updateTodo: false,
+  updateTodo: true,
   deleteTodo: true,
   getTodoStats: false,
   getProgressStats: false,

@@ -1,7 +1,8 @@
-from drf_spectacular.utils import extend_schema, OpenApiExample
+from drf_spectacular.utils import extend_schema, OpenApiExample, inline_serializer
 from apps.common.rest_schemas import CommonSchemas
 from dj_rest_auth.serializers import LoginSerializer
-from .serializers import CustomRegisterSerializer, WelcomeEmailWebhookSerializer
+from rest_framework import serializers
+from .serializers import CustomRegisterSerializer, CustomUserSerializer, AuthResponseSerializer, WelcomeEmailWebhookSerializer
 
 class AuthSchemas:
     """認証関連のOpenAPIスキーマ定義"""
@@ -24,25 +25,7 @@ class AuthSchemas:
         """,
         request=LoginSerializer,
         responses={
-            200: {
-                'type': 'object',
-                'properties': {
-                    'user': {
-                        'type': 'object',
-                        'properties': {
-                            'id': {'type': 'integer', 'description': 'ユーザーID'},
-                            'email': {'type': 'string', 'format': 'email'},
-                            'first_name': {'type': 'string'},
-                            'last_name': {'type': 'string'},
-                            'is_staff': {'type': 'boolean'},
-                        },
-                        'required': ['id', 'email', 'is_staff'],
-                    },
-                    'access': {'type': 'string', 'description': 'アクセストークン（Cookieにも設定される）'},
-                    'refresh': {'type': 'string', 'description': 'リフレッシュトークン（Cookieにも設定される）'},
-                },
-                'required': ['user', 'access', 'refresh'],
-            },
+            200: AuthResponseSerializer,
             400: {
                 'type': 'object',
                 'properties': {
@@ -64,10 +47,11 @@ class AuthSchemas:
                 'Success',
                 value={
                     'user': {
-                        'pk': 1,
+                        'id': 1,
                         'email': 'user@example.com',
                         'first_name': 'John',
-                        'last_name': 'Doe'
+                        'last_name': 'Doe',
+                        'is_staff': False
                     },
                     'access': 'eyJ0eXAiOiJKV1QiLCJhbGc...',
                     'refresh': 'eyJ0eXAiOiJKV1QiLCJhbGc...'
@@ -116,22 +100,7 @@ class AuthSchemas:
         """,
         request=CustomRegisterSerializer,
         responses={
-            201: {
-                'type': 'object',
-                'properties': {
-                    'user': {
-                        'type': 'object',
-                        'properties': {
-                            'pk': {'type': 'integer', 'description': 'ユーザーID'},
-                            'email': {'type': 'string', 'format': 'email'},
-                            'first_name': {'type': 'string'},
-                            'last_name': {'type': 'string'},
-                        }
-                    },
-                    'access': {'type': 'string', 'description': 'アクセストークン（Cookieにも設定される）'},
-                    'refresh': {'type': 'string', 'description': 'リフレッシュトークン（Cookieにも設定される）'},
-                },
-            },
+            201: AuthResponseSerializer,
             400: {
                 'type': 'object',
                 'properties': {
@@ -152,10 +121,11 @@ class AuthSchemas:
                 'Success',
                 value={
                     'user': {
-                        'pk': 1,
+                        'id': 1,
                         'email': 'user@example.com',
                         'first_name': 'John',
-                        'last_name': 'Doe'
+                        'last_name': 'Doe',
+                        'is_staff': False
                     },
                     'access': 'eyJ0eXAiOiJKV1QiLCJhbGc...',
                     'refresh': 'eyJ0eXAiOiJKV1QiLCJhbGc...'

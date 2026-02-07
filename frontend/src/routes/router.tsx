@@ -6,7 +6,7 @@ import About from '@/pages/AboutPage';
 import Register from '@/pages/RegisterPage';
 import Login from '@/pages/LoginPage';
 import Dashboard from '@/pages/Dashboard';
-import Todo from '@/pages/TodoPage';
+import TodoPage from '@/pages/TodoPage';
 import NotFound from '@/pages/Not-Found';
 import { AuthGuard } from '@/routes/auth-guard';
 import { GuestGuard } from '@/routes/guest-guard';
@@ -60,7 +60,7 @@ const router = createBrowserRouter(
         {/* Protected routes */}
         <Route element={<AuthGuard />}>
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/todo" element={<Todo />} />
+          <Route path="/todo" element={<TodoPage />} />
         </Route>
       </Route>
     </>,

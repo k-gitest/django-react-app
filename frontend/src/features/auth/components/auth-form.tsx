@@ -1,30 +1,30 @@
 import { FormInput, FormWrapper } from '@/components/form/form-parts';
 import { FormPasswordInput } from '@/components/form/form-password-input';
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/features/auth/hooks/use-auth';
+//import { useAuth } from '@/features/auth/hooks/use-auth';
 import { validatedAccount } from '@/features/auth/schemas/account-schema';
-import type { Account, AccountFormType } from '@/features/auth/types/auth';
+import type { Account } from '@/features/auth/types/auth';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Loader } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 
-export const AccountForm = (props: { type: AccountFormType }) => {
+interface AccountFormProps {
+  submitLabel: string;
+  onSubmit: (data: Account) => Promise<unknown>;
+  isLoading: boolean;
+}
+
+export const AccountForm = ({ submitLabel, onSubmit, isLoading }: AccountFormProps) => {
   const form = useForm<Account>({
     resolver: zodResolver(validatedAccount),
     defaultValues: { email: '', password: '' },
   });
 
-  const { signUp, signIn, signUpMutation, signInMutation } = useAuth();
+  //const { signUp, signIn, signUpMutation, signInMutation } = useAuth();
 
   const handleSubmit = async (formData: Account) => {
     try {
-      if (props.type === 'login') {
-        await signIn(formData);
-      } else {
-        await signUp(formData);
-      }
-
-      // 成功時のみリセット
+      await onSubmit(formData);
       form.reset();
     } catch (error) {
       // エラーは useAuth の onError と errorHandler で処理済み
@@ -35,7 +35,7 @@ export const AccountForm = (props: { type: AccountFormType }) => {
   };
 
   // ローディング状態を統合
-  const isLoading = signInMutation.isPending || signUpMutation.isPending;
+  //const isLoading = signInMutation.isPending || signUpMutation.isPending;
 
   return (
     <div className="flex flex-col gap-4">
@@ -46,7 +46,7 @@ export const AccountForm = (props: { type: AccountFormType }) => {
           <div className="text-center">
             <Button type="submit" className="w-32" disabled={isLoading}>
               {isLoading && <Loader className="mr-2 h-4 w-4 animate-spin" />}
-              {props.type === 'login' ? 'ログイン' : '登録'}
+              {submitLabel}
             </Button>
           </div>
         </FormWrapper>

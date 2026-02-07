@@ -1,5 +1,5 @@
 import { apiClient } from '@/lib/api-client';
-import type { Account } from '../types/auth';
+import type { Account, UserInfo } from '../types/auth';
 //import type { ApiRes, ApiReq } from '@/types/api-utils';
 
 /**
@@ -7,8 +7,9 @@ import type { Account } from '../types/auth';
  * エンドポイント: GET /api/v1/auth/user/
  * 認証: Cookie（自動送信）
  */
-export const fetchMe = async () => {
+export const fetchMe = async (): Promise<UserInfo> => {
   const { data } = await apiClient.GET("/api/v1/auth/user/");
+  if (!data) throw new Error("User not found");
   return data;
 };
 
@@ -17,11 +18,21 @@ export const fetchMe = async () => {
  * POST /api/v1/auth/login/
  * @param credentials - 認証情報 (email, password)
  */
-export const loginService = async (credentials: Account) => {
+export const loginService = async (credentials: Account): Promise<UserInfo> => {
   const { data } = await apiClient.POST("/api/v1/auth/login/", {
     body: credentials,
   });
-  return data;
+  
+  if (!data?.user) throw new Error("User not found");
+
+  // ここで access, refresh を捨てて user だけを返す
+  return {
+    id: data.user.id,
+    email: data.user.email,
+    is_staff: data.user.is_staff,
+    first_name: data.user.first_name,
+    last_name: data.user.last_name,
+  };
 };
 
 /**
@@ -30,7 +41,7 @@ export const loginService = async (credentials: Account) => {
  * 認証: 不要
  * backendのスキーマに合わせて password1/2 を送信
  */
-export const signupService = async (credentials: Account) => {
+export const signupService = async (credentials: Account): Promise<UserInfo> => {
   const { data } = await apiClient.POST('/api/v1/auth/registration/', {
     body: {
       email: credentials.email,

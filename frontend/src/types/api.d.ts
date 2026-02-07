@@ -477,23 +477,23 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
-         * @description emailベース認証用のカスタム登録シリアライザ
+         * @description ログイン・登録APIの共通レスポンス用シリアライザー
          *
-         *     - usernameフィールドを削除（emailを主キーとして使用）
-         *     - first_name/last_nameフィールドを追加
-         *     - サービス層経由でユーザー作成
-         *
-         *     エラーハンドリング:
-         *         - メールアドレス重複: UserAlreadyExistsError → 統一エラーハンドラーが処理
-         *         - その他のエラー: 統一エラーハンドラーが処理
+         *     ログインと登録で同じレスポンス構造を使用するため、
+         *     共通のシリアライザーとして定義。
          */
+        AuthResponse: {
+            /** @description ユーザー情報 */
+            readonly user: components["schemas"]["CustomUser"];
+            /** @description アクセストークン（Cookieにも設定される） */
+            readonly access: string;
+            /** @description リフレッシュトークン（Cookieにも設定される） */
+            readonly refresh: string;
+        };
         CustomRegister: {
-            /** Format: email */
-            email: string;
-            /** @description ユーザーの名 */
-            first_name?: string;
-            /** @description ユーザーの姓 */
-            last_name?: string;
+            user: components["schemas"]["CustomUser"];
+            access: string;
+            refresh: string;
         };
         /**
          * @description emailベース認証用のカスタム登録シリアライザ
@@ -693,21 +693,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        user: {
-                            /** @description ユーザーID */
-                            id: number;
-                            /** Format: email */
-                            email: string;
-                            first_name?: string;
-                            last_name?: string;
-                            is_staff: boolean;
-                        };
-                        /** @description アクセストークン（Cookieにも設定される） */
-                        access: string;
-                        /** @description リフレッシュトークン（Cookieにも設定される） */
-                        refresh: string;
-                    };
+                    "application/json": components["schemas"]["AuthResponse"];
                 };
             };
             400: {
