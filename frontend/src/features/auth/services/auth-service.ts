@@ -1,6 +1,5 @@
 import { apiClient } from '@/lib/api-client';
 import type { Account, UserInfo } from '../types/auth';
-//import type { ApiRes, ApiReq } from '@/types/api-utils';
 
 /**
  * ユーザー情報取得
@@ -24,15 +23,7 @@ export const loginService = async (credentials: Account): Promise<UserInfo> => {
   });
   
   if (!data?.user) throw new Error("User not found");
-
-  // ここで access, refresh を捨てて user だけを返す
-  return {
-    id: data.user.id,
-    email: data.user.email,
-    is_staff: data.user.is_staff,
-    first_name: data.user.first_name,
-    last_name: data.user.last_name,
-  };
+  return data.user;
 };
 
 /**
@@ -49,7 +40,8 @@ export const signupService = async (credentials: Account): Promise<UserInfo> => 
       password2: credentials.password,
     },
   });
-  return data;
+  if (!data?.user) throw new Error("User not found");
+  return data.user;
 };
 
 /**

@@ -366,17 +366,4 @@ SPECTACULAR_SETTINGS = {
     # レスポンス設定
     'COMPONENT_SPLIT_REQUEST': True,
     'SCHEMA_PATH_PREFIX': '/api/v1',
-    'APPEND_COMPONENTS': {
-        "schemas": {
-            "CustomRegister": {
-                "type": "object",
-                "properties": {
-                    "user": { "$ref": "#/components/schemas/CustomUser" },
-                    "access": { "type": "string" },
-                    "refresh": { "type": "string" }
-                },
-                "required": ["user", "access", "refresh"]
-            }
-        }
-    },
 }

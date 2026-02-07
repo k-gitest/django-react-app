@@ -2241,6 +2241,95 @@ frontend/src/
 ### バックエンド実装
 
 #### 1. スキーマ定義ファイルの作成
+
+**設計判断: 関数による遅延評価**
+
+`rest_schemas.py` では、スキーマ定義を**クラス属性**ではなく**関数**で返すパターンを採用しています。これにより、循環参照を回避し、確実にシリアライザーが読み込まれた後にスキーマが評価されるようになります。
+
+**なぜ関数にするのか？**
+
+| 方式 | 評価タイミング | 問題 |
+|------|-------------|------|
+| **クラス属性** | ファイル読み込み時 | ❌ シリアライザーがまだ読み込まれていない可能性 |
+| **関数** | 呼び出し時 | ✅ 確実にシリアライザーが読み込まれている |
+
+**実装例（認証API）**:
+```python
+# backend/apps/users/rest_schemas.py
+
+def get_register_schema():
+    """
+    登録APIのスキーマ定義を返す
+    
+    関数にすることで、インポート時ではなく使用時に評価される
+    """
+    from .serializers import CustomRegisterSerializer, AuthResponseSerializer
+    
+    return extend_schema(
+        summary="新規登録",
+        description="""...""",
+        request=CustomRegisterSerializer,  # リクエスト用
+        responses={
+            201: AuthResponseSerializer,    # レスポンス用
+            400: {...},
+        },
+        examples=[...],
+        tags=['Authentication']
+    )
+
+def get_login_schema():
+    """ログインAPIのスキーマ定義を返す"""
+    from .serializers import LoginSerializer, AuthResponseSerializer
+    
+    return extend_schema(
+        summary="ログイン",
+        description="""...""",
+        request=LoginSerializer,
+        responses={
+            200: AuthResponseSerializer,
+            400: {...},
+        },
+        examples=[...],
+        tags=['Authentication']
+    )
+```
+
+**Viewへのデコレーター適用**:
+```python
+# backend/apps/users/views.py
+
+from drf_spectacular.utils import extend_schema_view
+from .rest_schemas import get_register_schema, get_login_schema
+
+@extend_schema_view(post=get_register_schema())  # ← 関数を呼び出す
+@method_decorator(...)
+class CustomRegisterView(RegisterView):
+    """カスタム登録ビュー"""
+    
+    def create(self, request, *args, **kwargs):
+        # ...
+        pass
+
+@extend_schema_view(post=get_login_schema())  # ← 関数を呼び出す
+@method_decorator(...)
+class CustomLoginView(LoginView):
+    """カスタムログインビュー"""
+    
+    def post(self, request, *args, **kwargs):
+        # ...
+        pass
+```
+
+**TodosとCommonのスキーマはクラス属性のまま**
+
+`todos/rest_schemas.py` と `common/rest_schemas.py` は、従来通り**クラス属性**で定義しています。これらは以下の理由で問題ありません：
+
+- ✅ ViewSetで直接使われている（`@extend_schema_view`を使わない）
+- ✅ シンプルな`ModelSerializer`を使用
+- ✅ 循環参照の問題が発生していない
+- ✅ スキーマが正しく生成されている
+
+**実装例（Todos）**:
 ```python
 # backend/apps/todos/rest_schemas.py
 
@@ -2323,6 +2412,18 @@ class TodoViewSet(viewsets.ModelViewSet):
         # 実装...
         pass
 ```
+
+**使い分けガイドライン**
+
+| 状況 | 推奨方式 | 理由 |
+|------|---------|------|
+| **`get_serializer_class`を使用** | 関数 | スキーマ生成が複雑化するため |
+| **リクエストとレスポンスで異なるシリアライザー** | 関数 | 循環参照を避けるため |
+| **スキーマ生成に問題が発生** | 関数 | 遅延評価で解決できるため |
+| **ViewSetでシンプルに使用** | クラス属性 | コードが読みやすいため |
+| **問題なく動作している** | クラス属性 | 不要な変更を避けるため |
+
+この設計により、各アプリケーションの特性に応じた最適なスキーマ定義方法を採用しています。
 
 ---
 
