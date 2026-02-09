@@ -21,3 +21,16 @@ export const delay = (millisecond: number): Promise<void> => {
 export const between = (value: number, min: number, max: number): boolean => {
   return value >= min && value <= max;
 };
+
+// rhfへのエラー渡し
+// RHFのsetErrorにValidationErrorを流し込むだけの関数
+export const mapErrorsToForm = <T extends FieldValues>(
+  error: unknown,
+  setError: UseFormSetError<T>
+) => {
+  if (error instanceof ValidationError && error.fields) {
+    Object.entries(error.fields).forEach(([field, messages]) => {
+      setError(field as Path<T>, { message: messages[0] });
+    });
+  }
+};

@@ -2,15 +2,15 @@ import { useEffect, useRef } from 'react';
 import { useLazyLoadQuery } from 'react-relay';
 import type { OperationType, GraphQLTaggedNode, FetchPolicy } from 'relay-runtime';
 
-interface UseApiQueryOptions<TQuery extends OperationType> {
+interface UseRelayQueryOptions<TQuery extends OperationType> {
   fetchPolicy?: FetchPolicy;
   onSuccess?: (data: TQuery['response']) => void;
 }
 
-export const useApiLazyLoadQuery = <TQuery extends OperationType>(
+export const useRelayLazyLoadQuery = <TQuery extends OperationType>(
   query: GraphQLTaggedNode,
   variables: TQuery['variables'],
-  options?: UseApiQueryOptions<TQuery>
+  options?: UseRelayQueryOptions<TQuery>
 ): TQuery['response'] => {
   const data = useLazyLoadQuery<TQuery>(query, variables, {
     fetchPolicy: options?.fetchPolicy || 'store-or-network',
