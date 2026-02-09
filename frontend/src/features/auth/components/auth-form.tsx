@@ -7,6 +7,7 @@ import type { Account } from '@/features/auth/types/auth';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Loader } from 'lucide-react';
 import { useForm } from 'react-hook-form';
+import { mapErrorsToForm } from '@/lib/utils';
 
 interface AccountFormProps {
   submitLabel: string;
@@ -27,6 +28,8 @@ export const AccountForm = ({ submitLabel, onSubmit, isLoading }: AccountFormPro
       await onSubmit(formData);
       form.reset();
     } catch (error) {
+      // 1. ValidationError (Zodやすり抜けた400エラー) の場合
+      mapErrorsToForm(error, form.setError)
       // エラーは useAuth の onError と errorHandler で処理済み
       if (import.meta.env.DEV) {
         console.error('Form submission error:', error);

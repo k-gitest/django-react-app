@@ -3,53 +3,45 @@ import { useMutation } from 'react-relay';
 import type {
   MutationParameters,
   GraphQLTaggedNode,
-  UseMutationConfig,
-  PayloadError
+  MutationConfig,
+  //PayloadError
 } from 'relay-runtime';
-import { ApiError } from '@/errors/api-error';
-import { handleMutationError } from '@/errors/error-handler';
+//import { ApiError } from '@/errors/api-error';
+import { errorHandler } from '@/errors/error-handler';
 
 interface ExtendedMutationConfig<TMutation extends MutationParameters>
-  extends UseMutationConfig<TMutation> {
+  extends MutationConfig<TMutation> {
   errorContext?: string;
   showToast?: boolean;
 }
 
-export const useApiMutation = <TMutation extends MutationParameters>(
+export const useRelayMutation = <TMutation extends MutationParameters>(
   mutation: GraphQLTaggedNode
 ) => {
   const [commit, isInFlight] = useMutation<TMutation>(mutation);
 
   const execute = useCallback(
     (config: ExtendedMutationConfig<TMutation>): Promise<TMutation['response']> => {
-      const { errorContext, showToast = true, ...relayConfig } = config;
+      const { errorContext, ...relayConfig } = config;
 
       return new Promise((resolve, reject) => {
         commit({
           ...relayConfig,
+          // nullをundefinedに変換して型不整合を解消
+          uploadables: relayConfig.uploadables ?? undefined,
+
           onCompleted: (response, errors) => {
-            // GraphQL実行時エラーの処理
-            if (errors && errors.length > 0) {
-              const graphqlErrors = convertPayloadErrorsToApiErrors(errors);
-              graphqlErrors.forEach(error => {
-                handleMutationError(error, {
-                  context: errorContext || 'Mutation',
-                  showToast
-                });
-              });
-              return reject(graphqlErrors[0]);
-            }
-            // 正常終了
+            // fetchRelayでエラー時にthrowしているため、ここに来る時は基本成功
+            // relayConfig (呼び出し元) が万が一 errors を見たがっている場合に備えて渡すだけ
             relayConfig.onCompleted?.(response, errors);
             resolve(response);
           },
           onError: (error) => {
-            // ネットワークエラー等の処理
-            handleMutationError(error, {
-              context: errorContext || 'Mutation',
-              showToast
-            });
+            // すでに fetchRelay で整形済みなので、そのまま投げるだけ
+            errorHandler(error, errorContext || 'Mutation');
+            // 個別のコールバックがあれば実行（基本的には空でOK）
             relayConfig.onError?.(error);
+            // コンポーネント側の try-catch に制御を戻す
             reject(error);
           },
         });
@@ -61,6 +53,7 @@ export const useApiMutation = <TMutation extends MutationParameters>(
   return { execute, isInFlight };
 };
 
+/*
 function convertPayloadErrorsToApiErrors(errors: readonly PayloadError[]): ApiError[] {
   return errors.map(error => {
     const extensions = error.extensions;
@@ -76,3 +69,4 @@ function convertPayloadErrorsToApiErrors(errors: readonly PayloadError[]): ApiEr
     return new ApiError(500, error.message, { code: 'graphql_error' });
   });
 }
+*/
