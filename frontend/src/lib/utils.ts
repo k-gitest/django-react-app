@@ -1,5 +1,7 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import { ApiError } from "@/errors/api-error"
+import type { FieldValues, Path, UseFormSetError } from "react-hook-form"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -28,9 +30,19 @@ export const mapErrorsToForm = <T extends FieldValues>(
   error: unknown,
   setError: UseFormSetError<T>
 ) => {
-  if (error instanceof ValidationError && error.fields) {
-    Object.entries(error.fields).forEach(([field, messages]) => {
-      setError(field as Path<T>, { message: messages[0] });
-    });
+  // fetchRelay が投げているのは ApiError クラスのインスタンス
+  if (error instanceof ApiError) {
+    // 400 (Validation) も 409 (Conflict) も、
+    // ApiError の fieldErrors が値を返してくれるならこれだけで OK
+    const errors = error.fieldErrors;
+
+    if (errors) {
+      Object.entries(errors).forEach(([field, messages]) => {
+        setError(field as Path<T>, {
+          type: 'server',
+          message: messages[0]
+        });
+      });
+    }
   }
 };
