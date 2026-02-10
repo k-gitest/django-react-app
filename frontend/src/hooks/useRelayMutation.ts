@@ -4,13 +4,11 @@ import type {
   MutationParameters,
   GraphQLTaggedNode,
   MutationConfig,
-  //PayloadError
 } from 'relay-runtime';
-//import { ApiError } from '@/errors/api-error';
 import { errorHandler } from '@/errors/error-handler';
 
 interface ExtendedMutationConfig<TMutation extends MutationParameters>
-  extends MutationConfig<TMutation> {
+  extends Omit<MutationConfig<TMutation>, 'mutation'> {
   errorContext?: string;
   showToast?: boolean;
 }
@@ -53,20 +51,3 @@ export const useRelayMutation = <TMutation extends MutationParameters>(
   return { execute, isInFlight };
 };
 
-/*
-function convertPayloadErrorsToApiErrors(errors: readonly PayloadError[]): ApiError[] {
-  return errors.map(error => {
-    const extensions = error.extensions;
-    if (extensions?.__typename) {
-      const statusMap: Record<string, number> = {
-        ValidationError: 400,
-        AuthenticationError: 401,
-        NotFoundError: 404,
-        InternalError: 500,
-      };
-      return new ApiError(statusMap[extensions.__typename as string] || 500, error.message, extensions);
-    }
-    return new ApiError(500, error.message, { code: 'graphql_error' });
-  });
-}
-*/

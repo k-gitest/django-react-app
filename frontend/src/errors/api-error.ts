@@ -58,16 +58,19 @@ export class ApiError extends Error {
    * バリデーションエラーの場合、フィールド別エラーを取得
    */
   get fieldErrors(): Record<string, string[]> | null {
+    // 400と409以外は、フォームに紐付けないので null で即復帰
+    if (this.status !== 400 && this.status !== 409) return null;
+
     // 1. 明示的なフィールド指定がある場合 (GraphQLや特定の単一エラー用)
     // サービス層で field 引数が指定された場合、最優先でそのフィールドのエラーとして扱う
-    if (this.status === 400 && this.field) {
+    if (this.field) {
       return {
         [this.field]: [this.message],
       };
     }
     // サービス層で明示的にエラーオブジェクト（fields）が作られた場合
     // GraphQLサービスなどで、パース済みの { fieldName: ["message"] } を渡すケース
-    if (this.status === 400 && this.fields && typeof this.fields === 'object') {
+    if (this.fields && typeof this.fields === 'object') {
       const normalized: Record<string, string[]> = {};
       for (const [key, value] of Object.entries(this.fields)) {
         // string | string[] どちらが来ても string[] に正規化して RHF が読みやすくする
@@ -77,7 +80,7 @@ export class ApiError extends Error {
     }
     // 2. レスポンスデータから一括抽出する場合 (主にREST/DRF用)
     // dataオブジェクト(キー:メッセージの配列)をループして、全フィールドのエラーを解析する
-    if (this.status === 400 && this.data && typeof this.data === 'object') {
+    if (this.data && typeof this.data === 'object') {
       const errors: Record<string, string[]> = {};
       for (const [key, value] of Object.entries(this.data)) {
         if (Array.isArray(value)) {

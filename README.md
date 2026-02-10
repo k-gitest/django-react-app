@@ -923,11 +923,19 @@ REST APIと並行して**GraphQL API**を提供しています。環境変数の
 | 項目 | 説明 |
 |------|------|
 | **完全な抽象化** | UI層はREST/GraphQLを一切意識しない |
-| **環境変数切り替え** | `VITE_API_MODE=graphql` で即座に切り替え |
+| **環境変数切り替え** | `VITE_API_MODE=graphql`　やimportなどで即座に切り替え |
 | **統一エラーハンドリング** | `ApiError`クラスに統一、エラーハンドラーも共通 |
 | **Service層の再利用** | ビジネスロジックを重複なく共有 |
-| **型安全性** | GraphQL Codegenで完全な型推論（オプション） |
+| **型安全性** | GraphQL Codegen/Relay Compilerで完全な型推論（オプション） |
 | **段階的移行** | REST APIと並行運用可能、リスク最小化 |
+
+### API選択ガイド
+
+| API | 推奨ケース | メリット | デメリット |
+|-----|----------|---------|---------|
+| **REST** | シンプルなCRUD、既存コード | 実装が簡単、ツールが豊富 | Over-fetching、Under-fetching |
+| **GraphQL** | 柔軟なクエリ、複数リソース | 必要なデータのみ取得 | 学習コスト |
+| **Relay** | 大規模アプリ、最高のパフォーマンス | キャッシュ最適化、型安全性 | セットアップが複雑 |
 
 ---
 
@@ -972,10 +980,11 @@ REST APIと並行して**GraphQL API**を提供しています。環境変数の
 
 | コンポーネント | 技術 |
 |--------------|------|
-| **GraphQLクライアント** | graphql-request |
-| **状態管理** | TanStack Query（RESTと同じ） |
+| **GraphQLクライアント** | graphql-request, react-relay, relay-runtime |
+| **状態管理** | TanStack Query（RESTと同じ）, Relay Store |
 | **エラークラス** | ApiError（統一） |
-| **型生成** | GraphQL Code Generator（オプション） |
+| **型生成** | GraphQL Code Generator, relay-compiler |
+| **カスタムフック** | useRelayMutation, useRelayLazyLoadQuery |
 
 ---
 
@@ -995,6 +1004,54 @@ import { useTodos } from '@/features/todo/hooks/useTodos';
 export const TodoPage = () => {
   const { todos, createTodo } = useTodos();
   // REST/GraphQLを意識せずに使用可能
+};
+```
+
+#### Relayカスタムフック（useRelayMutation）
+```typescript
+import { useRelayMutation } from '@/hooks/useRelayMutation';
+import { graphql } from 'react-relay';
+
+const CreateTodoMutation = graphql`
+  mutation TodoFormMutation($input: TodoCreateInput!) {
+    createTodo(input: $input) {
+      __typename
+      ... on TodoType { id todoTitle }
+      ... on ValidationError { message code field }
+    }
+  }
+`;
+
+export const TodoForm = () => {
+  const { execute, isInFlight } = useRelayMutation(CreateTodoMutation);
+  const { handleSubmit, setError } = useForm();
+
+  const onSubmit = handleSubmit(async (data) => {
+    try {
+      const response = await execute({
+        variables: { input: data },
+        errorContext: 'CreateTodo',
+      });
+      
+      const result = response.createTodo;
+      if (result.__typename === 'TodoType') {
+        toast.success('作成しました');
+      }
+    } catch (error) {
+      // ApiErrorの場合、fieldErrorsがあればRHFに渡す
+      if (error instanceof ApiError && error.fieldErrors) {
+        Object.entries(error.fieldErrors).forEach(([field, messages]) => {
+          setError(field, { type: 'server', message: messages[0] });
+        });
+      }
+    }
+  });
+
+  return (
+    
+      作成
+    
+  );
 };
 ```
 
@@ -1096,6 +1153,22 @@ try {
 }
 ```
 
+### エラーハンドリングの流れ(Relay)
+```
+1. relay-environment.ts (fetchRelay)
+   ↓ GraphQLエラー/HTTPエラー → ApiError に変換してthrow
+   ↓ ネットワークエラー → NetworkError に変換してthrow
+   
+2. useRelayMutation.onError
+   ↓ errorHandler(error) → トースト表示・ログ送信
+   ↓ reject(error) → コンポーネントへ
+   
+3. コンポーネント.catch
+   ↓ error.fieldErrors があればsetErrorで個別フィールドに表示
+   
+完了
+```
+
 ---
 
 ### 移行戦略
@@ -1170,17 +1243,25 @@ frontend/src/
 │   │   └── user.ts
 │   └── types.ts              # GraphQL型定義
 │
+├── hooks/
+│   ├── useRelayMutation.ts       # Relay Mutation用カスタムフック
+│   └── useRelayLazyLoadQuery.ts  # Relay Query用カスタムフック
+│
 ├── lib/
 │   ├── api-client.ts         # REST用
 │   ├── graphql-client.ts     # GraphQL用
+│   ├── relay-environment.ts  # Relay環境（fetch使用）
 │   └── constants.ts          # API_MODE定義
 │
 ├── errors/
-│   ├── api-error.ts          # ✅ REST/GraphQL統一
-│   └── error-handler.ts      # ✅ REST/GraphQL統一
+│   ├── api-error.ts          # ✅ REST/GraphQL/Relay統一
+│   └── error-handler.ts      # ✅ REST/GraphQL/Relay統一
 │
 └── features/
     ├── todo/
+    │   ├── components/
+    │   │   ├── TodoIndexView.ts              # プレゼンテーション用UI（統一）
+    │   │   └── TodoRelayContainer.tsx        # Relay用データ送受信コンポーネント
     │   ├── hooks/
     │   │   └── useTodos.ts   # ✅ 統一フック
     │   └── services/
@@ -1190,6 +1271,9 @@ frontend/src/
     │           └── todo-service-graphql.ts  # GraphQL実装
     │
     └── auth/
+        ├── components/
+        │   ├── AuthForm.ts                  # プレゼンテーション用UI（統一）
+        │   └── AuthFormRelayContainer.tsx    # Relay用データ送受信コンポーネント
         ├── hooks/
         │   └── use-auth.ts   # ✅ 統一フック
         └── services/
@@ -1225,6 +1309,17 @@ GraphQL APIの詳細については、以下のドキュメントを参照して
   - エラーハンドリングの統合
   - Relay GlobalIDの変換
   - GraphQL Code Generatorの設定
+  - ベストプラクティス
+  - トラブルシューティング
+
+Relay統合の詳細については、以下のドキュメントを参照してください。
+
+- **[docs/relay-integration.md](docs/relay-integration.md)** - Relay統合詳細ガイド
+  - Relay環境のセットアップ
+  - useRelayMutation/useRelayLazyLoadQueryの実装詳細
+  - エラーハンドリングの統合
+  - AsyncBoundaryの使い方
+  - Result Patternの処理
   - ベストプラクティス
   - トラブルシューティング
 

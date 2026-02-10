@@ -1,16 +1,17 @@
-import { graphql, useMutation } from 'react-relay';
+import { graphql } from 'react-relay';
 import { useNavigate } from 'react-router-dom';
 import { AccountForm } from './auth-form';
 import type { AccountFormType, Account } from '@/features/auth/types/auth';
+import { useRelayMutation } from '@/hooks/useRelayMutation';
 
 // --- 自動生成される型をインポート ---
 // ※ relay-compiler 実行後に生成されます
-import type { 
-  AuthFormRelayContainerRegisterMutation 
+import type {
+  AuthFormRelayContainerRegisterMutation
 } from '@/__generated__/AuthFormRelayContainerRegisterMutation.graphql';
 
-import type { 
-  AuthFormRelayContainerLoginMutation 
+import type {
+  AuthFormRelayContainerLoginMutation
 } from '@/__generated__/AuthFormRelayContainerLoginMutation.graphql';
 
 const RegisterMutation = graphql`
@@ -81,10 +82,9 @@ const LoginMutation = graphql`
 
 export const AuthFormRelayContainer = ({ type }: { type: AccountFormType }) => {
   const navigate = useNavigate();
-  
-  // ジェネリクスに型を渡すことで、引数やレスポンスが型安全になる
-  const [commitRegister, isRegisterPending] = useMutation<AuthFormRelayContainerRegisterMutation>(RegisterMutation);
-  const [commitLogin, isLoginPending] = useMutation<AuthFormRelayContainerLoginMutation>(LoginMutation);
+
+  const { execute: commitRegister, isInFlight: isRegisterPending } = useRelayMutation<AuthFormRelayContainerRegisterMutation>(RegisterMutation);
+  const { execute: commitLogin, isInFlight: isLoginPending } = useRelayMutation<AuthFormRelayContainerLoginMutation>(LoginMutation);
 
   const isLogin = type === 'login';
   const label = isLogin ? 'ログイン' : '登録';
@@ -93,36 +93,23 @@ export const AuthFormRelayContainer = ({ type }: { type: AccountFormType }) => {
   const handleSubmit = async (data: Account) => {
     // 共通の成功時・失敗時処理を定義
     // response は any ではなく、各 Mutation ごとの型がつきます
-    const variables = {
-      input: {
-        email: data.email,
-        password: data.password,
-        passwordConfirm: data.password,
-      },
+    const config = {
+      variables: { input: { email: data.email, password: data.password, passwordConfirm: data.password } },
+      errorContext: isLogin ? 'ログインに失敗しました' : 'ユーザー登録に失敗しました'
     };
 
-    if (isLogin) {
-      commitLogin({
-        variables,
-        onCompleted: (response) => {
-          // response は AuthFormRelayContainerLoginMutation$data 型になる
-          if (response.login?.__typename === 'AuthPayload') {
-             navigate('/dashboard');
-          }
-        },
-        onError: (error: Error) => console.error(error),
-      });
-    } else {
-      commitRegister({
-        variables,
-        onCompleted: (response) => {
-          // response は AuthFormRelayContainerRegisterMutation$data 型になる
-          if (response.register?.__typename === 'AuthPayload') {
-             navigate('/dashboard');
-          }
-        },
-        onError: (error: Error) => console.error(error),
-      });
+    try {
+      const response = isLogin ? await commitLogin(config) : await commitRegister(config);
+
+      // 「login か register のどちらかに入っている result」を型安全に抽出
+      const result = ('login' in response ? response.login : response.register);
+
+      if (result?.__typename === 'AuthPayload') {
+        navigate('/dashboard');
+      }
+    } catch (error) {
+      // errorHandlerはuseRelayMutation内部で実行されるので、ここでは何もしなくてOK
+      if (import.meta.env.DEV) console.error("error: ", error)
     }
   };
 
