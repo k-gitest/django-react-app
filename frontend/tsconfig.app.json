@@ -9,10 +9,10 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": [
-        "./src/*"
-      ],
-      "@tests/*": ["tests/*"]
+      "@/*": ["./src/*"],
+      "@tests/*": ["tests/*"],
+      /* Relay用のパス解決を追加 */
+      "__generated__/*": ["./src/__generated__/*"],
     },
 
     /* Bundler mode */
@@ -31,5 +31,5 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src"]
+  "include": ["src", "relay.config.js"]
 }

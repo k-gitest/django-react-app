@@ -41,13 +41,13 @@ Django/React モノレポベースのSPAアプリケーション
 - **フレームワーク**: React 19.2.0, TypeScript 5.9.3
 - **ビルドツール**: Vite 7.2.4
 - **ルーティング**: React Router DOM 7.10.1
-- **状態管理**: Zustand 5.0.9, TanStack Query 5.90.12
+- **状態管理**: Zustand 5.0.9, TanStack Query 5.90.12, Relay 20.1.1
 - **フォーム**: React Hook Form 7.68.0, Zod 4.1.13
 - **UI**: Tailwind CSS 4.1.17, shadcn/ui
-- **HTTPクライアント**: openapi-fetch 0.15.0, graphql-request 7.1.2
-- **型定義・パース**: Zod 4.1.13, graphql 16.10.0
+- **HTTPクライアント**: openapi-fetch 0.15.0, graphql-request 7.1.2, Relay 20.1.1
+- **型定義・パース**: Zod 4.1.13, graphql 16.10.0, Relay Compiler 20.1.1
 - **テスト**: Playwright 1.57.0, Vitest 4.0.15, MSW 2.12.4, playwright-msw 3.0.1
-- **Linter**: ESLint 9.39.1
+- **Linter**: ESLint 9.39.1, eslint-plugin-relay 2.0.0
 
 ### インフラ（Terraform管理）
 - **Neon**: PostgreSQLデータベース

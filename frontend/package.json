@@ -78,6 +78,7 @@
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
+    "eslint-plugin-relay": "^2.0.0",
     "globals": "^16.5.0",
     "jsdom": "^27.3.0",
     "msw": "^2.12.4",
@@ -94,6 +95,11 @@
     "schema": "../schema.graphql",
     "language": "typescript",
     "artifactDirectory": "./src/__generated__",
-    "eagerEsModules": true
+    "eagerEsModules": true,
+    "exclude": [
+      "**/node_modules/**",
+      "**/__mocks__/**",
+      "**/__generated__/**"
+    ]
   }
 }
