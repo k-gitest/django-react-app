@@ -1,7 +1,14 @@
 import { Pie, PieChart } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { useTodoStats } from "../hooks/useTodoStats";
+
+interface TodoStatsChartViewProps {
+  data: {
+     priority: string;
+     count: number;
+     fill?: string | null;
+  }[];
+}
 
 const chartConfig = {
   count: { label: "タスク数" },
@@ -10,10 +17,7 @@ const chartConfig = {
   low: { label: "優先度: 低", color: "hsl(var(--muted))" },
 } satisfies ChartConfig;
 
-export const TodoStatsChart = () => {
-  const { data } = useTodoStats();
-
-  //if (isLoading || !data) return <div>Loading...</div>;
+export const TodoStatsChart = ({ data }: TodoStatsChartViewProps) => {
 
   return (
     <Card className="flex flex-col">

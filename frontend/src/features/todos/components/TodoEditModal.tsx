@@ -1,16 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-//import type { Todo } from '../types';
 import type { TodoFormValues } from '../schemas';
 import { TodoForm } from './TodoForm';
-//import { useTodos } from '../hooks/useTodos';
-
-/*
-interface TodoEditModalProps {
-  todo: Todo | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}
-*/
 
 interface TodoEditModalProps {
   id: number | string;
@@ -20,20 +10,18 @@ interface TodoEditModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (values: TodoFormValues) => void | Promise<void>;
+  isSubmitting?: boolean;
 }
 
 export const TodoEditModal = ({ 
-  //id, 
   title, 
   priority, 
   progress, 
   open, 
   onOpenChange, 
-  onSubmit  
+  onSubmit,
+  isSubmitting,
 }: TodoEditModalProps) => {
-  //const { updateTodo } = useTodos();
-
-  //if (!id) return null;
 
   const handleSubmit = async (values: TodoFormValues) => {
     await onSubmit(values);
@@ -53,7 +41,8 @@ export const TodoEditModal = ({
             progress: progress,
           }}
           onSubmit={handleSubmit}
-          submitLabel="変更を保存"
+          isLoading={isSubmitting} 
+          submitLabel={isSubmitting ? "保存中..." : "変更を保存"}
         />
       </DialogContent>
     </Dialog>

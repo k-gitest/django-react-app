@@ -1,16 +1,19 @@
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { useProgressStats } from "../hooks/useProgressStats";
+
+interface TodoProgressChartViewProps {
+  data: {
+    readonly range: string;
+    readonly count: number;
+  }[];
+}
 
 const chartConfig = {
   count: { label: "タスク数", color: "hsl(var(--chart-1))" },
 } satisfies ChartConfig;
 
-export const TodoProgressChart = () => {
-  const { data } = useProgressStats();
-
-  //if (isLoading || !data) return <div className="h-[200px] flex items-center justify-center">Loading...</div>;
+export const TodoProgressChart = ({ data }: TodoProgressChartViewProps) => {
 
   return (
     <Card>

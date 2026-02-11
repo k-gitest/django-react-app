@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<d18c7352b9ba05afccf2abc9aaa98101>>
+ * @generated SignedSource<<9edd015ea8f8cbcdcdc4f5bcd7c38f0c>>
  * @lightSyntaxTransform
  * @nogrep
  */
@@ -15,10 +15,10 @@ export type TodoCreateInput = {
   progress?: number;
   todoTitle: string;
 };
-export type TodoIndexRelayContainerMutation$variables = {
+export type TodoCreateFormRelayContainerMutation$variables = {
   input: TodoCreateInput;
 };
-export type TodoIndexRelayContainerMutation$data = {
+export type TodoCreateFormRelayContainerMutation$data = {
   readonly createTodo: {
     readonly __typename: "TodoType";
     readonly id: string;
@@ -34,9 +34,9 @@ export type TodoIndexRelayContainerMutation$data = {
     readonly __typename: "%other";
   };
 };
-export type TodoIndexRelayContainerMutation = {
-  response: TodoIndexRelayContainerMutation$data;
-  variables: TodoIndexRelayContainerMutation$variables;
+export type TodoCreateFormRelayContainerMutation = {
+  response: TodoCreateFormRelayContainerMutation$data;
+  variables: TodoCreateFormRelayContainerMutation$variables;
 };
 
 const node: ConcreteRequest = (function(){
@@ -116,7 +116,7 @@ return {
     "argumentDefinitions": (v0/*: any*/),
     "kind": "Fragment",
     "metadata": null,
-    "name": "TodoIndexRelayContainerMutation",
+    "name": "TodoCreateFormRelayContainerMutation",
     "selections": [
       {
         "alias": null,
@@ -140,7 +140,7 @@ return {
   "operation": {
     "argumentDefinitions": (v0/*: any*/),
     "kind": "Operation",
-    "name": "TodoIndexRelayContainerMutation",
+    "name": "TodoCreateFormRelayContainerMutation",
     "selections": [
       {
         "alias": null,
@@ -167,16 +167,16 @@ return {
     ]
   },
   "params": {
-    "cacheID": "217e41c315417c681be6a27076a6343c",
+    "cacheID": "aa16983b93bc8369a3508c441e3b566d",
     "id": null,
     "metadata": {},
-    "name": "TodoIndexRelayContainerMutation",
+    "name": "TodoCreateFormRelayContainerMutation",
     "operationKind": "mutation",
-    "text": "mutation TodoIndexRelayContainerMutation(\n  $input: TodoCreateInput!\n) {\n  createTodo(input: $input) {\n    __typename\n    ... on TodoType {\n      id\n      todoTitle\n      progress\n      priority\n    }\n    ... on ValidationError {\n      message\n    }\n    ... on Node {\n      __isNode: __typename\n      id\n    }\n  }\n}\n"
+    "text": "mutation TodoCreateFormRelayContainerMutation(\n  $input: TodoCreateInput!\n) {\n  createTodo(input: $input) {\n    __typename\n    ... on TodoType {\n      id\n      todoTitle\n      progress\n      priority\n    }\n    ... on ValidationError {\n      message\n    }\n    ... on Node {\n      __isNode: __typename\n      id\n    }\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "d48a7ba173d51ba8f72a3bcb499a67fd";
+(node as any).hash = "cc7cbd1579a057e1fc726cf2c07012ef";
 
 export default node;
