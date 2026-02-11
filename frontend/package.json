@@ -15,7 +15,8 @@
     "generate:graphql": "graphql-codegen --config codegen.yml",
     "generate:api": "openapi-typescript http://localhost:8000/api/schema/ -o src/types/api.d.ts",
     "generate:api:local": "openapi-typescript ../backend/schema.yml -o src/types/api.d.ts",
-    "generate:types": "npm run generate:api:local && npm run generate:graphql:local"
+    "generate:types": "npm run generate:api:local && npm run generate:graphql:local",
+    "relay": "relay-compiler"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

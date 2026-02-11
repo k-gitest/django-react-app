@@ -7,51 +7,19 @@ import { FormField, FormItem, FormLabel, FormControl } from '@/components/ui/for
 import { Slider } from '@/components/ui/slider';
 
 interface TodoFormProps {
-  /**
-   * フォーム送信時のハンドラー
-   */
   onSubmit: (values: TodoFormValues) => Promise<void>;
-  
-  /**
-   * 初期値（編集時に使用）
-   */
   defaultValues?: Partial<TodoFormValues>;
-  
-  /**
-   * 送信ボタンのラベル
-   */
   submitLabel?: string;
-  
-  /**
-   * キャンセルボタンのハンドラー（オプション）
-   */
   onCancel?: () => void;
+  isLoading?: boolean;
 }
 
-/**
- * Todo作成・編集用の共通フォームコンポーネント
- * 
- * @example
- * // 作成時
- * <TodoForm 
- *   onSubmit={handleCreate}
- *   submitLabel="作成"
- * />
- * 
- * @example
- * // 編集時
- * <TodoForm 
- *   onSubmit={handleUpdate}
- *   defaultValues={todo}
- *   submitLabel="更新"
- *   onCancel={handleCancel}
- * />
- */
-export const TodoForm = ({ 
-  onSubmit, 
+export const TodoForm = ({
+  onSubmit,
   defaultValues,
   submitLabel = '保存',
-  onCancel 
+  onCancel,
+  isLoading
 }: TodoFormProps) => {
   const form = useForm<TodoFormValues>({
     resolver: zodResolver(todoSchema),
@@ -71,6 +39,8 @@ export const TodoForm = ({
     }
   };
 
+  const isPending = form.formState.isSubmitting || isLoading;
+
   return (
     <FormWrapper onSubmit={handleSubmit} form={form}>
       {/* タイトル */}
@@ -79,7 +49,7 @@ export const TodoForm = ({
         name="todo_title"
         placeholder="例: レポートを作成する"
       />
-      
+
       {/* 優先度 */}
       <FormSelect
         label="優先度"
@@ -111,8 +81,8 @@ export const TodoForm = ({
                   className="w-full"
                 />
                 {/* 数値入力（微調整用） */}
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   min={0}
                   max={100}
@@ -140,21 +110,21 @@ export const TodoForm = ({
       {/* ボタンエリア */}
       <div className="flex gap-2">
         {onCancel && (
-          <Button 
-            type="button" 
-            variant="outline" 
+          <Button
+            type="button"
+            variant="outline"
             onClick={onCancel}
             className="flex-1"
           >
             キャンセル
           </Button>
         )}
-        <Button 
-          type="submit" 
+        <Button
+          type="submit"
           className={onCancel ? 'flex-1' : 'w-full'}
-          disabled={form.formState.isSubmitting}
+          disabled={isPending}
         >
-          {form.formState.isSubmitting ? '保存中...' : submitLabel}
+          {isPending ? '保存中...' : submitLabel}
         </Button>
       </div>
     </FormWrapper>

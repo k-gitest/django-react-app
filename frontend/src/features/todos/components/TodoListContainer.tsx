@@ -1,8 +1,5 @@
 import { useTodos } from '../hooks/useTodos';
 import { TodoItem } from './TodoItem';
-// import { Spinner } from '@/components/ui/spinner';
-// import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-// import { Terminal } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { TodoEditModal } from './TodoEditModal';
 import type { Todo } from '../types';
@@ -11,13 +8,6 @@ import type { TodoFormValues } from '../schemas';
 export const TodoList = ({ showActions = true, limit }: { showActions?: boolean; limit?: number; }) => {
   const { todos, updateTodo, deleteTodo } = useTodos();
 	const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
-
-  /*
-  const handleToggleComplete = useCallback(async (todo: Todo) => {
-    const newProgress = todo.progress === 100 ? 0 : 100;
-    await updateTodo({ id: todo.id, data: { progress: newProgress } });
-  }, [updateTodo]);
-  */
 
   const handleToggleComplete = useCallback(async (id: number | string, currentProgress: number) => {
     const newProgress = currentProgress === 100 ? 0 : 100;
@@ -49,26 +39,6 @@ export const TodoList = ({ showActions = true, limit }: { showActions?: boolean;
   // 取得失敗時は空配列をデフォルトにする（データの正規化）
   const safeTodos: Todo[] = Array.isArray(todos) ? todos : (todos?.data ?? []);
   const displayTodos = limit ? safeTodos.slice(0, limit) : safeTodos;
-
-  /*
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-40">
-        <Spinner />
-      </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <Alert variant="destructive">
-        <Terminal className="h-4 w-4" />
-        <AlertTitle>エラー</AlertTitle>
-        <AlertDescription>タスクの読み込みに失敗しました。</AlertDescription>
-      </Alert>
-    );
-  }
-  */
 
   if (safeTodos.length === 0) {
     return <p className="text-center text-gray-500">まだタスクがありません。新しいタスクを追加しましょう！</p>;

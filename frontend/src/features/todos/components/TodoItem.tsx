@@ -8,22 +8,13 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
-/*
-interface TodoItemProps {
-  todo: Todo;
-  onToggleComplete?: (todo: Todo) => void;
-  onEdit?: (todo: Todo) => void;
-  onDelete?: (id: number) => void;
-  showActions?: boolean;
-}
-  */
-
 interface TodoItemProps {
   id: number | string; // REST: number, Relay: string(GlobalID)
   title: string;
   priority: 'HIGH' | 'MEDIUM' | 'LOW';
   progress: number;
   updatedAt: string;
+  disabled?: boolean;
   onToggleComplete?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
@@ -40,13 +31,13 @@ const PRIORITY_CONFIG: Record<Priority, {
   LOW: { variant: 'secondary', label: '低' },
 };
 
-export const TodoItem = memo(({ id, title, priority, progress, updatedAt, 
+export const TodoItem = memo(({ id, title, priority, progress, updatedAt, disabled = false,  
   onToggleComplete, onEdit, onDelete, showActions = true }: TodoItemProps) => {
   const isCompleted = progress === 100;
   const priorityConfig = PRIORITY_CONFIG[priority || 'MEDIUM'];
 
   return (
-    <Card className="w-full">
+    <Card className={`w-full ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <div className="flex items-center space-x-2">
           {showActions && onToggleComplete && (
@@ -54,6 +45,7 @@ export const TodoItem = memo(({ id, title, priority, progress, updatedAt,
               checked={isCompleted}
               onCheckedChange={() => onToggleComplete()}
               id={`todo-${id}`}
+              disabled={disabled}
             />
           )}
           <CardTitle className={`text-lg ${isCompleted ? 'line-through text-gray-500' : ''}`}>

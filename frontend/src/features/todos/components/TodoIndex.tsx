@@ -1,18 +1,12 @@
-import { TodoList } from '@/features/todos/components/TodoList';
-import { TodoCreateForm } from '@/features/todos/components/TodoCreateForm';
-import { TodoStatsChart } from '@/features/todos/components/TodoStatsChart';
-import { TodoProgressChart } from '@/features/todos/components/TodoProgressChart';
-import { useTodos } from '@/features/todos/hooks/useTodos';
-import type { TodoFormValues } from '@/features/todos/schemas';
-import { useCallback } from 'react';
+import { TodoCreateFormContainer } from '@/features/todos/components/TodoCreateFormContainer';
+import { TodoList } from '@/features/todos/components/TodoListContainer';
+//import { TodoList as TodoListRelay } from '@/features/todos/components/TodoListRelayContainer';
+import { TodoProgressChartContainer } from '@/features/todos/components/TodoProgressChartContainer';
+//import { TodoProgressChartRelayContainer } from './TodoProgressChartRelayContainer';
+import { TodoStatsChartContainer } from '@/features/todos/components/TodoStatsChartContainer';
+//import { TodoStatsChartRelayContainer } from './TodoStatsChartRelayContainer';
 
 export const TodoIndex = () => {
-  const { createTodo } = useTodos();
-
-  const handleCreateSubmit = useCallback(async (values: TodoFormValues) => {
-    await createTodo(values);
-  }, [createTodo]);
-
   return (
     <div className="container mx-auto py-8 px-4 space-y-8">
       {/* ヘッダーエリア */}
@@ -21,16 +15,16 @@ export const TodoIndex = () => {
           <h1 className="text-3xl font-bold tracking-tight">TODO</h1>
           <p className="text-muted-foreground">現在のタスク状況と進捗統計を確認できます。</p>
         </div>
-        <TodoCreateForm onSubmit={handleCreateSubmit} />
+        <TodoCreateFormContainer />
       </div>
 
-      {/* 統計エリア (Gridレイアウト) */}
+      {/* 統計エリア */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         <div className="md:col-span-1 lg:col-span-3">
-          <TodoStatsChart />
+          <TodoStatsChartContainer />
         </div>
         <div className="md:col-span-1 lg:col-span-4">
-          <TodoProgressChart />
+          <TodoProgressChartContainer />
         </div>
       </div>
 
