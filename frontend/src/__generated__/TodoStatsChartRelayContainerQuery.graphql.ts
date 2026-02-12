@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<cac9e5c0a0e6bbf30063bbff9c14eb4f>>
+ * @generated SignedSource<<4ef97f932c7f38482b1f8be42c801916>>
  * @lightSyntaxTransform
  * @nogrep
  */
@@ -9,54 +9,29 @@
 // @ts-nocheck
 
 import { ConcreteRequest } from 'relay-runtime';
-export type PriorityEnum = "HIGH" | "LOW" | "MEDIUM" | "%future added value";
+import { FragmentRefs } from "relay-runtime";
 export type TodoStatsChartRelayContainerQuery$variables = Record<PropertyKey, never>;
 export type TodoStatsChartRelayContainerQuery$data = {
-  readonly priorityStats: ReadonlyArray<{
-    readonly count: number;
-    readonly priority: PriorityEnum;
-  }>;
+  readonly " $fragmentSpreads": FragmentRefs<"TodoStatsChartRelayContainer_stats">;
 };
 export type TodoStatsChartRelayContainerQuery = {
   response: TodoStatsChartRelayContainerQuery$data;
   variables: TodoStatsChartRelayContainerQuery$variables;
 };
 
-const node: ConcreteRequest = (function(){
-var v0 = [
-  {
-    "alias": null,
-    "args": null,
-    "concreteType": "PriorityStatsType",
-    "kind": "LinkedField",
-    "name": "priorityStats",
-    "plural": true,
-    "selections": [
-      {
-        "alias": null,
-        "args": null,
-        "kind": "ScalarField",
-        "name": "priority",
-        "storageKey": null
-      },
-      {
-        "alias": null,
-        "args": null,
-        "kind": "ScalarField",
-        "name": "count",
-        "storageKey": null
-      }
-    ],
-    "storageKey": null
-  }
-];
-return {
+const node: ConcreteRequest = {
   "fragment": {
     "argumentDefinitions": [],
     "kind": "Fragment",
     "metadata": null,
     "name": "TodoStatsChartRelayContainerQuery",
-    "selections": (v0/*: any*/),
+    "selections": [
+      {
+        "args": null,
+        "kind": "FragmentSpread",
+        "name": "TodoStatsChartRelayContainer_stats"
+      }
+    ],
     "type": "Query",
     "abstractKey": null
   },
@@ -65,19 +40,44 @@ return {
     "argumentDefinitions": [],
     "kind": "Operation",
     "name": "TodoStatsChartRelayContainerQuery",
-    "selections": (v0/*: any*/)
+    "selections": [
+      {
+        "alias": null,
+        "args": null,
+        "concreteType": "PriorityStatsType",
+        "kind": "LinkedField",
+        "name": "priorityStats",
+        "plural": true,
+        "selections": [
+          {
+            "alias": null,
+            "args": null,
+            "kind": "ScalarField",
+            "name": "priority",
+            "storageKey": null
+          },
+          {
+            "alias": null,
+            "args": null,
+            "kind": "ScalarField",
+            "name": "count",
+            "storageKey": null
+          }
+        ],
+        "storageKey": null
+      }
+    ]
   },
   "params": {
-    "cacheID": "377656572b34d55f4a27c9e6368b9289",
+    "cacheID": "5e39d1d3147820fba613986316a13317",
     "id": null,
     "metadata": {},
     "name": "TodoStatsChartRelayContainerQuery",
     "operationKind": "query",
-    "text": "query TodoStatsChartRelayContainerQuery {\n  priorityStats {\n    priority\n    count\n  }\n}\n"
+    "text": "query TodoStatsChartRelayContainerQuery {\n  ...TodoStatsChartRelayContainer_stats\n}\n\nfragment TodoStatsChartRelayContainer_stats on Query {\n  priorityStats {\n    priority\n    count\n  }\n}\n"
   }
 };
-})();
 
-(node as any).hash = "be40f9e8c867dced51f29cd938e05c98";
+(node as any).hash = "e24c7c509d80d9bb13122d30f2a69a33";
 
 export default node;

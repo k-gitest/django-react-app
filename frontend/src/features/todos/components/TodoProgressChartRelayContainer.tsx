@@ -1,8 +1,27 @@
-import { graphql } from 'react-relay';
+import { graphql, useFragment } from 'react-relay';
 import { useRelayLazyLoadQuery } from '@/hooks/useRelayLazyLoadQuery';
 import { TodoProgressChart } from './TodoProgressChart';
 import type { TodoProgressChartRelayContainerQuery } from '@/__generated__/TodoProgressChartRelayContainerQuery.graphql';
+import type { TodoProgressChartRelayContainer_progress$key } from '@/__generated__/TodoProgressChartRelayContainer_progress.graphql'
 
+const TodoProgressFragment = graphql`
+fragment TodoProgressChartRelayContainer_progress on Query {
+  progressStats {
+    range020
+    range2140
+    range4160
+    range6180
+    range81100
+  }
+}
+`
+
+const TodoProgressQuery = graphql`
+query TodoProgressChartRelayContainerQuery {
+  ...TodoProgressChartRelayContainer_progress
+}
+`
+/*
 const TodoProgressQuery = graphql`
   query TodoProgressChartRelayContainerQuery {
     progressStats {
@@ -14,10 +33,15 @@ const TodoProgressQuery = graphql`
     }
   }
 `;
+*/
 
 export const TodoProgressChartRelayContainer = () => {
-  const data = useRelayLazyLoadQuery<TodoProgressChartRelayContainerQuery>(TodoProgressQuery, {});
-	const stats = data?.progressStats;
+  //const data = useRelayLazyLoadQuery<TodoProgressChartRelayContainerQuery>(TodoProgressQuery, {});
+  const queryData = useRelayLazyLoadQuery<TodoProgressChartRelayContainerQuery>(TodoProgressQuery, {});
+
+  const data = useFragment<TodoProgressChartRelayContainer_progress$key>(TodoProgressFragment, queryData);
+
+  const stats = data?.progressStats;
   // 1つのオブジェクトを、配列形式に変換する
   // これを行うことで「lengthがない」というエラーが消え、同時に「readonly」も外れます
   const chartData = stats ? [
