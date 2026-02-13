@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<c28114c702d5b54e5bf69983744f3788>>
+ * @generated SignedSource<<5a453d95158369148c9bdb25058d7024>>
  * @lightSyntaxTransform
  * @nogrep
  */
@@ -15,11 +15,11 @@ export type TodoUpdateInput = {
   progress?: number | null | undefined;
   todoTitle?: string | null | undefined;
 };
-export type TodoListRelayContainerUpdateMutation$variables = {
+export type TodoItemRelayContainerUpdateMutation$variables = {
   id: string;
   input: TodoUpdateInput;
 };
-export type TodoListRelayContainerUpdateMutation$data = {
+export type TodoItemRelayContainerUpdateMutation$data = {
   readonly updateTodo: {
     readonly __typename: "TodoType";
     readonly id: string;
@@ -35,9 +35,9 @@ export type TodoListRelayContainerUpdateMutation$data = {
     readonly __typename: "%other";
   };
 };
-export type TodoListRelayContainerUpdateMutation = {
-  response: TodoListRelayContainerUpdateMutation$data;
-  variables: TodoListRelayContainerUpdateMutation$variables;
+export type TodoItemRelayContainerUpdateMutation = {
+  response: TodoItemRelayContainerUpdateMutation$data;
+  variables: TodoItemRelayContainerUpdateMutation$variables;
 };
 
 const node: ConcreteRequest = (function(){
@@ -127,7 +127,7 @@ return {
     "argumentDefinitions": (v0/*: any*/),
     "kind": "Fragment",
     "metadata": null,
-    "name": "TodoListRelayContainerUpdateMutation",
+    "name": "TodoItemRelayContainerUpdateMutation",
     "selections": [
       {
         "alias": null,
@@ -151,7 +151,7 @@ return {
   "operation": {
     "argumentDefinitions": (v0/*: any*/),
     "kind": "Operation",
-    "name": "TodoListRelayContainerUpdateMutation",
+    "name": "TodoItemRelayContainerUpdateMutation",
     "selections": [
       {
         "alias": null,
@@ -178,16 +178,16 @@ return {
     ]
   },
   "params": {
-    "cacheID": "218003c5cf0afeb314e8b7bdd8aecf83",
+    "cacheID": "b6bfacfd298ca37ffb8ac40ff48f7f37",
     "id": null,
     "metadata": {},
-    "name": "TodoListRelayContainerUpdateMutation",
+    "name": "TodoItemRelayContainerUpdateMutation",
     "operationKind": "mutation",
-    "text": "mutation TodoListRelayContainerUpdateMutation(\n  $id: ID!\n  $input: TodoUpdateInput!\n) {\n  updateTodo(id: $id, input: $input) {\n    __typename\n    ... on TodoType {\n      id\n      todoTitle\n      priority\n      progress\n    }\n    ... on ValidationError {\n      message\n    }\n    ... on Node {\n      __isNode: __typename\n      id\n    }\n  }\n}\n"
+    "text": "mutation TodoItemRelayContainerUpdateMutation(\n  $id: ID!\n  $input: TodoUpdateInput!\n) {\n  updateTodo(id: $id, input: $input) {\n    __typename\n    ... on TodoType {\n      id\n      todoTitle\n      priority\n      progress\n    }\n    ... on ValidationError {\n      message\n    }\n    ... on Node {\n      __isNode: __typename\n      id\n    }\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "5b1ef45cd5d90bb6ce897d74d46a7061";
+(node as any).hash = "7dae77c44fa481e0c6245f7e0aff54be";
 
 export default node;
