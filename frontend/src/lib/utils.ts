@@ -46,3 +46,13 @@ export const mapErrorsToForm = <T extends FieldValues>(
     }
   }
 };
+
+// Priority型ガード
+export function isPriority(value: string): value is 'LOW' | 'MEDIUM' | 'HIGH' {
+  return value === 'LOW' || value === 'MEDIUM' || value === 'HIGH';
+}
+
+// Progress型ガード
+export function isProgress(value: number): value is 0 | 25 | 50 | 75 | 100 {
+  return value === 0 || value === 25 || value === 50 || value === 75 || value === 100;
+}

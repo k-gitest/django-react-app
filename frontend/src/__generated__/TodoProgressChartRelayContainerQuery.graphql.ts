@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<139a7fbd26da5782e1a9b566193edf27>>
+ * @generated SignedSource<<db2d27755fe33ecfb218182bb81f6bac>>
  * @lightSyntaxTransform
  * @nogrep
  */
@@ -9,77 +9,29 @@
 // @ts-nocheck
 
 import { ConcreteRequest } from 'relay-runtime';
+import { FragmentRefs } from "relay-runtime";
 export type TodoProgressChartRelayContainerQuery$variables = Record<PropertyKey, never>;
 export type TodoProgressChartRelayContainerQuery$data = {
-  readonly progressStats: {
-    readonly range020: number;
-    readonly range2140: number;
-    readonly range4160: number;
-    readonly range6180: number;
-    readonly range81100: number;
-  };
+  readonly " $fragmentSpreads": FragmentRefs<"TodoProgressChartRelayContainer_progress">;
 };
 export type TodoProgressChartRelayContainerQuery = {
   response: TodoProgressChartRelayContainerQuery$data;
   variables: TodoProgressChartRelayContainerQuery$variables;
 };
 
-const node: ConcreteRequest = (function(){
-var v0 = [
-  {
-    "alias": null,
-    "args": null,
-    "concreteType": "ProgressStatsType",
-    "kind": "LinkedField",
-    "name": "progressStats",
-    "plural": false,
-    "selections": [
-      {
-        "alias": null,
-        "args": null,
-        "kind": "ScalarField",
-        "name": "range020",
-        "storageKey": null
-      },
-      {
-        "alias": null,
-        "args": null,
-        "kind": "ScalarField",
-        "name": "range2140",
-        "storageKey": null
-      },
-      {
-        "alias": null,
-        "args": null,
-        "kind": "ScalarField",
-        "name": "range4160",
-        "storageKey": null
-      },
-      {
-        "alias": null,
-        "args": null,
-        "kind": "ScalarField",
-        "name": "range6180",
-        "storageKey": null
-      },
-      {
-        "alias": null,
-        "args": null,
-        "kind": "ScalarField",
-        "name": "range81100",
-        "storageKey": null
-      }
-    ],
-    "storageKey": null
-  }
-];
-return {
+const node: ConcreteRequest = {
   "fragment": {
     "argumentDefinitions": [],
     "kind": "Fragment",
     "metadata": null,
     "name": "TodoProgressChartRelayContainerQuery",
-    "selections": (v0/*: any*/),
+    "selections": [
+      {
+        "args": null,
+        "kind": "FragmentSpread",
+        "name": "TodoProgressChartRelayContainer_progress"
+      }
+    ],
     "type": "Query",
     "abstractKey": null
   },
@@ -88,19 +40,65 @@ return {
     "argumentDefinitions": [],
     "kind": "Operation",
     "name": "TodoProgressChartRelayContainerQuery",
-    "selections": (v0/*: any*/)
+    "selections": [
+      {
+        "alias": null,
+        "args": null,
+        "concreteType": "ProgressStatsType",
+        "kind": "LinkedField",
+        "name": "progressStats",
+        "plural": false,
+        "selections": [
+          {
+            "alias": null,
+            "args": null,
+            "kind": "ScalarField",
+            "name": "range020",
+            "storageKey": null
+          },
+          {
+            "alias": null,
+            "args": null,
+            "kind": "ScalarField",
+            "name": "range2140",
+            "storageKey": null
+          },
+          {
+            "alias": null,
+            "args": null,
+            "kind": "ScalarField",
+            "name": "range4160",
+            "storageKey": null
+          },
+          {
+            "alias": null,
+            "args": null,
+            "kind": "ScalarField",
+            "name": "range6180",
+            "storageKey": null
+          },
+          {
+            "alias": null,
+            "args": null,
+            "kind": "ScalarField",
+            "name": "range81100",
+            "storageKey": null
+          }
+        ],
+        "storageKey": null
+      }
+    ]
   },
   "params": {
-    "cacheID": "4de74201b59be2505124dd9820828ae0",
+    "cacheID": "5bfbbfc36069074bc615f4051bf7b616",
     "id": null,
     "metadata": {},
     "name": "TodoProgressChartRelayContainerQuery",
     "operationKind": "query",
-    "text": "query TodoProgressChartRelayContainerQuery {\n  progressStats {\n    range020\n    range2140\n    range4160\n    range6180\n    range81100\n  }\n}\n"
+    "text": "query TodoProgressChartRelayContainerQuery {\n  ...TodoProgressChartRelayContainer_progress\n}\n\nfragment TodoProgressChartRelayContainer_progress on Query {\n  progressStats {\n    range020\n    range2140\n    range4160\n    range6180\n    range81100\n  }\n}\n"
   }
 };
-})();
 
-(node as any).hash = "222e6b35056290ac84e606bbb1a2580d";
+(node as any).hash = "4092f3fa974891856fdb86602cf3e595";
 
 export default node;
