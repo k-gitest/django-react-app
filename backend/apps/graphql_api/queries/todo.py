@@ -75,19 +75,32 @@ class TodoQuery:
         user = info.context.request.user
         todos = TodoQueryService.get_user_todos(user)
         
-        # ✅ 将来的にはDjangoのpaginationと統合
-        # 現状は簡易実装
-        total_count = todos.count()
+        # ✅ Cursorベースのページネーション
+        if after:
+            cursor_data = decode_cursor(after)
+            queryset = queryset.filter(id__lt=cursor_data['id'])
+        
+        todos = list(queryset[:first + 1])  # +1 for hasNextPage判定
+        has_next_page = len(todos) > first
+        
+        if has_next_page:
+            todos = todos[:first]
+        
+        edges = [
+            TodoEdge(
+                node=todo,
+                cursor=encode_cursor({'id': todo.id})
+            )
+            for todo in todos
+        ]
         
         return TodoConnection(
-            edges=[TodoEdge(node=todo) for todo in todos],
+            edges=edges,
             page_info=relay.PageInfo(
-                has_next_page=False,
-                has_previous_page=False,
-                start_cursor=None,
-                end_cursor=None,
+                has_next_page=has_next_page,
+                end_cursor=edges[-1].cursor if edges else None,
             ),
-            total_count=total_count,
+            total_count=queryset.count(),
         )
     
     @strawberry.field(permission_classes=[IsAuthenticated])

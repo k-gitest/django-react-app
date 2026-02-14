@@ -6,8 +6,12 @@ from apps.todos.service import TodoCommandService
 from apps.common.exceptions import BaseAppError
 from apps.graphql_api.types.todo import (
     TodoType,
+    TodoEdge,
     TodoCreateInput,
     TodoUpdateInput,
+    CreateTodoPayload,
+    UpdateTodoPayload,
+    DeleteTodoPayload,
 )
 from apps.graphql_api.types.common import (
     ValidationError,
@@ -28,28 +32,44 @@ from apps.graphql_api.errors.handlers import graphql_error_handler
 # Result Union型の定義
 # ============================================================================
 
-TodoResult = strawberry.union(
-    "TodoResult",
+# ============================================================================
+# Create専用
+# ============================================================================
+TodoCreateResult = strawberry.union(
+    "TodoCreateResult",
     types=(
-        TodoType,
-        ValidationError,
-        AuthenticationError,
-        AuthorizationError,
-        NotFoundError,
-        ConflictError,
-        ExternalServiceError,
+        CreateTodoPayload,      # 成功時: Edgeを返す
+        ValidationError,        # 入力不備
+        AuthenticationError,    # 未ログイン
+        InternalError,          # サーバーエラー
+    )
+)
+
+# ============================================================================
+# Update専用
+# ============================================================================
+TodoUpdateResult = strawberry.union(
+    "TodoUpdateResult",
+    types=(
+        UpdateTodoPayload,      # 成功時: Nodeを返す
+        ValidationError,        # 入力不備
+        NotFoundError,          # 指定IDが存在しない
+        AuthenticationError,    # 未ログイン
+        AuthorizationError,     # 他人のTodoを編集しようとした
         InternalError,
     )
 )
 
-DeleteResult = strawberry.union(
-    "DeleteResult",
+# ============================================================================
+# Delete専用
+# ============================================================================
+TodoDeleteResult = strawberry.union(
+    "TodoDeleteResult",
     types=(
-        Success,
+        DeleteTodoPayload,      # 成功時: 削除されたIDを返す
+        NotFoundError,          # 指定IDが存在しない
         AuthenticationError,
         AuthorizationError,
-        NotFoundError,
-        ExternalServiceError,
         InternalError,
     )
 )
@@ -76,12 +96,12 @@ class TodoMutation:
         self,
         info: strawberry.Info,
         input: TodoCreateInput
-    ) -> TodoResult:
+    ) -> TodoCreateResult:
         """
         Todo作成
         
         Returns:
-            TodoResult = TodoType | ValidationError | ... | InternalError
+            TodoCreateResult = CreateTodoPayload | ValidationError | ... | InternalError
         """
         user = info.context.request.user
         
@@ -99,7 +119,14 @@ class TodoMutation:
         }
         
         todo = TodoCommandService.create_todo(user, data)
-        return todo
+        # return todo
+        # ✅ Edgeを作って Payload で包んで返す
+        return CreateTodoPayload(
+            todo_edge=TodoEdge(
+                node=todo,
+                cursor=relay.to_base64("TodoType", todo.id)
+            )
+        )
     
     @strawberry.mutation(permission_classes=[IsAuthenticated])
     @graphql_error_handler
@@ -108,12 +135,12 @@ class TodoMutation:
         info: strawberry.Info,
         id: relay.GlobalID,
         input: TodoUpdateInput
-    ) -> TodoResult:
+    ) -> TodoUpdateResult:
         """
         Todo更新
         
         Returns:
-            TodoResult = TodoType | ValidationError | ... | InternalError
+            TodoUpdateResult = UpdateTodoPayload | ValidationError | ... | InternalError
         """
         user = info.context.request.user
         db_id = id.node_id
@@ -133,7 +160,9 @@ class TodoMutation:
             data["progress"] = input.progress
         
         todo = TodoCommandService.update_todo(db_id, user, data)
-        return todo
+        # return todo
+        # Payloadで包んで返す
+        return UpdateTodoPayload(todo=todo)
     
     @strawberry.mutation(permission_classes=[IsAuthenticated])
     @graphql_error_handler
@@ -141,12 +170,12 @@ class TodoMutation:
         self,
         info: strawberry.Info,
         id: relay.GlobalID
-    ) -> DeleteResult:
+    ) -> TodoDeleteResult:
         """
         Todo削除
         
         Returns:
-            DeleteResult = Success | AuthenticationError | ... | InternalError
+            TodoDeleteResult = DeleteTodoPayload | NotFoundError | ... | InternalError
         """
         user = info.context.request.user
         db_id = id.node_id
@@ -154,7 +183,12 @@ class TodoMutation:
         # Service層を呼び出し
         TodoCommandService.delete_todo(db_id, user)
         
-        return Success(message="Todoを削除しました")
+        # return Success(message="Todoを削除しました")
+        # ✅ 渡された GlobalID をそのまま「消えたID」として返してあげる
+        return DeleteTodoPayload(
+            deleted_todo_id=id, 
+            message="Todoを削除しました"
+        )
     
     @strawberry.mutation(permission_classes=[IsAuthenticated])
     @graphql_error_handler

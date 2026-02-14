@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<5a453d95158369148c9bdb25058d7024>>
+ * @generated SignedSource<<368823791f39af08d212ce950510e85c>>
  * @lightSyntaxTransform
  * @nogrep
  */
@@ -21,13 +21,17 @@ export type TodoItemRelayContainerUpdateMutation$variables = {
 };
 export type TodoItemRelayContainerUpdateMutation$data = {
   readonly updateTodo: {
-    readonly __typename: "TodoType";
-    readonly id: string;
-    readonly priority: PriorityEnum;
-    readonly progress: number;
-    readonly todoTitle: string;
+    readonly __typename: "UpdateTodoPayload";
+    readonly todo: {
+      readonly id: string;
+      readonly priority: PriorityEnum;
+      readonly progress: number;
+      readonly todoTitle: string;
+      readonly updatedAt: any;
+    };
   } | {
     readonly __typename: "ValidationError";
+    readonly field: string | null | undefined;
     readonly message: string;
   } | {
     // This will never be '%other', but we need some
@@ -55,95 +59,116 @@ var v0 = [
 ],
 v1 = [
   {
-    "kind": "Variable",
-    "name": "id",
-    "variableName": "id"
-  },
-  {
-    "kind": "Variable",
-    "name": "input",
-    "variableName": "input"
+    "alias": null,
+    "args": [
+      {
+        "kind": "Variable",
+        "name": "id",
+        "variableName": "id"
+      },
+      {
+        "kind": "Variable",
+        "name": "input",
+        "variableName": "input"
+      }
+    ],
+    "concreteType": null,
+    "kind": "LinkedField",
+    "name": "updateTodo",
+    "plural": false,
+    "selections": [
+      {
+        "alias": null,
+        "args": null,
+        "kind": "ScalarField",
+        "name": "__typename",
+        "storageKey": null
+      },
+      {
+        "kind": "InlineFragment",
+        "selections": [
+          {
+            "alias": null,
+            "args": null,
+            "concreteType": "TodoType",
+            "kind": "LinkedField",
+            "name": "todo",
+            "plural": false,
+            "selections": [
+              {
+                "alias": null,
+                "args": null,
+                "kind": "ScalarField",
+                "name": "id",
+                "storageKey": null
+              },
+              {
+                "alias": null,
+                "args": null,
+                "kind": "ScalarField",
+                "name": "todoTitle",
+                "storageKey": null
+              },
+              {
+                "alias": null,
+                "args": null,
+                "kind": "ScalarField",
+                "name": "priority",
+                "storageKey": null
+              },
+              {
+                "alias": null,
+                "args": null,
+                "kind": "ScalarField",
+                "name": "progress",
+                "storageKey": null
+              },
+              {
+                "alias": null,
+                "args": null,
+                "kind": "ScalarField",
+                "name": "updatedAt",
+                "storageKey": null
+              }
+            ],
+            "storageKey": null
+          }
+        ],
+        "type": "UpdateTodoPayload",
+        "abstractKey": null
+      },
+      {
+        "kind": "InlineFragment",
+        "selections": [
+          {
+            "alias": null,
+            "args": null,
+            "kind": "ScalarField",
+            "name": "message",
+            "storageKey": null
+          },
+          {
+            "alias": null,
+            "args": null,
+            "kind": "ScalarField",
+            "name": "field",
+            "storageKey": null
+          }
+        ],
+        "type": "ValidationError",
+        "abstractKey": null
+      }
+    ],
+    "storageKey": null
   }
-],
-v2 = {
-  "alias": null,
-  "args": null,
-  "kind": "ScalarField",
-  "name": "__typename",
-  "storageKey": null
-},
-v3 = {
-  "alias": null,
-  "args": null,
-  "kind": "ScalarField",
-  "name": "id",
-  "storageKey": null
-},
-v4 = {
-  "kind": "InlineFragment",
-  "selections": [
-    (v3/*: any*/),
-    {
-      "alias": null,
-      "args": null,
-      "kind": "ScalarField",
-      "name": "todoTitle",
-      "storageKey": null
-    },
-    {
-      "alias": null,
-      "args": null,
-      "kind": "ScalarField",
-      "name": "priority",
-      "storageKey": null
-    },
-    {
-      "alias": null,
-      "args": null,
-      "kind": "ScalarField",
-      "name": "progress",
-      "storageKey": null
-    }
-  ],
-  "type": "TodoType",
-  "abstractKey": null
-},
-v5 = {
-  "kind": "InlineFragment",
-  "selections": [
-    {
-      "alias": null,
-      "args": null,
-      "kind": "ScalarField",
-      "name": "message",
-      "storageKey": null
-    }
-  ],
-  "type": "ValidationError",
-  "abstractKey": null
-};
+];
 return {
   "fragment": {
     "argumentDefinitions": (v0/*: any*/),
     "kind": "Fragment",
     "metadata": null,
     "name": "TodoItemRelayContainerUpdateMutation",
-    "selections": [
-      {
-        "alias": null,
-        "args": (v1/*: any*/),
-        "concreteType": null,
-        "kind": "LinkedField",
-        "name": "updateTodo",
-        "plural": false,
-        "selections": [
-          (v2/*: any*/),
-          (v4/*: any*/),
-          (v5/*: any*/)
-        ],
-        "storageKey": null
-      }
-    ],
+    "selections": (v1/*: any*/),
     "type": "Mutation",
     "abstractKey": null
   },
@@ -152,42 +177,19 @@ return {
     "argumentDefinitions": (v0/*: any*/),
     "kind": "Operation",
     "name": "TodoItemRelayContainerUpdateMutation",
-    "selections": [
-      {
-        "alias": null,
-        "args": (v1/*: any*/),
-        "concreteType": null,
-        "kind": "LinkedField",
-        "name": "updateTodo",
-        "plural": false,
-        "selections": [
-          (v2/*: any*/),
-          (v4/*: any*/),
-          (v5/*: any*/),
-          {
-            "kind": "InlineFragment",
-            "selections": [
-              (v3/*: any*/)
-            ],
-            "type": "Node",
-            "abstractKey": "__isNode"
-          }
-        ],
-        "storageKey": null
-      }
-    ]
+    "selections": (v1/*: any*/)
   },
   "params": {
-    "cacheID": "b6bfacfd298ca37ffb8ac40ff48f7f37",
+    "cacheID": "5b985a0d3ddae2d32c88ffb9826ffc0b",
     "id": null,
     "metadata": {},
     "name": "TodoItemRelayContainerUpdateMutation",
     "operationKind": "mutation",
-    "text": "mutation TodoItemRelayContainerUpdateMutation(\n  $id: ID!\n  $input: TodoUpdateInput!\n) {\n  updateTodo(id: $id, input: $input) {\n    __typename\n    ... on TodoType {\n      id\n      todoTitle\n      priority\n      progress\n    }\n    ... on ValidationError {\n      message\n    }\n    ... on Node {\n      __isNode: __typename\n      id\n    }\n  }\n}\n"
+    "text": "mutation TodoItemRelayContainerUpdateMutation(\n  $id: ID!\n  $input: TodoUpdateInput!\n) {\n  updateTodo(id: $id, input: $input) {\n    __typename\n    ... on UpdateTodoPayload {\n      todo {\n        id\n        todoTitle\n        priority\n        progress\n        updatedAt\n      }\n    }\n    ... on ValidationError {\n      message\n      field\n    }\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "7dae77c44fa481e0c6245f7e0aff54be";
+(node as any).hash = "ff70178581a8197866085b16df06ae0b";
 
 export default node;

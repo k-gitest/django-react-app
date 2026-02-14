@@ -148,3 +148,21 @@ class TodoConnection(relay.Connection):
     total_count: int = strawberry.field(
         description="ユーザーのTodo総数"
     )
+
+@strawberry.type
+class CreateTodoPayload:
+    """Todo作成成功時の戻り値"""
+    # NodeではなくEdgeを返すことで、フロントの @prependEdge が動作する
+    todo_edge: TodoEdge
+
+@strawberry.type
+class UpdateTodoPayload:
+    """Todo更新成功時の戻り値"""
+    todo: TodoType  # 更新されたデータ本体
+
+@strawberry.type
+class DeleteTodoPayload:
+    """Todo削除成功時の戻り値"""
+    # 削除されたIDを返すことで、フロントの @deleteEdge が動作する
+    deleted_todo_id: relay.GlobalID
+    message: str

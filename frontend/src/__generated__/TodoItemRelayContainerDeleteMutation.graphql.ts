@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<3b9b14016d2f585b3afde6f6dc184791>>
+ * @generated SignedSource<<ea403ce6b71e59fc844036653f0a508f>>
  * @lightSyntaxTransform
  * @nogrep
  */
@@ -11,10 +11,15 @@
 import { ConcreteRequest } from 'relay-runtime';
 export type ErrorCategory = "AUTHENTICATION" | "AUTHORIZATION" | "CONFLICT" | "EXTERNAL_SERVICE" | "INTERNAL" | "NOT_FOUND" | "RATE_LIMIT" | "VALIDATION" | "%future added value";
 export type TodoItemRelayContainerDeleteMutation$variables = {
+  connections: ReadonlyArray<string>;
   id: string;
 };
 export type TodoItemRelayContainerDeleteMutation$data = {
   readonly deleteTodo: {
+    readonly __typename: "DeleteTodoPayload";
+    readonly deletedTodoId: string;
+    readonly message: string;
+  } | {
     readonly __typename: "InternalError";
     readonly category: ErrorCategory;
     readonly code: string;
@@ -24,10 +29,6 @@ export type TodoItemRelayContainerDeleteMutation$data = {
     readonly category: ErrorCategory;
     readonly code: string;
     readonly message: string;
-  } | {
-    readonly __typename: "Success";
-    readonly message: string;
-    readonly success: boolean;
   } | {
     // This will never be '%other', but we need some
     // value in case none of the concrete values match.
@@ -40,21 +41,45 @@ export type TodoItemRelayContainerDeleteMutation = {
 };
 
 const node: ConcreteRequest = (function(){
-var v0 = [
+var v0 = {
+  "defaultValue": null,
+  "kind": "LocalArgument",
+  "name": "connections"
+},
+v1 = {
+  "defaultValue": null,
+  "kind": "LocalArgument",
+  "name": "id"
+},
+v2 = [
   {
-    "defaultValue": null,
-    "kind": "LocalArgument",
-    "name": "id"
+    "kind": "Variable",
+    "name": "id",
+    "variableName": "id"
   }
 ],
-v1 = {
+v3 = {
+  "alias": null,
+  "args": null,
+  "kind": "ScalarField",
+  "name": "__typename",
+  "storageKey": null
+},
+v4 = {
   "alias": null,
   "args": null,
   "kind": "ScalarField",
   "name": "message",
   "storageKey": null
 },
-v2 = [
+v5 = {
+  "alias": null,
+  "args": null,
+  "kind": "ScalarField",
+  "name": "deletedTodoId",
+  "storageKey": null
+},
+v6 = [
   {
     "alias": null,
     "args": null,
@@ -62,7 +87,7 @@ v2 = [
     "name": "category",
     "storageKey": null
   },
-  (v1/*: any*/),
+  (v4/*: any*/),
   {
     "alias": null,
     "args": null,
@@ -71,87 +96,116 @@ v2 = [
     "storageKey": null
   }
 ],
-v3 = [
-  {
-    "alias": null,
-    "args": [
-      {
-        "kind": "Variable",
-        "name": "id",
-        "variableName": "id"
-      }
-    ],
-    "concreteType": null,
-    "kind": "LinkedField",
-    "name": "deleteTodo",
-    "plural": false,
-    "selections": [
-      {
-        "alias": null,
-        "args": null,
-        "kind": "ScalarField",
-        "name": "__typename",
-        "storageKey": null
-      },
-      {
-        "kind": "InlineFragment",
-        "selections": [
-          (v1/*: any*/),
-          {
-            "alias": null,
-            "args": null,
-            "kind": "ScalarField",
-            "name": "success",
-            "storageKey": null
-          }
-        ],
-        "type": "Success",
-        "abstractKey": null
-      },
-      {
-        "kind": "InlineFragment",
-        "selections": (v2/*: any*/),
-        "type": "NotFoundError",
-        "abstractKey": null
-      },
-      {
-        "kind": "InlineFragment",
-        "selections": (v2/*: any*/),
-        "type": "InternalError",
-        "abstractKey": null
-      }
-    ],
-    "storageKey": null
-  }
-];
+v7 = {
+  "kind": "InlineFragment",
+  "selections": (v6/*: any*/),
+  "type": "NotFoundError",
+  "abstractKey": null
+},
+v8 = {
+  "kind": "InlineFragment",
+  "selections": (v6/*: any*/),
+  "type": "InternalError",
+  "abstractKey": null
+};
 return {
   "fragment": {
-    "argumentDefinitions": (v0/*: any*/),
+    "argumentDefinitions": [
+      (v0/*: any*/),
+      (v1/*: any*/)
+    ],
     "kind": "Fragment",
     "metadata": null,
     "name": "TodoItemRelayContainerDeleteMutation",
-    "selections": (v3/*: any*/),
+    "selections": [
+      {
+        "alias": null,
+        "args": (v2/*: any*/),
+        "concreteType": null,
+        "kind": "LinkedField",
+        "name": "deleteTodo",
+        "plural": false,
+        "selections": [
+          (v3/*: any*/),
+          {
+            "kind": "InlineFragment",
+            "selections": [
+              (v4/*: any*/),
+              (v5/*: any*/)
+            ],
+            "type": "DeleteTodoPayload",
+            "abstractKey": null
+          },
+          (v7/*: any*/),
+          (v8/*: any*/)
+        ],
+        "storageKey": null
+      }
+    ],
     "type": "Mutation",
     "abstractKey": null
   },
   "kind": "Request",
   "operation": {
-    "argumentDefinitions": (v0/*: any*/),
+    "argumentDefinitions": [
+      (v1/*: any*/),
+      (v0/*: any*/)
+    ],
     "kind": "Operation",
     "name": "TodoItemRelayContainerDeleteMutation",
-    "selections": (v3/*: any*/)
+    "selections": [
+      {
+        "alias": null,
+        "args": (v2/*: any*/),
+        "concreteType": null,
+        "kind": "LinkedField",
+        "name": "deleteTodo",
+        "plural": false,
+        "selections": [
+          (v3/*: any*/),
+          {
+            "kind": "InlineFragment",
+            "selections": [
+              (v4/*: any*/),
+              (v5/*: any*/),
+              {
+                "alias": null,
+                "args": null,
+                "filters": null,
+                "handle": "deleteEdge",
+                "key": "",
+                "kind": "ScalarHandle",
+                "name": "deletedTodoId",
+                "handleArgs": [
+                  {
+                    "kind": "Variable",
+                    "name": "connections",
+                    "variableName": "connections"
+                  }
+                ]
+              }
+            ],
+            "type": "DeleteTodoPayload",
+            "abstractKey": null
+          },
+          (v7/*: any*/),
+          (v8/*: any*/)
+        ],
+        "storageKey": null
+      }
+    ]
   },
   "params": {
-    "cacheID": "593a8fc4526599508759600b4de91e73",
+    "cacheID": "2d7e660bd2a771f9f2ce999ba62c4d26",
     "id": null,
     "metadata": {},
     "name": "TodoItemRelayContainerDeleteMutation",
     "operationKind": "mutation",
-    "text": "mutation TodoItemRelayContainerDeleteMutation(\n  $id: ID!\n) {\n  deleteTodo(id: $id) {\n    __typename\n    ... on Success {\n      message\n      success\n    }\n    ... on NotFoundError {\n      category\n      message\n      code\n    }\n    ... on InternalError {\n      category\n      message\n      code\n    }\n  }\n}\n"
+    "text": "mutation TodoItemRelayContainerDeleteMutation(\n  $id: ID!\n) {\n  deleteTodo(id: $id) {\n    __typename\n    ... on DeleteTodoPayload {\n      message\n      deletedTodoId\n    }\n    ... on NotFoundError {\n      category\n      message\n      code\n    }\n    ... on InternalError {\n      category\n      message\n      code\n    }\n  }\n}\n"
   }
 };
 })();
 
-(node as any).hash = "050dde93c6afb0135a330c759de956c5";
+(node as any).hash = "df1fa75483e4ff79e9f36b5c68157abe";
 
 export default node;

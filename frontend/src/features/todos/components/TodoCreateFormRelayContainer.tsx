@@ -6,17 +6,27 @@ import type { TodoCreateFormRelayContainerMutation } from '@/__generated__/TodoC
 import type { TodoFormValues } from '../schemas';
 
 const CreateTodoMutation = graphql`
-  mutation TodoCreateFormRelayContainerMutation($input: TodoCreateInput!) {
+  mutation TodoCreateFormRelayContainerMutation(
+    $input: TodoCreateInput!
+    $connections: [ID!]!
+  ) {
     createTodo(input: $input) {
       __typename
-      ... on TodoType {
-        id
-        todoTitle
-        progress
-        priority
+      ... on CreateTodoPayload {
+        todoEdge @prependEdge(connections: $connections) {
+          node {
+            id
+            todoTitle
+            progress
+            priority
+            createdAt
+            updatedAt
+          }
+        }
       }
       ... on ValidationError {
         message
+        field
       }
     }
   }
@@ -27,34 +37,44 @@ export const TodoCreateFormRelayContainer = () => {
 
   const handleCreateSubmit = useCallback(
     async (values: TodoFormValues): Promise<void> => {
-      await execute({
-        variables: {
-          input: {
-            todoTitle: values.todo_title,
-            priority: values.priority,
-            progress: values.progress,
+      try {
+        const response = await execute({
+          variables: {
+            input: {
+              todoTitle: values.todo_title,
+              priority: values.priority,
+              progress: values.progress,
+            },
+            // ✅ Connection ID を渡す
+            connections: ['client:root:__TodoList_todosConnection_connection'],
           },
-        },
-        updater: (store) => {
-          // 1. サーバーから返ってきた 'createTodo' の結果（新しく作られたデータ）を取得
-          const payload = store.getRootField('createTodo');
-          if (!payload) return;
+          // ✅ 楽観的更新
+          optimisticResponse: {
+            createTodo: {
+              __typename: 'CreateTodoPayload',
+              todoEdge: {
+                __typename: 'TodoEdge',
+                node: {
+                  __typename: 'Todo',
+                  id: `temp-${Date.now()}`,
+                  todoTitle: values.todo_title,
+                  priority: values.priority,
+                  progress: values.progress,
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                },
+              },
+            },
+          } as TodoCreateFormRelayContainerMutation['response'],
+          errorContext: 'タスクの作成に失敗しました',
+        });
 
-          // 2. 作成成功時の型（TodoType）を特定する
-          const newTodo = payload.getLinkedRecord('... on TodoType'); 
-          // もし Union 型でないなら payload そのものが TodoType です
-          const itemToAdd = newTodo || payload;
-
-          // 3. ルート（Query）にある現在の 'todos' 配列を取得
-          const root = store.getRoot();
-          const currentTodos = root.getLinkedRecords('todos') || [];
-
-          // 4. 新しい配列を作成（先頭に追加する場合）してセット
-          // これにより TodoList が再描画されます
-          root.setLinkedRecords([itemToAdd, ...currentTodos], 'todos');
-        },
-        errorContext: 'タスクの作成に失敗しました',
-      });
+        if (response.createTodo.__typename === 'CreateTodoPayload') {
+          //toast.success('タスクを作成しました');
+        }
+      } catch (error) {
+        if (import.meta.env.DEV) console.error(error);
+      }
     },
     [execute]
   );
