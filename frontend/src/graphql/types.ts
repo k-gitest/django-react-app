@@ -63,7 +63,16 @@ export type ConflictError = {
   message: Scalars['String']['output'];
 };
 
-export type DeleteResult = AuthenticationError | AuthorizationError | ExternalServiceError | InternalError | NotFoundError | Success;
+export type CreateTodoPayload = {
+  __typename?: 'CreateTodoPayload';
+  todoEdge: TodoEdge;
+};
+
+export type DeleteTodoPayload = {
+  __typename?: 'DeleteTodoPayload';
+  deletedTodoId: Scalars['ID']['output'];
+  message: Scalars['String']['output'];
+};
 
 export type ErrorCategory =
   | 'AUTHENTICATION'
@@ -106,12 +115,12 @@ export type Mutation = {
   __typename?: 'Mutation';
   bulkIndexTodos: SuccessExternalServiceErrorInternalError;
   changePassword: ChangePasswordResult;
-  createTodo: TodoResult;
-  deleteTodo: DeleteResult;
+  createTodo: TodoCreateResult;
+  deleteTodo: TodoDeleteResult;
   login: AuthResult;
   logout: LogoutResult;
   register: AuthResult;
-  updateTodo: TodoResult;
+  updateTodo: TodoUpdateResult;
 };
 
 
@@ -284,14 +293,16 @@ export type TodoCreateInput = {
   todoTitle: Scalars['String']['input'];
 };
 
+export type TodoCreateResult = AuthenticationError | CreateTodoPayload | InternalError | ValidationError;
+
+export type TodoDeleteResult = AuthenticationError | AuthorizationError | DeleteTodoPayload | InternalError | NotFoundError;
+
 export type TodoEdge = {
   __typename?: 'TodoEdge';
   /** A cursor for use in pagination */
   cursor: Scalars['String']['output'];
   node: TodoType;
 };
-
-export type TodoResult = AuthenticationError | AuthorizationError | ConflictError | ExternalServiceError | InternalError | NotFoundError | TodoType | ValidationError;
 
 export type TodoSearchInput = {
   /** 最小類似度スコア（0.0-1.0） */
@@ -321,6 +332,13 @@ export type TodoUpdateInput = {
   progress?: InputMaybe<Scalars['Int']['input']>;
   /** タスクのタイトル（1-200文字） */
   todoTitle?: InputMaybe<Scalars['String']['input']>;
+};
+
+export type TodoUpdateResult = AuthenticationError | AuthorizationError | InternalError | NotFoundError | UpdateTodoPayload | ValidationError;
+
+export type UpdateTodoPayload = {
+  __typename?: 'UpdateTodoPayload';
+  todo: TodoType;
 };
 
 export type UserType = {
@@ -354,13 +372,9 @@ export type CreateTodoMutationVariables = Exact<{
 
 export type CreateTodoMutation = { __typename?: 'Mutation', createTodo:
     | { __typename: 'AuthenticationError' }
-    | { __typename: 'AuthorizationError' }
-    | { __typename: 'ConflictError', category: ErrorCategory, message: string, code: string }
-    | { __typename: 'ExternalServiceError' }
-    | { __typename: 'InternalError', category: ErrorCategory, message: string, code: string }
-    | { __typename: 'NotFoundError' }
-    | { __typename: 'TodoType', id: string, todoTitle: string, priority: PriorityEnum, progress: number, createdAt: string, updatedAt: string, userEmail: string }
-    | { __typename: 'ValidationError', category: ErrorCategory, message: string, field?: string | null, code: string }
+    | { __typename: 'CreateTodoPayload', todoEdge: { __typename?: 'TodoEdge', node: { __typename?: 'TodoType', id: string, todoTitle: string, priority: PriorityEnum, progress: number, createdAt: string, updatedAt: string, userEmail: string } } }
+    | { __typename: 'InternalError', message: string }
+    | { __typename: 'ValidationError', message: string, field?: string | null }
    };
 
 export type UpdateTodoMutationVariables = Exact<{
@@ -372,12 +386,10 @@ export type UpdateTodoMutationVariables = Exact<{
 export type UpdateTodoMutation = { __typename?: 'Mutation', updateTodo:
     | { __typename: 'AuthenticationError' }
     | { __typename: 'AuthorizationError' }
-    | { __typename: 'ConflictError' }
-    | { __typename: 'ExternalServiceError' }
-    | { __typename: 'InternalError', category: ErrorCategory, message: string, code: string }
-    | { __typename: 'NotFoundError', category: ErrorCategory, message: string, code: string }
-    | { __typename: 'TodoType', id: string, todoTitle: string, priority: PriorityEnum, progress: number, createdAt: string, updatedAt: string, userEmail: string }
-    | { __typename: 'ValidationError', category: ErrorCategory, message: string, field?: string | null, code: string }
+    | { __typename: 'InternalError', message: string }
+    | { __typename: 'NotFoundError', message: string }
+    | { __typename: 'UpdateTodoPayload', todo: { __typename?: 'TodoType', id: string, todoTitle: string, priority: PriorityEnum, progress: number, createdAt: string, updatedAt: string, userEmail: string } }
+    | { __typename: 'ValidationError', message: string, field?: string | null }
    };
 
 export type DeleteTodoMutationVariables = Exact<{
@@ -388,18 +400,17 @@ export type DeleteTodoMutationVariables = Exact<{
 export type DeleteTodoMutation = { __typename?: 'Mutation', deleteTodo:
     | { __typename: 'AuthenticationError' }
     | { __typename: 'AuthorizationError' }
-    | { __typename: 'ExternalServiceError' }
-    | { __typename: 'InternalError', category: ErrorCategory, message: string, code: string }
-    | { __typename: 'NotFoundError', category: ErrorCategory, message: string, code: string }
-    | { __typename: 'Success', message: string, success: boolean }
+    | { __typename: 'DeleteTodoPayload', deletedTodoId: string, message: string }
+    | { __typename: 'InternalError', message: string }
+    | { __typename: 'NotFoundError', message: string }
    };
 
 export type BulkIndexTodosMutationVariables = Exact<{ [key: string]: never; }>;
 
 
 export type BulkIndexTodosMutation = { __typename?: 'Mutation', bulkIndexTodos:
-    | { __typename: 'ExternalServiceError', category: ErrorCategory, message: string, code: string }
-    | { __typename: 'InternalError', category: ErrorCategory, message: string, code: string }
+    | { __typename: 'ExternalServiceError', message: string }
+    | { __typename: 'InternalError', message: string }
     | { __typename: 'Success', message: string, success: boolean }
    };
 

@@ -41,10 +41,17 @@ type ConflictError {
   Conflicterror_Typename: String!
 }
 
+type CreateTodoPayload {
+  todoEdge: TodoEdge!
+}
+
 """Date with time (isoformat)"""
 scalar DateTime
 
-union DeleteResult = Success | AuthenticationError | AuthorizationError | NotFoundError | ExternalServiceError | InternalError
+type DeleteTodoPayload {
+  deletedTodoId: ID!
+  message: String!
+}
 
 enum ErrorCategory {
   VALIDATION
@@ -84,9 +91,9 @@ input LoginInput {
 union LogoutResult = Success | AuthenticationError | InternalError
 
 type Mutation {
-  createTodo(input: TodoCreateInput!): TodoResult!
-  updateTodo(id: ID!, input: TodoUpdateInput!): TodoResult!
-  deleteTodo(id: ID!): DeleteResult!
+  createTodo(input: TodoCreateInput!): TodoCreateResult!
+  updateTodo(id: ID!, input: TodoUpdateInput!): TodoUpdateResult!
+  deleteTodo(id: ID!): TodoDeleteResult!
   bulkIndexTodos: SuccessExternalServiceErrorInternalError!
   register(input: RegisterInput!): AuthResult!
   login(input: LoginInput!): AuthResult!
@@ -214,13 +221,15 @@ input TodoCreateInput {
   progress: Int! = 0
 }
 
+union TodoCreateResult = CreateTodoPayload | ValidationError | AuthenticationError | InternalError
+
+union TodoDeleteResult = DeleteTodoPayload | NotFoundError | AuthenticationError | AuthorizationError | InternalError
+
 type TodoEdge {
   """A cursor for use in pagination"""
   cursor: String!
   node: TodoType!
 }
-
-union TodoResult = TodoType | ValidationError | AuthenticationError | AuthorizationError | NotFoundError | ConflictError | ExternalServiceError | InternalError
 
 input TodoSearchInput {
   """検索クエリ（自然言語）"""
@@ -254,6 +263,12 @@ input TodoUpdateInput {
 
   """進捗率（0-100）"""
   progress: Int = null
+}
+
+union TodoUpdateResult = UpdateTodoPayload | ValidationError | NotFoundError | AuthenticationError | AuthorizationError | InternalError
+
+type UpdateTodoPayload {
+  todo: TodoType!
 }
 
 type UserType {

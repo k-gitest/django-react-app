@@ -23,26 +23,33 @@ const TodoUpdateMutation = graphql`
   mutation TodoItemRelayContainerUpdateMutation($id: ID!, $input: TodoUpdateInput!) {
     updateTodo(id: $id, input: $input) {
       __typename
-      ... on TodoType {
-        id
-        todoTitle
-        priority
-        progress
+      ... on UpdateTodoPayload {
+        todo {
+          id
+          todoTitle
+          priority
+          progress
+          updatedAt
+        }
       }
       ... on ValidationError {
         message
+        field
       }
     }
   }
 `;
 
 const TodoDeleteMutation = graphql`
-  mutation TodoItemRelayContainerDeleteMutation($id: ID!) {
+  mutation TodoItemRelayContainerDeleteMutation(
+    $id: ID!
+    $connections: [ID!]!
+  ) {
     deleteTodo(id: $id) {
       __typename
-      ... on Success {
+      ... on DeleteTodoPayload {
         message
-        success
+        deletedTodoId @deleteEdge(connections: $connections)
       }
       ... on NotFoundError {
         category
@@ -68,27 +75,65 @@ export const TodoItemRelayContainer = ({ todoRef, ...props }: Props) => {
   const [isEditOpen, setIsEditOpen] = useState(false);
 
   const { execute: updateTodo, isInFlight: isUpdating } =
-      useRelayMutation<TodoItemRelayContainerUpdateMutation>(TodoUpdateMutation);
-    const { execute: deleteTodo, isInFlight: isDeleting } =
-      useRelayMutation<TodoItemRelayContainerDeleteMutation>(TodoDeleteMutation);
+    useRelayMutation<TodoItemRelayContainerUpdateMutation>(TodoUpdateMutation);
+  const { execute: deleteTodo, isInFlight: isDeleting } =
+    useRelayMutation<TodoItemRelayContainerDeleteMutation>(TodoDeleteMutation);
 
   const handleToggle = async () => {
-    await updateTodo({
-      variables: {
-        id: todo.id,
-        input: { progress: todo.progress === 100 ? 0 : 100 }
+    const nextProgress = todo.progress === 100 ? 0 : 100;
+
+    try {
+      const response = await updateTodo({
+        variables: {
+          id: todo.id,
+          input: { progress: nextProgress },
+        },
+        // ✅ 楽観的更新
+        optimisticResponse: {
+          updateTodo: {
+            __typename: 'UpdateTodoPayload',
+            todo: {
+              id: todo.id,
+              todoTitle: todo.todoTitle,
+              priority: todo.priority,
+              progress: nextProgress,
+              updatedAt: new Date().toISOString(),
+            },
+          },
+        },
+        errorContext: '進捗更新',
+      });
+
+      if (response.updateTodo.__typename === 'UpdateTodoPayload') {
+        //toast.success('進捗を更新しました');
       }
-    });
+    } catch (error) {
+      if (import.meta.env.DEV) console.error(error);
+    }
   };
 
   const handleDelete = async () => {
-    if (window.confirm('本当に削除しますか？')) {
-      await deleteTodo({
-        variables: { id: todo.id },
-        updater: (store) => {
+    if (!window.confirm('本当に削除しますか？')) return;
+
+    try {
+      const response = await deleteTodo({
+        variables: {
+          id: todo.id,
+          // ✅ Connection ID を渡す
+          connections: ['client:root:__TodoList_todosConnection_connection'],
+        },
+        // ✅ 楽観的更新
+        optimisticUpdater: (store) => {
           store.delete(todo.id);
         },
+        errorContext: 'Todo削除',
       });
+
+      if (response.deleteTodo.__typename === 'DeleteTodoPayload') {
+        //toast.success('削除しました');
+      }
+    } catch (error) {
+      if (import.meta.env.DEV) console.error(error);
     }
   };
 

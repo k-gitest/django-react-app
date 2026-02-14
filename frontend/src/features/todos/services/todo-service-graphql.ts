@@ -44,13 +44,24 @@ export const todoServiceGraphQL = {
       progress: input.progress,
     };
 
-    const todo = await gqlMutation<CreateTodoMutation, 'createTodo'>(
+    const result = await gqlMutation<CreateTodoMutation, 'createTodo'>(
       CREATE_TODO,
       { input: graphqlInput },
       'createTodo'
     );
 
-    return graphqlToTodo(todo as TodoType);
+
+    // ✅ 型ガード: まず __typename で「成功時」であることを確定させる
+    if (result.__typename === 'CreateTodoPayload') {
+      // 成功時、result は CreateTodoPayload 型として扱えるので node にアクセス可能
+      const node = result.todoEdge.node;
+      // node を TodoType として扱う
+      return graphqlToTodo(node as unknown as TodoType);
+    }
+    
+    // ❌ 失敗時（ValidationErrorなど）
+    throw new Error(result.__typename === 'ValidationError' ? result.message : '作成に失敗しました');
+
   },
 
   updateTodo: async (input: UpdateTodoInput): Promise<Todo> => {
@@ -63,23 +74,39 @@ export const todoServiceGraphQL = {
 
     const globalId = btoa(`TodoType:${input.id}`);
 
-    const todo = await gqlMutation<UpdateTodoMutation, 'updateTodo'>(
+    const result = await gqlMutation<UpdateTodoMutation, 'updateTodo'>(
       UPDATE_TODO,
       { id: globalId, input: graphqlInput },
       'updateTodo'
     );
 
-    return graphqlToTodo(todo as TodoType);
+    // ✅ 型ガード: UpdateTodoPayload であることを確認
+    if (result.__typename === 'UpdateTodoPayload') {
+      // payload の中の todo プロパティが Node 本体
+      return graphqlToTodo(result.todo as unknown as TodoType);
+    }
+
+    throw new Error('更新に失敗しました');
   },
 
   deleteTodo: async (id: number): Promise<void> => {
     const globalId = btoa(`TodoType:${id}`);
 
-    await gqlMutation<DeleteTodoMutation, 'deleteTodo'>(
+    const result = await gqlMutation<DeleteTodoMutation, 'deleteTodo'>(
       DELETE_TODO,
       { id: globalId },
       'deleteTodo'
     );
+
+    // ✅ 追加：明示的に成功(Payload)を確認する
+    if (result.__typename !== 'DeleteTodoPayload') {
+      // 失敗時（NotFoundError や InternalError）はエラーを投げる
+      throw new Error(
+        result.__typename === 'NotFoundError' ? '対象のTodoが見つかりません' : '削除に失敗しました'
+      );
+    }
+    
+    // ここまで来れば、result.__typename === 'DeleteTodoPayload' なので確実に成功
   },
 
   getTodoStats: async (): Promise<Array<{ priority: string; count: number }>> => {

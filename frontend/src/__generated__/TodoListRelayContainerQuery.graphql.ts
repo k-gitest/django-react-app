@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<f7018f9bebca5585038db3ab76cfa5d1>>
+ * @generated SignedSource<<975e5b6f3e7b75697f7fbd720febb8fe>>
  * @lightSyntaxTransform
  * @nogrep
  */
@@ -10,12 +10,23 @@
 
 import { ConcreteRequest } from 'relay-runtime';
 import { FragmentRefs } from "relay-runtime";
-export type TodoListRelayContainerQuery$variables = Record<PropertyKey, never>;
+export type TodoListRelayContainerQuery$variables = {
+  first?: number | null | undefined;
+};
 export type TodoListRelayContainerQuery$data = {
-  readonly todos: ReadonlyArray<{
-    readonly id: string;
-    readonly " $fragmentSpreads": FragmentRefs<"TodoItemRelayContainer_todo">;
-  }>;
+  readonly todosConnection: {
+    readonly edges: ReadonlyArray<{
+      readonly node: {
+        readonly id: string;
+        readonly " $fragmentSpreads": FragmentRefs<"TodoItemRelayContainer_todo">;
+      };
+    }>;
+    readonly pageInfo: {
+      readonly endCursor: string | null | undefined;
+      readonly hasNextPage: boolean;
+    };
+    readonly totalCount: number;
+  };
 };
 export type TodoListRelayContainerQuery = {
   response: TodoListRelayContainerQuery$data;
@@ -23,34 +34,120 @@ export type TodoListRelayContainerQuery = {
 };
 
 const node: ConcreteRequest = (function(){
-var v0 = {
+var v0 = [
+  {
+    "defaultValue": 100,
+    "kind": "LocalArgument",
+    "name": "first"
+  }
+],
+v1 = {
   "alias": null,
   "args": null,
   "kind": "ScalarField",
   "name": "id",
   "storageKey": null
-};
+},
+v2 = {
+  "alias": null,
+  "args": null,
+  "kind": "ScalarField",
+  "name": "__typename",
+  "storageKey": null
+},
+v3 = {
+  "alias": null,
+  "args": null,
+  "kind": "ScalarField",
+  "name": "cursor",
+  "storageKey": null
+},
+v4 = {
+  "alias": null,
+  "args": null,
+  "concreteType": "PageInfo",
+  "kind": "LinkedField",
+  "name": "pageInfo",
+  "plural": false,
+  "selections": [
+    {
+      "alias": null,
+      "args": null,
+      "kind": "ScalarField",
+      "name": "hasNextPage",
+      "storageKey": null
+    },
+    {
+      "alias": null,
+      "args": null,
+      "kind": "ScalarField",
+      "name": "endCursor",
+      "storageKey": null
+    }
+  ],
+  "storageKey": null
+},
+v5 = {
+  "alias": null,
+  "args": null,
+  "kind": "ScalarField",
+  "name": "totalCount",
+  "storageKey": null
+},
+v6 = [
+  {
+    "kind": "Variable",
+    "name": "first",
+    "variableName": "first"
+  }
+];
 return {
   "fragment": {
-    "argumentDefinitions": [],
+    "argumentDefinitions": (v0/*: any*/),
     "kind": "Fragment",
     "metadata": null,
     "name": "TodoListRelayContainerQuery",
     "selections": [
       {
-        "alias": null,
+        "alias": "todosConnection",
         "args": null,
-        "concreteType": "TodoType",
+        "concreteType": "TodoConnection",
         "kind": "LinkedField",
-        "name": "todos",
-        "plural": true,
+        "name": "__TodoList_todosConnection_connection",
+        "plural": false,
         "selections": [
-          (v0/*: any*/),
           {
+            "alias": null,
             "args": null,
-            "kind": "FragmentSpread",
-            "name": "TodoItemRelayContainer_todo"
-          }
+            "concreteType": "TodoEdge",
+            "kind": "LinkedField",
+            "name": "edges",
+            "plural": true,
+            "selections": [
+              {
+                "alias": null,
+                "args": null,
+                "concreteType": "TodoType",
+                "kind": "LinkedField",
+                "name": "node",
+                "plural": false,
+                "selections": [
+                  (v1/*: any*/),
+                  {
+                    "args": null,
+                    "kind": "FragmentSpread",
+                    "name": "TodoItemRelayContainer_todo"
+                  },
+                  (v2/*: any*/)
+                ],
+                "storageKey": null
+              },
+              (v3/*: any*/)
+            ],
+            "storageKey": null
+          },
+          (v4/*: any*/),
+          (v5/*: any*/)
         ],
         "storageKey": null
       }
@@ -60,63 +157,109 @@ return {
   },
   "kind": "Request",
   "operation": {
-    "argumentDefinitions": [],
+    "argumentDefinitions": (v0/*: any*/),
     "kind": "Operation",
     "name": "TodoListRelayContainerQuery",
     "selections": [
       {
         "alias": null,
-        "args": null,
-        "concreteType": "TodoType",
+        "args": (v6/*: any*/),
+        "concreteType": "TodoConnection",
         "kind": "LinkedField",
-        "name": "todos",
-        "plural": true,
+        "name": "todosConnection",
+        "plural": false,
         "selections": [
-          (v0/*: any*/),
           {
             "alias": null,
             "args": null,
-            "kind": "ScalarField",
-            "name": "todoTitle",
+            "concreteType": "TodoEdge",
+            "kind": "LinkedField",
+            "name": "edges",
+            "plural": true,
+            "selections": [
+              {
+                "alias": null,
+                "args": null,
+                "concreteType": "TodoType",
+                "kind": "LinkedField",
+                "name": "node",
+                "plural": false,
+                "selections": [
+                  (v1/*: any*/),
+                  {
+                    "alias": null,
+                    "args": null,
+                    "kind": "ScalarField",
+                    "name": "todoTitle",
+                    "storageKey": null
+                  },
+                  {
+                    "alias": null,
+                    "args": null,
+                    "kind": "ScalarField",
+                    "name": "priority",
+                    "storageKey": null
+                  },
+                  {
+                    "alias": null,
+                    "args": null,
+                    "kind": "ScalarField",
+                    "name": "progress",
+                    "storageKey": null
+                  },
+                  {
+                    "alias": null,
+                    "args": null,
+                    "kind": "ScalarField",
+                    "name": "updatedAt",
+                    "storageKey": null
+                  },
+                  (v2/*: any*/)
+                ],
+                "storageKey": null
+              },
+              (v3/*: any*/)
+            ],
             "storageKey": null
           },
-          {
-            "alias": null,
-            "args": null,
-            "kind": "ScalarField",
-            "name": "priority",
-            "storageKey": null
-          },
-          {
-            "alias": null,
-            "args": null,
-            "kind": "ScalarField",
-            "name": "progress",
-            "storageKey": null
-          },
-          {
-            "alias": null,
-            "args": null,
-            "kind": "ScalarField",
-            "name": "updatedAt",
-            "storageKey": null
-          }
+          (v4/*: any*/),
+          (v5/*: any*/)
         ],
         "storageKey": null
+      },
+      {
+        "alias": null,
+        "args": (v6/*: any*/),
+        "filters": null,
+        "handle": "connection",
+        "key": "TodoList_todosConnection",
+        "kind": "LinkedHandle",
+        "name": "todosConnection"
       }
     ]
   },
   "params": {
-    "cacheID": "8c8debf1b8758287933278458a3b1d0a",
+    "cacheID": "92e97a6a8f893d8862b72f36e79d6480",
     "id": null,
-    "metadata": {},
+    "metadata": {
+      "connection": [
+        {
+          "count": "first",
+          "cursor": null,
+          "direction": "forward",
+          "path": [
+            "todosConnection"
+          ]
+        }
+      ]
+    },
     "name": "TodoListRelayContainerQuery",
     "operationKind": "query",
-    "text": "query TodoListRelayContainerQuery {\n  todos {\n    id\n    ...TodoItemRelayContainer_todo\n  }\n}\n\nfragment TodoEditModalRelayContainer_todo on TodoType {\n  id\n  todoTitle\n  priority\n  progress\n}\n\nfragment TodoItemRelayContainer_todo on TodoType {\n  id\n  todoTitle\n  priority\n  progress\n  updatedAt\n  ...TodoEditModalRelayContainer_todo\n}\n"
+    "text": "query TodoListRelayContainerQuery(\n  $first: Int = 100\n) {\n  todosConnection(first: $first) {\n    edges {\n      node {\n        id\n        ...TodoItemRelayContainer_todo\n        __typename\n      }\n      cursor\n    }\n    pageInfo {\n      hasNextPage\n      endCursor\n    }\n    totalCount\n  }\n}\n\nfragment TodoEditModalRelayContainer_todo on TodoType {\n  id\n  todoTitle\n  priority\n  progress\n}\n\nfragment TodoItemRelayContainer_todo on TodoType {\n  id\n  todoTitle\n  priority\n  progress\n  updatedAt\n  ...TodoEditModalRelayContainer_todo\n}\n"
   }
 };
 })();
 
-(node as any).hash = "2516ba00a5a9122eb18b747b9a6ea204";
+(node as any).hash = "bb60bdcbdc6f5a9eccacd080845b1560";
 
 export default node;

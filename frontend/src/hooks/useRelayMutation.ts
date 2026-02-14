@@ -1,14 +1,15 @@
 import { useCallback } from 'react';
 import { useMutation } from 'react-relay';
+import type { UseMutationConfig } from 'react-relay';
 import type {
   MutationParameters,
   GraphQLTaggedNode,
-  MutationConfig,
+  //MutationConfig,
 } from 'relay-runtime';
 import { errorHandler } from '@/errors/error-handler';
 
 interface ExtendedMutationConfig<TMutation extends MutationParameters>
-  extends Omit<MutationConfig<TMutation>, 'mutation'> {
+  extends UseMutationConfig<TMutation> {
   errorContext?: string;
   showToast?: boolean;
 }
@@ -27,6 +28,7 @@ export const useRelayMutation = <TMutation extends MutationParameters>(
           ...relayConfig,
           // nullをundefinedに変換して型不整合を解消
           uploadables: relayConfig.uploadables ?? undefined,
+          //mutation: mutation,
 
           onCompleted: (response, errors) => {
             // fetchRelayでエラー時にthrowしているため、ここに来る時は基本成功

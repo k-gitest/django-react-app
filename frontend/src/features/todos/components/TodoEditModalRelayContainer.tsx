@@ -18,14 +18,18 @@ const TodoUpdateMutation = graphql`
   mutation TodoEditModalRelayContainerUpdateMutation($id: ID!, $input: TodoUpdateInput!) {
     updateTodo(id: $id, input: $input) {
       __typename
-      ... on TodoType {
-        id
-        todoTitle
-        priority
-        progress
+      ... on UpdateTodoPayload {
+        todo {
+          id
+          todoTitle
+          priority
+          progress
+          updatedAt
+        }
       }
       ... on ValidationError {
         message
+        field
       }
     }
   }
@@ -40,23 +44,44 @@ export const TodoEditModalRelayContainer = ({ todoRef, ...props }: Props) => {
   const todo = useFragment<TodoEditModalRelayContainer_todo$key>(TodoEditModalFragment, todoRef);
 
   const { execute: updateTodo, isInFlight: isUpdating } =
-      useRelayMutation<TodoEditModalRelayContainerUpdateMutation>(TodoUpdateMutation);
+    useRelayMutation<TodoEditModalRelayContainerUpdateMutation>(TodoUpdateMutation);
 
   const handleSave = async (formValues: { todo_title: string; priority: string; progress: number }) => {
-    // スキーマの型に合わせてオブジェクトを構成
     const input: TodoUpdateInput = {
       todoTitle: formValues.todo_title,
       priority: isPriority(formValues.priority) ? formValues.priority : 'MEDIUM',
       progress: formValues.progress,
     };
 
-    await updateTodo({
-      variables: {
-        id: todo.id,
-        input,
-      },
-    });
-    props.onClose(); // 成功時に閉じる
+    try {
+      const response = await updateTodo({
+        variables: {
+          id: todo.id,
+          input,
+        },
+        // ✅ 楽観的更新
+        optimisticResponse: {
+          updateTodo: {
+            __typename: 'UpdateTodoPayload',
+            todo: {
+              id: todo.id,
+              todoTitle: input.todoTitle ?? todo.todoTitle,
+              priority: input.priority ?? todo.priority,
+              progress: input.progress ?? todo.progress,
+              updatedAt: new Date().toISOString(),
+            },
+          },
+        },
+        errorContext: 'Todo更新',
+      });
+
+      if (response.updateTodo.__typename === 'UpdateTodoPayload') {
+        //toast.success('更新しました');
+        props.onClose();
+      }
+    } catch (error) {
+      if (import.meta.env.DEV) console.error(error);
+    }
   };
 
   // onOpenChangeをbooleanで受け取り、falseの時だけonCloseを呼ぶ
@@ -70,7 +95,7 @@ export const TodoEditModalRelayContainer = ({ todoRef, ...props }: Props) => {
 
   return (
     <TodoEditModal
-			id={todo.id}
+      id={todo.id}
       open={true}
       title={todo.todoTitle}
       priority={priority}

@@ -6,7 +6,7 @@ import { TodoProgressChartContainer } from '@/features/todos/components/TodoProg
 import { TodoStatsChartContainer } from '@/features/todos/components/TodoStatsChartContainer';
 //import { TodoStatsChartRelayContainer } from './TodoStatsChartRelayContainer';
 
-export const TodoIndex = () => {
+export const TodoIndexView = () => {
   return (
     <div className="container mx-auto py-8 px-4 space-y-8">
       {/* ヘッダーエリア */}
