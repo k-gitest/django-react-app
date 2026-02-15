@@ -1,18 +1,12 @@
 import { graphql } from 'react-relay';
 import { useNavigate } from 'react-router-dom';
 import { AccountForm } from './auth-form';
-import type { AccountFormType, Account } from '@/features/auth/types/auth';
 import { useRelayMutation } from '@/hooks/useRelayMutation';
-
-// --- 自動生成される型をインポート ---
-// ※ relay-compiler 実行後に生成されます
-import type {
-  AuthFormRelayContainerRegisterMutation
-} from '@/__generated__/AuthFormRelayContainerRegisterMutation.graphql';
-
-import type {
-  AuthFormRelayContainerLoginMutation
-} from '@/__generated__/AuthFormRelayContainerLoginMutation.graphql';
+import { useAuthStore } from '@/hooks/use-session-store';
+import { queryClient } from '@/lib/queryClient';
+import type { AccountFormType, Account } from '@/features/auth/types/auth';
+import type { AuthFormRelayContainerRegisterMutation } from '@/__generated__/AuthFormRelayContainerRegisterMutation.graphql';
+import type { AuthFormRelayContainerLoginMutation } from '@/__generated__/AuthFormRelayContainerLoginMutation.graphql';
 
 const RegisterMutation = graphql`
   mutation AuthFormRelayContainerRegisterMutation($input: RegisterInput!) {
@@ -105,6 +99,35 @@ export const AuthFormRelayContainer = ({ type }: { type: AccountFormType }) => {
       const result = ('login' in response ? response.login : response.register);
 
       if (result?.__typename === 'AuthPayload') {
+        // REST/GraphQL版と同じ処理を追加
+        const user = result.user;
+        
+        if (user) {
+          // ユーザー情報を即座にStoreにセット
+          useAuthStore.getState().setUser({
+            id: parseInt(atob(String(user.id)).split(':')[1], 10), // Relay GlobalID → 整数ID
+            email: user.email,
+            first_name: user.firstName,
+            last_name: user.lastName,
+            is_staff: user.isStaff,
+          });
+
+          // 2. キャッシュも手動で更新
+          queryClient.setQueryData(['auth', 'me'], {
+            id: parseInt(atob(String(user.id)).split(':')[1], 10),
+            email: user.email,
+            first_name: user.firstName,
+            last_name: user.lastName,
+            is_staff: user.isStaff,
+          });
+        }
+
+        // 3. 初期化完了フラグを立ててガードを通す
+        useAuthStore.getState().setInitialized(true);
+
+        // 4. 念のため無効化（awaitしない）
+        queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+
         navigate('/dashboard');
       }
     } catch (error) {

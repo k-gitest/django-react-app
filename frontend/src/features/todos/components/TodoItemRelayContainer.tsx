@@ -1,8 +1,9 @@
-import { useState } from 'react';
 import { graphql, useFragment } from 'react-relay';
 import { TodoItem } from './TodoItem';
 import { isPriority } from '@/lib/utils';
 import { useRelayMutation } from '@/hooks/useRelayMutation';
+import { useCallback } from 'react';
+import { useExclusiveModal, useUIStore } from '@/hooks/useExclusiveModal';
 import type { TodoItemRelayContainerDeleteMutation } from '@/__generated__/TodoItemRelayContainerDeleteMutation.graphql';
 import type { TodoItemRelayContainerUpdateMutation } from '@/__generated__/TodoItemRelayContainerUpdateMutation.graphql';
 import type { TodoItemRelayContainer_todo$key } from '@/__generated__/TodoItemRelayContainer_todo.graphql';
@@ -72,23 +73,23 @@ interface Props {
 
 export const TodoItemRelayContainer = ({ todoRef, ...props }: Props) => {
   const todo = useFragment<TodoItemRelayContainer_todo$key>(TodoItemFragment, todoRef);
-  const [isEditOpen, setIsEditOpen] = useState(false);
+  //const [isEditOpen, setIsEditOpen] = useState(false);
+  const { isOpen, open, close } = useExclusiveModal();
 
   const { execute: updateTodo, isInFlight: isUpdating } =
     useRelayMutation<TodoItemRelayContainerUpdateMutation>(TodoUpdateMutation);
   const { execute: deleteTodo, isInFlight: isDeleting } =
     useRelayMutation<TodoItemRelayContainerDeleteMutation>(TodoDeleteMutation);
 
-  const handleToggle = async () => {
+  const handleToggle = useCallback(async () => {
     const nextProgress = todo.progress === 100 ? 0 : 100;
 
     try {
-      const response = await updateTodo({
+      await updateTodo({
         variables: {
           id: todo.id,
           input: { progress: nextProgress },
         },
-        // ✅ 楽観的更新
         optimisticResponse: {
           updateTodo: {
             __typename: 'UpdateTodoPayload',
@@ -103,39 +104,42 @@ export const TodoItemRelayContainer = ({ todoRef, ...props }: Props) => {
         },
         errorContext: '進捗更新',
       });
-
-      if (response.updateTodo.__typename === 'UpdateTodoPayload') {
-        //toast.success('進捗を更新しました');
-      }
     } catch (error) {
       if (import.meta.env.DEV) console.error(error);
     }
-  };
+  }, [todo.id, todo.todoTitle, todo.priority, todo.progress, updateTodo]);
 
-  const handleDelete = async () => {
+  const handleDelete = useCallback(async () => {
     if (!window.confirm('本当に削除しますか？')) return;
 
     try {
-      const response = await deleteTodo({
+      await deleteTodo({
         variables: {
           id: todo.id,
-          // ✅ Connection ID を渡す
           connections: ['client:root:__TodoList_todosConnection_connection'],
         },
-        // ✅ 楽観的更新
         optimisticUpdater: (store) => {
           store.delete(todo.id);
         },
         errorContext: 'Todo削除',
       });
-
-      if (response.deleteTodo.__typename === 'DeleteTodoPayload') {
-        //toast.success('削除しました');
-      }
     } catch (error) {
       if (import.meta.env.DEV) console.error(error);
     }
-  };
+  }, [todo.id, deleteTodo]);
+
+  // 編集開始ハンドラ (排他制御付き)
+  /*
+  const handleEditOpen = useCallback(() => {
+    open(); // 内部で isAnyModalOpen をチェック
+  }, [open]);
+  */
+
+  const isLockedByOther = useUIStore(
+    (state) => state.currentModalId !== null && !isOpen
+  );
+
+  const isDisabled = isUpdating || isDeleting || isLockedByOther;
 
   const priority = isPriority(todo.priority) ? todo.priority : 'MEDIUM';
 
@@ -148,15 +152,15 @@ export const TodoItemRelayContainer = ({ todoRef, ...props }: Props) => {
         progress={todo.progress ?? 0}
         updatedAt={todo.updatedAt}
         showActions={props.showActions}
-        disabled={isUpdating || isDeleting}
-        onEdit={() => setIsEditOpen(true)}
+        disabled={isDisabled}
+        onEdit={open}
         onDelete={handleDelete}
         onToggleComplete={handleToggle}
       />
-      {isEditOpen && (
+      {isOpen && (
         <TodoEditModalRelayContainer
           todoRef={todo}
-          onClose={() => setIsEditOpen(false)}
+          onClose={close}
         />
       )}
     </>

@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { graphql } from 'react-relay';
 import { useRelayMutation } from '@/hooks/useRelayMutation';
+import { useExclusiveModal, useUIStore } from '@/hooks/useExclusiveModal';
 import { TodoCreateForm } from './TodoCreateForm';
 import type { TodoCreateFormRelayContainerMutation } from '@/__generated__/TodoCreateFormRelayContainerMutation.graphql';
 import type { TodoFormValues } from '../schemas';
@@ -34,6 +35,7 @@ const CreateTodoMutation = graphql`
 
 export const TodoCreateFormRelayContainer = () => {
   const { execute, isInFlight } = useRelayMutation<TodoCreateFormRelayContainerMutation>(CreateTodoMutation);
+  const { isOpen, open, close } = useExclusiveModal();
 
   const handleCreateSubmit = useCallback(
     async (values: TodoFormValues): Promise<void> => {
@@ -70,19 +72,35 @@ export const TodoCreateFormRelayContainer = () => {
         });
 
         if (response.createTodo.__typename === 'CreateTodoPayload') {
+          close(); // ✅ 成功時のみ閉じる
           //toast.success('タスクを作成しました');
         }
       } catch (error) {
         if (import.meta.env.DEV) console.error(error);
       }
     },
-    [execute]
+    [execute, close]
+  );
+
+  const handleOpenChange = useCallback((newOpen: boolean) => {
+    if (newOpen) {
+      open();
+    } else {
+      close();
+    }
+  }, [open, close]);
+
+  const isLockedByOther = useUIStore(
+    (state) => state.currentModalId !== null && !isOpen
   );
 
   return (
     <TodoCreateForm
+      open={isOpen}
+      onOpenChange={handleOpenChange}
       onSubmit={handleCreateSubmit}
       isLoading={isInFlight}
+      disabled={isLockedByOther}
     />
   );
 };
