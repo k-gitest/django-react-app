@@ -9,7 +9,7 @@ interface TodoEditModalProps {
   progress: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (values: TodoFormValues) => void | Promise<void>;
+  onSubmit: (values: TodoFormValues) => Promise<void>;
   isSubmitting?: boolean;
 }
 
@@ -23,10 +23,12 @@ export const TodoEditModal = ({
   isSubmitting,
 }: TodoEditModalProps) => {
 
+  /*
   const handleSubmit = async (values: TodoFormValues) => {
     await onSubmit(values);
     onOpenChange(false);
   };
+  */
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -40,7 +42,7 @@ export const TodoEditModal = ({
             priority: priority,
             progress: progress,
           }}
-          onSubmit={handleSubmit}
+          onSubmit={onSubmit}
           isLoading={isSubmitting} 
           submitLabel={isSubmitting ? "保存中..." : "変更を保存"}
         />

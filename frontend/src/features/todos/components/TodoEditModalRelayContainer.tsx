@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { graphql, useFragment } from 'react-relay';
 import { TodoEditModal } from './TodoEditModal';
 import { isPriority } from '@/lib/utils';
@@ -40,13 +41,13 @@ interface Props {
   onClose: () => void;
 }
 
-export const TodoEditModalRelayContainer = ({ todoRef, ...props }: Props) => {
+export const TodoEditModalRelayContainer = ({ todoRef, onClose }: Props) => {
   const todo = useFragment<TodoEditModalRelayContainer_todo$key>(TodoEditModalFragment, todoRef);
 
   const { execute: updateTodo, isInFlight: isUpdating } =
     useRelayMutation<TodoEditModalRelayContainerUpdateMutation>(TodoUpdateMutation);
 
-  const handleSave = async (formValues: { todo_title: string; priority: string; progress: number }) => {
+  const handleSave = useCallback(async (formValues: { todo_title: string; priority: string; progress: number }) => {
     const input: TodoUpdateInput = {
       todoTitle: formValues.todo_title,
       priority: isPriority(formValues.priority) ? formValues.priority : 'MEDIUM',
@@ -77,20 +78,19 @@ export const TodoEditModalRelayContainer = ({ todoRef, ...props }: Props) => {
 
       if (response.updateTodo.__typename === 'UpdateTodoPayload') {
         //toast.success('更新しました');
-        props.onClose();
+        onClose();
       }
     } catch (error) {
       if (import.meta.env.DEV) console.error(error);
     }
-  };
+  }, [todo.id, todo.todoTitle, todo.priority, todo.progress, updateTodo, onClose]);
 
-  // onOpenChangeをbooleanで受け取り、falseの時だけonCloseを呼ぶ
-  const handleOpenChange = (open: boolean) => {
+  const handleOpenChange = useCallback((open: boolean) => {
     if (!open) {
-      props.onClose();
+      onClose();
     }
-  };
-
+  }, [onClose]);
+  
   const priority = isPriority(todo.priority) ? todo.priority : 'MEDIUM';
 
   return (

@@ -1,20 +1,22 @@
 import { useTodos } from '../hooks/useTodos';
 import { TodoItem } from './TodoItem';
-import { useState, useCallback } from 'react';
-import { TodoEditModal } from './TodoEditModal';
+import { TodoItemContainer } from './TodoItemContainer';
+//import { useState, useCallback } from 'react';
+//import { TodoEditModal } from './TodoEditModal';
 import type { Todo } from '../types';
-import type { TodoFormValues } from '../schemas';
+//import type { TodoFormValues } from '../schemas';
 
 export const TodoList = ({ showActions = true, limit }: { showActions?: boolean; limit?: number; }) => {
-  const { todos, updateTodo, deleteTodo } = useTodos();
-	const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
+  const { todos } = useTodos();
+  //const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
 
+  /*
   const handleToggleComplete = useCallback(async (id: number | string, currentProgress: number) => {
     const newProgress = currentProgress === 100 ? 0 : 100;
     await updateTodo({ id: Number(id), progress: newProgress });
   }, [updateTodo]);
 
-	const handleEdit = useCallback((todo: Todo) => {
+  const handleEdit = useCallback((todo: Todo) => {
     setEditingTodo(todo);
   }, []);
 
@@ -34,6 +36,7 @@ export const TodoList = ({ showActions = true, limit }: { showActions?: boolean;
       setEditingTodo(null);
     }
   }, []);
+  */
 
   // APIレスポンスが「配列そのまま」の場合と「{ data: [] }」の場合を許容し、
   // 取得失敗時は空配列をデフォルトにする（データの正規化）
@@ -46,8 +49,23 @@ export const TodoList = ({ showActions = true, limit }: { showActions?: boolean;
 
   return (
     <>
-			<div className="space-y-4">
-				{displayTodos.map((todo) => (
+      <div className="space-y-4">
+        {displayTodos.map((todo) =>
+          showActions ? (
+            <TodoItemContainer key={todo.id} todo={todo} />
+          ) : (
+            <TodoItem
+              key={todo.id}
+              id={todo.id}
+              title={todo.todo_title}
+              priority={todo.priority ?? 'MEDIUM'}
+              progress={todo.progress ?? 0}
+              updatedAt={todo.updated_at}
+              showActions={false}
+            />
+          )
+        )}
+        {/*displayTodos.map((todo) => (
 					<TodoItem
 						key={todo.id}
 						id={todo.id}
@@ -60,11 +78,11 @@ export const TodoList = ({ showActions = true, limit }: { showActions?: boolean;
             onEdit={() => handleEdit(todo)}
             onDelete={() => handleDelete(todo.id)}
 					/>
-				))}
-			</div>
-			{/* ✅ 編集モードの時だけモーダルをレンダリング */}
-      {showActions && editingTodo && (
-        <TodoEditModal 
+        ))*/}
+      </div>
+      {/* ✅ 編集モードの時だけモーダルをレンダリング */}
+      {/*showActions && editingTodo && (
+        <TodoEditModal
           id={editingTodo.id}
           title={editingTodo.todo_title}
           priority={editingTodo.priority ?? 'MEDIUM'}
@@ -73,7 +91,7 @@ export const TodoList = ({ showActions = true, limit }: { showActions?: boolean;
           onOpenChange={handleModalClose}
           onSubmit={handleUpdateSubmit}
         />
-      )}
-		</>
+      )*/}
+    </>
   );
 };
