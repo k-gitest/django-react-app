@@ -390,6 +390,45 @@ src/features/
 
 ---
 
+## UI状態管理
+
+### モーダル排他制御
+
+本プロジェクトでは、複数のモーダルが同時に開くことを防ぐ**排他制御機構**を実装しています。
+```
+【設計原則】
+✅ アプリ全体で1つのモーダルのみ表示
+✅ useExclusiveModal フックで自動制御
+✅ ID ベースの厳密な管理
+✅ React の標準機能のみ使用（サードパーティ不要）
+```
+
+**実装の特徴**:
+
+| 機能 | 実装方法 |
+|------|---------|
+| **排他制御** | Zustand でグローバル状態管理 |
+| **ID 管理** | React の `useId()` でユニーク ID 生成 |
+| **自動クリーンアップ** | `useEffect` でアンマウント時に確実に解放 |
+| **UI フィードバック** | 他のモーダルが開いている間はボタンを無効化 |
+
+**使用例**:
+```typescript
+// モーダルを持つコンポーネント
+const { isOpen, open, close } = useExclusiveModal();
+
+return (
+  <>
+    <Button onClick={open}>編集</Button>
+    {isOpen && <EditModal onClose={close} />}
+  </>
+);
+```
+
+詳細は **[docs/ui-state-management.md](docs/ui-state-management.md)** を参照してください。
+
+---
+
 ## エラーハンドリング戦略
 
 ### 概要
