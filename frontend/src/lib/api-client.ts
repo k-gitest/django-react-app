@@ -43,6 +43,13 @@ export const apiClient = baseKyClient.extend({
 });
 */
 
+// Auth0のトークン取得関数を外部から注入
+let getAccessTokenFn: (() => Promise<string>) | null = null
+
+export function setAuth0TokenGetter(fn: () => Promise<string>) {
+  getAccessTokenFn = fn
+}
+
 /**
  * OpenAPI型付きクライアント
  */
@@ -64,6 +71,12 @@ const loggerMiddleware: Middleware = {
     if (import.meta.env.DEV) {
       console.log(`🚀 [API] ${request.method} ${request.url}`);
     }
+
+    if (getAccessTokenFn) {
+      const token = await getAccessTokenFn()
+      request.headers.set('Authorization', `Bearer ${token}`)
+    }
+    
     return request;
   },
 };
