@@ -1,6 +1,7 @@
-import { Navigate, Outlet } from 'react-router-dom';
 import { useAuthStore } from '@/hooks/use-session-store';
-import { useAuthUser } from '@/hooks/use-auth-user';
+import { Navigate, Outlet } from 'react-router-dom';
+//import { useAuthUser } from '@/hooks/use-auth-user';
+import { useAuthUser } from '@/hooks/use-auth0-user';
 
 export const GuestGuard = () => {
   const { isLoading } = useAuthUser(); // 現在の認証状況を確認

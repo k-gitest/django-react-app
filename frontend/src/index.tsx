@@ -5,6 +5,7 @@ import App from './App.tsx'
 import { initNewRelic } from './lib/newrelic';
 import * as Sentry from "@sentry/react";
 import { SENTRY_DSN, SENTRY_RELEASE, IS_PRODUCTION, BASE_API_URL } from "@/lib/constants";
+import { Auth0Provider } from './lib/auth0-provider';
 
 
 // Sentryの初期化
@@ -39,6 +40,8 @@ initNewRelic();
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    <App />
+    <Auth0Provider>
+      <App />
+    </Auth0Provider>
   </React.StrictMode>,
 );

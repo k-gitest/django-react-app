@@ -1,10 +1,11 @@
 import { Environment, Network, RecordSource, Store } from 'relay-runtime';
-import type { 
-  FetchFunction, 
-  RequestParameters, 
-  Variables, 
-  GraphQLResponse 
+import type {
+  FetchFunction,
+  RequestParameters,
+  Variables,
+  GraphQLResponse
 } from 'relay-runtime';
+import { authenticatedFetch } from './authenticated-fetch';
 import { GRAPHQL_URL } from '@/lib/constants';
 import { ApiError } from '@/errors/api-error';
 import { NetworkError } from '@/errors/network-error';
@@ -61,7 +62,7 @@ function isGraphQLResponse(json: unknown): json is GraphQLResponse {
   if (typeof json !== 'object' || json === null) {
     return false;
   }
-  
+
   return 'data' in json || 'errors' in json;
 }
 
@@ -77,7 +78,7 @@ const fetchRelay: FetchFunction = async (
   variables: Variables
 ): Promise<GraphQLResponse> => {
   try {
-    const response = await fetch(GRAPHQL_URL, {
+    const response = await authenticatedFetch(GRAPHQL_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

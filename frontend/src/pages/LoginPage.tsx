@@ -1,5 +1,6 @@
 import { AuthFormContainer } from '@/features/auth/components/auth-form-container';
 //import { AuthFormRelayContainer } from '@/features/auth/components/AuthFormRelayContainer';
+//import { AuthButtonContainer } from '@/features/auth/components/AuthButtonContainer';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import { MainWrapper } from '@/components/layout/main-wrapper';
@@ -12,6 +13,11 @@ const Login = () => {
         <div className="flex justify-center">
           <AuthFormContainer type="login" />
         </div>
+        {/*
+        <div className="flex justify-center">
+          <AuthButtonContainer type="login" />
+        </div>  
+         */}
       </PageAsyncBoundary>
 
       <div className="flex justify-center p-4">
