@@ -44,7 +44,28 @@ export interface Account {
 // 認証ストアの型定義（Cookie専用）
 // ============================================================================
 // GET /api/v1/auth/user/ の 200 OK レスポンスの型を抽出
-export type User = ApiRes<'/api/v1/auth/user/', 'get'>;
+//export type User = ApiRes<'/api/v1/auth/user/', 'get'>;
+export type DjangoUser = ApiRes<'/api/v1/auth/user/', 'get'>;
+
+// Auth0ユーザー型（OIDC統合後）
+export interface Auth0User {
+  id: string;  // Auth0のsub（例: "auth0|507f1f77bcf86cd799439011"）
+  email: string;
+  first_name: string;
+  last_name: string;
+}
+
+// 統合されたユーザー型（どちらでも受け入れる）
+export type User = DjangoUser | Auth0User;
+
+// 型ガード関数
+export function isDjangoUser(user: User): user is DjangoUser {
+  return typeof (user as DjangoUser).id === 'number';
+}
+export function isAuth0User(user: User): user is Auth0User {
+  return typeof (user as Auth0User).id === 'string';
+}
+
 export interface AuthState {
   user: User | null;
   isInitialized: boolean;

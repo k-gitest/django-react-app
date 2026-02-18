@@ -1,6 +1,7 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/hooks/use-session-store';
-import { useAuthUser } from '@/hooks/use-auth-user';
+//import { useAuthUser } from '@/hooks/use-auth-user';
+import { useAuthUser } from '@/hooks/use-auth0-user'
 
 /**
  * 認証ガード（Cookie専用）

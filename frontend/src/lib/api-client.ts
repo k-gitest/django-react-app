@@ -1,5 +1,6 @@
 //import { baseKyClient } from './ky-client';
 import createClient, { type Middleware } from "openapi-fetch";
+import { authenticatedFetch } from './authenticated-fetch';
 import type { paths } from "@/types/api";
 import { BASE_API_URL } from "@/lib/constants";
 import { ApiError } from "@/errors/api-error";
@@ -43,22 +44,18 @@ export const apiClient = baseKyClient.extend({
 });
 */
 
-// Auth0のトークン取得関数を外部から注入
-let getAccessTokenFn: (() => Promise<string>) | null = null
-
-export function setAuth0TokenGetter(fn: () => Promise<string>) {
-  getAccessTokenFn = fn
-}
-
 /**
  * OpenAPI型付きクライアント
  */
 export const client = createClient<paths>({
   baseUrl: BASE_API_URL,
-  credentials: "include",
+  //credentials: "include",
+  /*
   headers: {
     "Content-Type": "application/json",
   },
+  */
+  fetch: authenticatedFetch,  // 認証付きfetch
 });
 
 /**
@@ -72,11 +69,6 @@ const loggerMiddleware: Middleware = {
       console.log(`🚀 [API] ${request.method} ${request.url}`);
     }
 
-    if (getAccessTokenFn) {
-      const token = await getAccessTokenFn()
-      request.headers.set('Authorization', `Bearer ${token}`)
-    }
-    
     return request;
   },
 };
@@ -101,8 +93,8 @@ const httpErrorMiddleware: Middleware = {
 const networkErrorMiddleware: Middleware = {
   async onError({ error }) {
     // error が Error オブジェクトかどうかをチェック
-    const message = error instanceof Error 
-      ? error.message 
+    const message = error instanceof Error
+      ? error.message
       : "ネットワークエラーが発生しました";
     throw new NetworkError(message, error instanceof Error ? error : undefined);
   },

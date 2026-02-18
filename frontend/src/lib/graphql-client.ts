@@ -1,14 +1,18 @@
 import { ApiError } from '@/errors/api-error';
 import { NetworkError } from '@/errors/network-error';
 import { ClientError, GraphQLClient } from 'graphql-request';
+import { authenticatedFetch } from './authenticated-fetch';
 import { GRAPHQL_URL } from './constants';
 
 export const graphqlClient = new GraphQLClient(GRAPHQL_URL, {
-  credentials: 'include',
+  fetch: authenticatedFetch,  // ← 認証付きfetch
+  //credentials: 'include',
+  /*
   headers: {
     'X-Requested-With': 'XMLHttpRequest',
     'Content-Type': 'application/json',
   },
+  */
 });
 
 /**
