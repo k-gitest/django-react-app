@@ -77,6 +77,16 @@ class CustomUser(AbstractUser):
         _("email address"),
         unique=True,
     )
+
+    # Auth0連携用フィールド
+    oidc_sub = models.CharField(
+        max_length=255,
+        unique=True,
+        null=True,
+        blank=True,
+        db_index=True,  # 検索高速化
+        help_text='Auth0のUser ID（例: auth0|507f1f77bcf86cd799439011）',
+    )
     
     # ログインに使用するフィールドを 'email' に指定
     # authenticate() 関数がユーザー検索時に使用するフィールド
@@ -94,6 +104,10 @@ class CustomUser(AbstractUser):
         db_table = 'custom_user'
         verbose_name = _('user')
         verbose_name_plural = _('users')
+        indexes = [
+            models.Index(fields=['email']),
+            models.Index(fields=['oidc_sub']),  # OIDC検索用インデックス
+        ]
     
     def __str__(self):
         return self.email

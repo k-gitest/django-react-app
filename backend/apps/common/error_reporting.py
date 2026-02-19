@@ -10,6 +10,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from sentry_sdk import capture_exception, capture_message
 from django.conf import settings
+from .exceptions import BaseAppError, DatabaseError
+from django.http import Http404
+from django_ratelimit.exceptions import Ratelimited
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +23,9 @@ def _before_send(event: Dict, hint: Dict) -> Optional[Dict]:
         return None
     
     if 'exc_info' in hint:
-        exc_type, exc_value, tb = hint['exc_info']
-        if exc_type.__name__ in ('Http404', 'Ratelimited'):
+        exc_type, _, _ = hint['exc_info']
+        # 文字列比較ではなく、issubclass で判定する (こちらがより確実)
+        if issubclass(exc_type, (Http404, Ratelimited)):
             return None
     
     if 'request' in event and 'data' in event['request']:
@@ -67,28 +71,15 @@ def _capture_exception_internal(
 ):
     """内部実装: Sentryへ例外を送信"""
     with sentry_sdk.push_scope() as scope:
-        scope.level = level
-        
-        if extra:
-            for key, value in extra.items():
-                scope.set_extra(key, value)
-        
-        if tags:
-            for key, value in tags.items():
-                scope.set_tag(key, value)
-        
-        if user_info:
-            scope.set_user(user_info)
-
-        if fingerprint:
-            scope.fingerprint = fingerprint
-        
+        _apply_scope_data(
+            scope,
+            level=level,
+            extra=extra,
+            tags=tags,
+            user_info=user_info,
+            fingerprint=fingerprint
+        )
         capture_exception(exception)
-    """
-    with sentry_sdk.push_scope() as scope:
-        _apply_scope_data(scope, level, **kwargs)
-        sentry_sdk.capture_exception(exception)
-    """
 
 
 def _capture_message_internal(
@@ -211,6 +202,46 @@ class ErrorMonitor:
                 user=user
             )
         """
+        # デフォルトは 'error'
+        final_level = 'error'
+        # 1. BaseAppError（自作例外）の場合、そのステータスコードで判断
+        if isinstance(exception, BaseAppError):
+            if exception.status_code < 400:
+                final_level = 'info'
+            elif exception.status_code < 500:
+                final_level = 'warning'  # 400系（ユーザー起因）
+            else:
+                final_level = 'error'    # 500系（サーバー起因）
+            
+            # 特定の重大なエラーは 'fatal' に格上げ
+            if isinstance(exception, DatabaseError):
+                final_level = 'fatal'
+
+        # tagsのコピーを作成
+        final_tags = (tags or {}).copy()
+        
+        # tags['severity'] が渡されている場合、それを優先
+        if 'severity' in final_tags:
+            level_map = {
+                'critical': 'fatal',
+                'high': 'error',
+                'medium': 'warning',
+                'low': 'info'
+            }
+            final_level = level_map.get(final_tags['severity'], final_level)
+
+        # BaseAppError の error_code を tags に追加
+        if isinstance(exception, BaseAppError):
+            final_tags['error_code'] = exception.code
+
+        # contextのコピーを作成
+        final_context = (context or {}).copy()
+        
+        # BaseAppError の internal_info を context に追加
+        if isinstance(exception, BaseAppError) and hasattr(exception, 'internal_info'):
+            if exception.internal_info:
+                final_context['internal_info'] = exception.internal_info
+
         user_info = None
         if user and hasattr(user, 'id'):
             user_info = {
@@ -220,9 +251,9 @@ class ErrorMonitor:
         
         _capture_exception_internal(
             exception=exception,
-            level='error',
-            extra=context,
-            tags=tags,
+            level=final_level,
+            extra=final_context,
+            tags=final_tags,
             user_info=user_info,
             fingerprint=fingerprint
         )

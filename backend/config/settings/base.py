@@ -144,8 +144,9 @@ CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 # REST FrameWorkの設定
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
+        'apps.common.auth.oidc.OIDCAuthentication',  # auth0（最優先）
         "dj_rest_auth.jwt_auth.JWTCookieAuthentication",
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "rest_framework_simplejwt.authentication.JWTAuthentication", #後方互換
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         # 'rest_framework.permissions.IsAuthenticated',
@@ -367,3 +368,7 @@ SPECTACULAR_SETTINGS = {
     'COMPONENT_SPLIT_REQUEST': True,
     'SCHEMA_PATH_PREFIX': '/api/v1',
 }
+
+# Auth0設定
+AUTH0_DOMAIN = config('AUTH0_DOMAIN', default='')
+AUTH0_AUDIENCE = config('AUTH0_AUDIENCE', default='')
