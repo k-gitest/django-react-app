@@ -3,8 +3,8 @@
 """
 import functools
 import logging
-from django.db import IntegrityError
-from .exceptions import BaseAppError, UserAlreadyExistsError
+from django.db import IntegrityError as DjangoIntegrityError
+from .exceptions import BaseAppError, UserAlreadyExistsError, IntegrityConstraintError
 from .error_reporting import ErrorMonitor
 
 logger = logging.getLogger(__name__)
@@ -31,37 +31,55 @@ def service_error_handler(func):
         try:
             return func(*args, **kwargs)
             
-        except BaseAppError:
+        except BaseAppError as exc:
             # 既に独自例外なら、ログ出力して再送出
-            logger.warning(
-                f"{service_name}.{operation} failed",
-                exc_info=True,
-                extra={'service': service_name, 'operation': operation}
-            )
-            raise
-            
-        except IntegrityError as e:
-            # メールアドレス重複を判定
-            error_msg = str(e).lower()
-            if "unique" in error_msg and "email" in error_msg:
+            # internal_info をログに出力
+            if hasattr(exc, 'internal_info') and exc.internal_info:
                 logger.warning(
-                    f"{service_name}.{operation}: Duplicate email",
+                    f"{service_name}.{operation}: Internal details: {exc.internal_info}",
                     extra={'service': service_name, 'operation': operation}
                 )
-                raise UserAlreadyExistsError(email="(詳細不明)")
+            raise
             
-            # その他のIntegrityError（予期しないDB制約違反）
+        except DjangoIntegrityError as e:
+            error_msg = str(e).lower()
+            
+            # メールアドレス重複
+            if "unique" in error_msg and "email" in error_msg:
+                logger.warning(
+                    f"{service_name}.{operation}: Duplicate email: {str(e)}",
+                    extra={'service': service_name, 'operation': operation}
+                )
+                raise UserAlreadyExistsError(email="")  # メールアドレスは返さない
+            
+            # その他のユニーク制約違反
+            if "unique" in error_msg:
+                constraint_type = "unknown_unique_constraint"
+                if "oidc_sub" in error_msg:
+                    constraint_type = "oidc_sub"
+                
+                logger.error(
+                    f"{service_name}.{operation}: Unique constraint violation: {str(e)}",
+                    extra={'service': service_name, 'operation': operation}
+                )
+                raise IntegrityConstraintError(
+                    constraint_type=constraint_type,
+                    user_hint='データの重複エラーが発生しました',
+                    internal_details=str(e)  # ← ログ・Sentryのみ
+                )
+            
+            # その他のIntegrityError
             logger.error(
-                f"{service_name}.{operation}: Database integrity error",
+                f"{service_name}.{operation}: Database integrity error: {str(e)}",
                 exc_info=False
             )
-            # Sentryに送信（予期しないエラー）
             ErrorMonitor.log_error(
                 exception=e,
                 context={
                     'service': service_name,
                     'operation': operation,
-                    'error_type': 'database_integrity'
+                    'error_type': 'database_integrity',
+                    'error_details': str(e)  # Sentryには詳細を送る
                 },
                 tags={
                     'component': 'database',
@@ -71,9 +89,10 @@ def service_error_handler(func):
                 },
                 fingerprint=[service_name, operation, 'database']
             )
-            raise BaseAppError(
-                "データベース制約エラーが発生しました",
-                code="database_error"
+            raise IntegrityConstraintError(
+                constraint_type='unknown',
+                user_hint='データベースエラーが発生しました',
+                internal_details=str(e)  # ← ログ・Sentryのみ
             )
             
         except Exception as e:
