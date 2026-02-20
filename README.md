@@ -41,6 +41,7 @@ Django/React モノレポベースのSPAアプリケーション
 - **フレームワーク**: React 19.2.0, TypeScript 5.9.3
 - **ビルドツール**: Vite 7.2.4
 - **ルーティング**: React Router DOM 7.10.1
+- **認証**: auth0/auth0-react 2.15.0
 - **状態管理**: Zustand 5.0.9, TanStack Query 5.90.12, Relay 20.1.1
 - **フォーム**: React Hook Form 7.68.0, Zod 4.1.13
 - **UI**: Tailwind CSS 4.1.17, shadcn/ui
@@ -99,6 +100,8 @@ Django/React モノレポベースのSPAアプリケーション
 │   │   │   │   ├── base_vector.py
 │   │   │   │   ├── base_embedding.py
 │   │   │   │   └── base_analytics.py
+│   │   │   ├── auth/
+│   │   │   │   └── oidc.py
 │   │   │   ├── exceptions.py
 │   │   │   ├── error_handlers.py
 │   │   │   ├── error_decorators.py
@@ -200,7 +203,9 @@ Django/React モノレポベースのSPAアプリケーション
 │   │   │   ├── api-client.ts  # openapi-fetchベースのクライアント
 │   │   │   ├── graphql-client.ts # graphql-requestベースのクライアント
 │   │   │   ├── ky-client.ts
-│   │   │   └── queryClient.ts
+│   │   │   ├── queryClient.ts
+│   │   │   ├── auth0-provider.ts
+│   │   │   └── authenticated-fetch.ts
 │   │   ├── schemas/           # Zodスキーマ
 │   │   ├── types/             # TypeScript型定義
 │   │   │   ├── api.d.ts       # OpenAPI自動生成型

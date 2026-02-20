@@ -54,9 +54,5 @@ class BaseAnalyticsService:
         except Exception as e:
             logger.warning(f"MotherDuck {event_type} log failed: {str(e)}")
             raise AnalyticsError(
-                message=f"MotherDuck {event_type} log failed: {str(e)}",
-                context={
-                    "event_type": event_data.get("event_type"),
-                    "category": event_type
-                }
+                internal_details=str(e)
             ) from e

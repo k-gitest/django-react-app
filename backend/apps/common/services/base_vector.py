@@ -38,8 +38,7 @@ class BaseVectorService:
         except Exception as e:
             logger.error(f"Vector {operation} failed: {e}")
             raise VectorError(
-                message=f"Failed to {operation} vectors: {str(e)}",
-                operation=operation
+                internal_details=str(e)
             ) from e
 
     @classmethod
@@ -59,8 +58,7 @@ class BaseVectorService:
         except Exception as e:
             logger.error(f"Vector delete failed: {e}")
             raise VectorError(
-                message=f"Failed to delete vectors: {str(e)}",
-                operation="delete"
+                internal_details=str(e)
             ) from e
 
     @classmethod
@@ -90,6 +88,5 @@ class BaseVectorService:
         except Exception as e:
             logger.error(f"Vector query failed: {e}")
             raise VectorError(
-                message=f"Failed to query vectors: {str(e)}",
-                operation="query"
+                internal_details=str(e)
             ) from e

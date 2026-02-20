@@ -3,7 +3,6 @@ OIDC JWT検証（Auth0統合）
 
 Auth0が発行したJWTトークンを検証し、ユーザーを取得または作成する
 """
-from asyncio import exceptions
 from django.contrib.auth import get_user_model
 from django.db import transaction, IntegrityError as DjangoIntegrityError
 from rest_framework.authentication import BaseAuthentication
@@ -14,7 +13,7 @@ import requests
 from django.conf import settings
 from django.core.cache import cache
 import logging
-from exceptions import IntegrityConstraintError, InvalidTokenError, TokenExpiredError
+from apps.common.exceptions import IntegrityConstraintError, InvalidTokenError, TokenExpiredError
 
 
 logger = logging.getLogger(__name__)
@@ -248,7 +247,7 @@ class OIDCAuthentication(BaseAuthentication):
                 raise IntegrityConstraintError(
                     constraint_type='unique_email',
                     user_hint='このメールアドレスは既に使用されています',
-                    internal_details=str(e)  # ← 修正
+                    internal_details=str(e)
                 )
             
             # oidc_sub重複
@@ -259,12 +258,12 @@ class OIDCAuthentication(BaseAuthentication):
                 raise IntegrityConstraintError(
                     constraint_type='unique_oidc_sub',
                     user_hint='認証情報の重複エラーが発生しました',
-                    internal_details=str(e)  # ← 修正
+                    internal_details=str(e)
                 )
             
             # その他のIntegrityError
             raise IntegrityConstraintError(
                 constraint_type='unknown',
                 user_hint='データの整合性エラーが発生しました',
-                internal_details=str(e)  # ← 修正
+                internal_details=str(e)
             )
