@@ -24,7 +24,9 @@ class BaseEmbeddingService:
     """
     
     def __init__(self):
-        genai.configure(api_key=settings.GOOGLE_API_KEY)
+        # genai.configure(api_key=settings.GOOGLE_API_KEY)
+        # クライアントを初期化（新しいSDKの作法）
+        self.client = genai.Client(api_key=settings.GOOGLE_API_KEY)
         self.model = "models/text-embedding-004"
     
     def embed_text(
@@ -48,20 +50,30 @@ class BaseEmbeddingService:
             EmbeddingError: API呼び出しエラー時
         """
         try:
-            result = genai.embed_content(
+            #result = genai.embed_content(
+            #    model=self.model,
+            #    content=text,
+            #    task_type=task_type
+            #)
+            #return result['embedding']
+            # client.models.embed_content を使用
+            
+            result = self.client.models.embed_content(
                 model=self.model,
-                content=text,
-                task_type=task_type
+                contents=text, # 新SDKでは 'content' ではなく 'contents' の場合が多い
+                config={
+                    'task_type': task_type
+                }
             )
-            return result['embedding']
+            # 戻り値の構造も SDK バージョンにより異なるため確認が必要
+            return result.embeddings[0].values
         except EmbeddingError:
             # 既に適切な例外なので再送出
             raise
         except Exception as e:
             logger.error(f"Failed to embed text: {e}")
             raise EmbeddingError(
-                message=f"Failed to embed text: {str(e)}",
-                text=text
+                internal_details=str(e)
             ) from e
     
     def embed_batch(
@@ -95,6 +107,5 @@ class BaseEmbeddingService:
         except Exception as e:
             logger.error(f"Failed to embed batch: {e}")
             raise EmbeddingError(
-                message=f"Failed to embed batch: {str(e)}",
-                text=f"{len(texts)} texts"
+                internal_details=str(e)
             ) from e

@@ -44,6 +44,5 @@ class BaseQStashService:
             raise
         except Exception as e:
             raise QStashError(
-                message=f"QStash operation failed: {str(e)}",
-                endpoint=endpoint_path
+                internal_details=str(e)
             ) from e

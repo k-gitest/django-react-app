@@ -52,6 +52,5 @@ class BaseEmailService:
         except Exception as e:
             logger.error(f"Email delivery failed to {to_email}: {str(e)}")
             raise EmailDeliveryError(
-                message=f"Email delivery failed: {str(e)}",
-                email=to_email
+                internal_details=str(e)
             ) from e
