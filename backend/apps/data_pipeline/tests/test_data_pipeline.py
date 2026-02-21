@@ -102,7 +102,7 @@ class DltPipelineServiceTestCase(TestCase):
             DltPipelineService.execute_postgres_to_motherduck()
         
         # エラーメッセージに元の例外が含まれているか
-        self.assertIn("MotherDuck connection failed", str(context.exception))
+        self.assertIn("MotherDuck connection failed", str(context.exception.internal_info))
         
         # ロックが解放されているか（finallyブロックの確認）
         self.assertIsNone(cache.get(DltPipelineService.LOCK_KEY))
@@ -119,7 +119,7 @@ class DltPipelineServiceTestCase(TestCase):
             DltPipelineService.execute_postgres_to_motherduck()
         
         # エラーメッセージの確認
-        self.assertIn("already running", str(context.exception))
+        self.assertIn("already running", str(context.exception.internal_info))
         
         # cache.add が呼ばれたか
         mock_cache.add.assert_called_once_with(
@@ -311,7 +311,7 @@ class DltPipelineWebhookViewTestCase(APITestCase):
 
         # Assert
         # DRF permission_classes は 401 を返す
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     @patch("apps.common.permissions.verify_qstash_signature")
     def test_webhook_missing_signature(self, mock_verify_signature):
@@ -328,7 +328,7 @@ class DltPipelineWebhookViewTestCase(APITestCase):
 
         # Assert
         # DRF permission_classes は 401 を返す
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     @patch("apps.data_pipeline.views.DltPipelineService.execute_postgres_to_motherduck")
     @patch("apps.common.permissions.verify_qstash_signature")
@@ -337,8 +337,7 @@ class DltPipelineWebhookViewTestCase(APITestCase):
         # Arrange
         mock_verify_signature.return_value = True
         mock_execute.side_effect = AnalyticsError(
-            message="MotherDuck connection failed",
-            context={"error_type": "ConnectionError"}
+            internal_details="MotherDuck connection failed"
         )
 
         # Act
@@ -361,8 +360,7 @@ class DltPipelineWebhookViewTestCase(APITestCase):
         # Arrange
         mock_verify_signature.return_value = True
         mock_execute.side_effect = AnalyticsError(
-            message="Pipeline is already running",
-            context={"lock_key": "dlt_pipeline:lock"}
+            internal_details="Pipeline is already running",
         )
 
         # Act
@@ -376,7 +374,7 @@ class DltPipelineWebhookViewTestCase(APITestCase):
         # Assert
         self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
         self.assertIn("error", response.data)
-        self.assertIn("already running", response.data["detail"].lower())
+        self.assertIn("分析データの記録に失敗しました", response.data["detail"].lower())
 
 
 # ================================

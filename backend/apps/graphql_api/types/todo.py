@@ -1,4 +1,5 @@
 import strawberry
+import strawberry.django
 from strawberry import relay
 from typing import Optional
 from datetime import datetime

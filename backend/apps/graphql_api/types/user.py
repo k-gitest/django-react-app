@@ -2,6 +2,7 @@
 GraphQL User型定義
 """
 import strawberry
+import strawberry.django
 from datetime import datetime
 from typing import Optional
 

@@ -82,8 +82,7 @@ class DltPipelineService:
         if not cache.add(DltPipelineService.LOCK_KEY, "locked", DltPipelineService.LOCK_TIMEOUT):
             logger.warning("⚠️ Pipeline already running, skipping this execution")
             raise AnalyticsError(
-                message="Pipeline is already running",
-                context={"lock_key": DltPipelineService.LOCK_KEY}
+                internal_details=f"Pipeline already running (lock_key: {DltPipelineService.LOCK_KEY})"
             )
         
         try:
@@ -124,11 +123,7 @@ class DltPipelineService:
             # dlt実行時の予期しないエラー
             logger.exception("❌ dlt pipeline execution failed")
             raise AnalyticsError(
-                message=f"Pipeline execution failed: {str(e)}",
-                context={
-                    "error_type": type(e).__name__,
-                    "tables": table_names,
-                }
+                internal_details=f"Pipeline execution failed: {type(e).__name__}: {str(e)}"
             )
             
         finally:

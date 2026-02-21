@@ -1,6 +1,6 @@
 """
-Tests for users app
-Models, Serializers, Services, Views
+Usersアプリの統合テスト
+Models, Serializers, Services, Views の網羅的テスト
 """
 from unittest.mock import patch, MagicMock
 
@@ -10,29 +10,22 @@ from django.db import IntegrityError
 from rest_framework.test import APITestCase
 from rest_framework import status
 
-from apps.users.models import CustomUser, CustomUserManager
 from apps.users.serializers import (
     CustomUserSerializer,
     CustomRegisterSerializer,
-    CustomLoginSerializer,
     WelcomeEmailWebhookSerializer
 )
 from apps.users.user_service import (
     UserQueryService,
     UserCommandService,
     UserRegistrationService,
-    UserAuthService
 )
 from apps.users.analytics_service import AnalyticsService
 from apps.users.email_service import UserEmailService
 from apps.users.qstash_service import UserQStashService
 from apps.common.exceptions import (
     UserAlreadyExistsError,
-    EmailDeliveryError,
-    QStashError,
-    AnalyticsError
 )
-
 
 User = get_user_model()
 
@@ -42,10 +35,10 @@ User = get_user_model()
 # ================================
 
 class CustomUserModelTestCase(TestCase):
-    """Tests for CustomUser model"""
+    """カスタムユーザーモデルの基本機能テスト"""
 
     def test_create_user_with_email(self):
-        """Test creating user with email"""
+        """【Model】メールアドレスによる通常ユーザー作成のテスト"""
         user = User.objects.create_user(
             email="test@example.com",
             password="testpass123"
@@ -58,7 +51,7 @@ class CustomUserModelTestCase(TestCase):
         self.assertFalse(user.is_superuser)
 
     def test_create_superuser(self):
-        """Test creating superuser"""
+        """【Model】スーパーユーザー作成（is_staff, is_superuser）のテスト"""
         superuser = User.objects.create_superuser(
             email="admin@example.com",
             password="adminpass123"
@@ -70,17 +63,17 @@ class CustomUserModelTestCase(TestCase):
         self.assertTrue(superuser.is_superuser)
 
     def test_email_normalization(self):
-        """Test email normalization"""
+        """【Model】ドメイン部分が小文字化（正規化）されるかテスト"""
         user = User.objects.create_user(
             email="Test@EXAMPLE.com",
             password="pass123"
         )
         
-        # Domain should be lowercase
+        # ドメインが小文字になっていることを確認
         self.assertEqual(user.email, "Test@example.com")
 
     def test_email_unique_constraint(self):
-        """Test email uniqueness"""
+        """【Model】同一メールアドレスでの登録がDBレベルで阻止されるかテスト"""
         User.objects.create_user(
             email="unique@example.com",
             password="pass123"
@@ -93,19 +86,19 @@ class CustomUserModelTestCase(TestCase):
             )
 
     def test_get_by_natural_key_case_insensitive(self):
-        """Test case-insensitive login"""
+        """【Model】ログイン時のメールアドレス大文字小文字を区別せず検索できるかテスト"""
         User.objects.create_user(
             email="User@Example.com",
             password="pass123"
         )
         
-        # Should find user regardless of case
+        # どのようなケースで検索してもユーザーが見つかることを確認
         user = User.objects.get_by_natural_key("user@example.com")
         self.assertIsNotNone(user)
         self.assertEqual(user.email, "User@example.com")
 
     def test_str_representation(self):
-        """Test __str__ method"""
+        """【Model】ユーザーオブジェクトの文字列表現（__str__）のテスト"""
         user = User.objects.create_user(
             email="test@example.com",
             password="pass123"
@@ -119,10 +112,10 @@ class CustomUserModelTestCase(TestCase):
 # ================================
 
 class CustomUserSerializerTestCase(TestCase):
-    """Tests for CustomUserSerializer"""
+    """ユーザー情報シリアライザのテスト"""
 
     def test_serializer_fields(self):
-        """Test serializer contains correct fields"""
+        """【Serializer】必要なフィールドが全て含まれているかテスト"""
         user = User.objects.create_user(
             email="test@example.com",
             password="pass123",
@@ -139,7 +132,7 @@ class CustomUserSerializerTestCase(TestCase):
         self.assertEqual(data['last_name'], "Doe")
 
     def test_read_only_fields(self):
-        """Test that id, email, is_staff are read-only"""
+        """【Serializer】idやemailが更新不可（Read Only）であることをテスト"""
         user = User.objects.create_user(email="test@example.com", password="pass123")
         
         serializer = CustomUserSerializer(user, data={
@@ -153,21 +146,21 @@ class CustomUserSerializerTestCase(TestCase):
         serializer.save()
         
         user.refresh_from_db()
-        # Read-only fields should not be updated
+        # 読み取り専用フィールドが更新されていないことを確認
         self.assertNotEqual(user.email, 'hacker@example.com')
         self.assertFalse(user.is_staff)
-        # Writable field should be updated
+        # 書き込み可能フィールドのみ更新されていることを確認
         self.assertEqual(user.first_name, 'Updated')
 
 
 class CustomRegisterSerializerTestCase(TestCase):
-    """Tests for CustomRegisterSerializer"""
+    """会員登録用シリアライザのバリデーションテスト"""
 
     def setUp(self):
         self.factory = RequestFactory()
 
     def test_valid_registration_data(self):
-        """Test serializer with valid data"""
+        """【Serializer】正しい登録データがバリデーションを通過するかテスト"""
         data = {
             'email': 'newuser@example.com',
             'password1': 'strongpass123',
@@ -180,7 +173,7 @@ class CustomRegisterSerializerTestCase(TestCase):
         self.assertTrue(serializer.is_valid())
 
     def test_password_mismatch(self):
-        """Test password mismatch validation"""
+        """【Serializer】パスワード（確認用含む）の不一致バリデーションテスト"""
         data = {
             'email': 'test@example.com',
             'password1': 'pass123',
@@ -191,7 +184,7 @@ class CustomRegisterSerializerTestCase(TestCase):
         self.assertFalse(serializer.is_valid())
 
     def test_invalid_email(self):
-        """Test invalid email format"""
+        """【Serializer】不正なメール形式のバリデーションテスト"""
         data = {
             'email': 'not-an-email',
             'password1': 'pass123',
@@ -204,10 +197,10 @@ class CustomRegisterSerializerTestCase(TestCase):
 
 
 class WelcomeEmailWebhookSerializerTestCase(TestCase):
-    """Tests for WelcomeEmailWebhookSerializer"""
+    """ウェルカムメールWebhook用シリアライザのテスト"""
 
     def test_valid_webhook_payload(self):
-        """Test valid webhook payload"""
+        """【Serializer】Webhookの正しいペイロードが検証を通るかテスト"""
         data = {
             'email': 'user@example.com',
             'first_name': 'John'
@@ -219,7 +212,7 @@ class WelcomeEmailWebhookSerializerTestCase(TestCase):
         self.assertEqual(serializer.validated_data['first_name'], 'John')
 
     def test_missing_email(self):
-        """Test missing email field"""
+        """【Serializer】必須項目 email が欠落している場合のバリデーションテスト"""
         data = {'first_name': 'John'}
         
         serializer = WelcomeEmailWebhookSerializer(data=data)
@@ -228,7 +221,7 @@ class WelcomeEmailWebhookSerializerTestCase(TestCase):
         self.assertEqual(serializer.errors['email'][0], 'email is required')
 
     def test_missing_first_name(self):
-        """Test missing first_name field"""
+        """【Serializer】必須項目 first_name が欠落している場合のバリデーションテスト"""
         data = {'email': 'user@example.com'}
         
         serializer = WelcomeEmailWebhookSerializer(data=data)
@@ -236,7 +229,7 @@ class WelcomeEmailWebhookSerializerTestCase(TestCase):
         self.assertIn('first_name', serializer.errors)
 
     def test_blank_first_name(self):
-        """Test blank first_name"""
+        """【Serializer】first_name が空文字（blank）の場合のバリデーションテスト"""
         data = {
             'email': 'user@example.com',
             'first_name': ''
@@ -251,7 +244,7 @@ class WelcomeEmailWebhookSerializerTestCase(TestCase):
 # ================================
 
 class UserQueryServiceTestCase(TestCase):
-    """Tests for UserQueryService"""
+    """UserQueryService（参照系）のテスト"""
 
     def setUp(self):
         self.service = UserQueryService()
@@ -261,43 +254,43 @@ class UserQueryServiceTestCase(TestCase):
         )
 
     def test_get_user_by_email(self):
-        """Test getting user by email"""
+        """【Service】メールアドレス指定によるユーザー取得のテスト"""
         user = self.service.get_user_by_email("test@example.com")
         
         self.assertIsNotNone(user)
         self.assertEqual(user.email, "test@example.com")
 
     def test_get_user_by_email_case_insensitive(self):
-        """Test case-insensitive email lookup"""
+        """【Service】メールアドレス取得が大文字小文字を区別しないことをテスト"""
         user = self.service.get_user_by_email("TEST@EXAMPLE.COM")
         
         self.assertIsNotNone(user)
         self.assertEqual(user.email, "test@example.com")
 
     def test_get_user_by_email_not_found(self):
-        """Test getting nonexistent user returns None"""
+        """【Service】存在しないメールアドレスでNoneが返るかテスト"""
         user = self.service.get_user_by_email("nonexistent@example.com")
         
         self.assertIsNone(user)
 
     def test_email_exists(self):
-        """Test checking if email exists"""
+        """【Service】メールアドレスの存在確認関数のテスト"""
         self.assertTrue(self.service.email_exists("test@example.com"))
         self.assertFalse(self.service.email_exists("nonexistent@example.com"))
 
     def test_email_exists_case_insensitive(self):
-        """Test email_exists is case-insensitive"""
+        """【Service】存在確認が大文字小文字を区別しないことをテスト"""
         self.assertTrue(self.service.email_exists("TEST@EXAMPLE.COM"))
 
     def test_get_user_by_id(self):
-        """Test getting user by ID"""
+        """【Service】ID指定によるユーザー取得のテスト"""
         user = self.service.get_user_by_id(self.user.id)
         
         self.assertIsNotNone(user)
         self.assertEqual(user.id, self.user.id)
 
     def test_get_user_by_id_not_found(self):
-        """Test getting nonexistent user by ID returns None"""
+        """【Service】存在しないIDでNoneが返るかテスト"""
         user = self.service.get_user_by_id(99999)
         
         self.assertIsNone(user)
@@ -308,14 +301,14 @@ class UserQueryServiceTestCase(TestCase):
 # ================================
 
 class UserCommandServiceTestCase(TestCase):
-    """Tests for UserCommandService"""
+    """UserCommandService（更新系）のテスト"""
 
     def setUp(self):
         self.service = UserCommandService()
         self.factory = RequestFactory()
 
     def test_create_user(self):
-        """Test creating user"""
+        """【Service】ユーザーの新規作成（保存）テスト"""
         user = self.service.create_user(
             email="newuser@example.com",
             password="pass123",
@@ -329,7 +322,7 @@ class UserCommandServiceTestCase(TestCase):
         self.assertTrue(user.check_password("pass123"))
 
     def test_create_user_with_adapter(self):
-        """Test creating user with allauth adapter"""
+        """【Service】allauthアダプターを経由したユーザー作成テスト"""
         request = self.factory.post('/register')
         
         user = self.service.create_user_with_adapter(
@@ -344,7 +337,7 @@ class UserCommandServiceTestCase(TestCase):
         self.assertEqual(user.first_name, "Jane")
 
     def test_update_user(self):
-        """Test updating user"""
+        """【Service】ユーザー情報の更新テスト"""
         user = User.objects.create_user(
             email="test@example.com",
             password="pass123"
@@ -360,7 +353,7 @@ class UserCommandServiceTestCase(TestCase):
         self.assertEqual(updated.last_name, "Name")
 
     def test_change_password(self):
-        """Test changing password"""
+        """【Service】パスワード変更処理のテスト"""
         user = User.objects.create_user(
             email="test@example.com",
             password="oldpass"
@@ -372,7 +365,7 @@ class UserCommandServiceTestCase(TestCase):
         self.assertFalse(updated.check_password("oldpass"))
 
     def test_delete_user(self):
-        """Test deleting user"""
+        """【Service】ユーザー削除処理のテスト"""
         user = User.objects.create_user(
             email="delete@example.com",
             password="pass123"
@@ -389,7 +382,7 @@ class UserCommandServiceTestCase(TestCase):
 # ================================
 
 class UserRegistrationServiceTestCase(TestCase):
-    """Tests for UserRegistrationService"""
+    """ユーザー登録用ファサードサービスのテスト"""
 
     def setUp(self):
         self.service = UserRegistrationService()
@@ -397,7 +390,7 @@ class UserRegistrationServiceTestCase(TestCase):
 
     @override_settings(TESTING=True)
     def test_register_user_success(self):
-        """Test successful user registration"""
+        """【Service】正常なユーザー登録フローのテスト"""
         request = self.factory.post('/register')
         user_data = {
             'email': 'newuser@example.com',
@@ -414,7 +407,7 @@ class UserRegistrationServiceTestCase(TestCase):
 
     @override_settings(TESTING=True)
     def test_register_user_duplicate_email(self):
-        """Test registration with duplicate email raises UserAlreadyExistsError"""
+        """【Service】重複メールアドレス登録時のカスタム例外送出テスト"""
         User.objects.create_user(
             email="duplicate@example.com",
             password="pass123"
@@ -429,11 +422,12 @@ class UserRegistrationServiceTestCase(TestCase):
         with self.assertRaises(UserAlreadyExistsError) as context:
             self.service.register_user(request, user_data)
         
-        self.assertIn("duplicate@example.com", str(context.exception))
+        self.assertEqual(str(context.exception), "このメールアドレスは既に登録されています")
+        self.assertEqual(context.exception.data.get("field"), "email")
 
     @override_settings(TESTING=True)
     def test_register_user_case_insensitive_duplicate(self):
-        """Test duplicate check is case-insensitive"""
+        """【Service】重複登録チェックが大文字小文字を区別しないことをテスト"""
         User.objects.create_user(
             email="case@example.com",
             password="pass123"
@@ -454,7 +448,7 @@ class UserRegistrationServiceTestCase(TestCase):
 # ================================
 
 class AnalyticsServiceTestCase(TestCase):
-    """Tests for AnalyticsService"""
+    """分析用サービス（外部DB連携）のテスト"""
 
     def setUp(self):
         self.factory = RequestFactory()
@@ -462,7 +456,7 @@ class AnalyticsServiceTestCase(TestCase):
             email="test@example.com",
             password="pass123"
         )
-        # シングルトンをリセット
+        # サービス内のシングルトンクライアントをリセット
         AnalyticsService._client = None
 
     def tearDown(self):
@@ -474,7 +468,7 @@ class AnalyticsServiceTestCase(TestCase):
     @patch("apps.common.infrastructure.motherduck_client.duckdb.connect")
     @patch("apps.common.infrastructure.motherduck_client.MotherDuckClient._setup_schema")
     def test_log_auth_event_login(self, mock_setup_schema, mock_connect):
-        """Test logging login event"""
+        """【Service】ログインイベントのログ記録テスト"""
         mock_conn = MagicMock()
         mock_connect.return_value = mock_conn
         
@@ -493,7 +487,7 @@ class AnalyticsServiceTestCase(TestCase):
     @patch("apps.common.infrastructure.motherduck_client.duckdb.connect")
     @patch("apps.common.infrastructure.motherduck_client.MotherDuckClient._setup_schema")
     def test_log_auth_event_with_ip_address(self, mock_setup_schema, mock_connect):
-        """Test IP address extraction"""
+        """【Service】ログ記録時のIPアドレス抽出テスト"""
         mock_conn = MagicMock()
         mock_connect.return_value = mock_conn
         
@@ -506,14 +500,14 @@ class AnalyticsServiceTestCase(TestCase):
             success=True
         )
         
-        # Verify execute was called with IP address
+        # IPアドレスがクエリに含まれていることを確認
         call_args = mock_conn.execute.call_args
         self.assertIsNotNone(call_args)
 
     @patch("apps.common.infrastructure.motherduck_client.duckdb.connect")
     @patch("apps.common.infrastructure.motherduck_client.MotherDuckClient._setup_schema")
     def test_log_auth_event_with_x_forwarded_for(self, mock_setup_schema, mock_connect):
-        """Test X-Forwarded-For header handling"""
+        """【Service】プロキシ経由（X-Forwarded-For）のIPアドレス抽出テスト"""
         mock_conn = MagicMock()
         mock_connect.return_value = mock_conn
         
@@ -537,7 +531,7 @@ class AnalyticsServiceTestCase(TestCase):
 # ================================
 
 class UserEmailServiceTestCase(TestCase):
-    """Tests for UserEmailService"""
+    """メール送信サービスのテスト"""
 
     def setUp(self):
         UserEmailService._client = None
@@ -552,7 +546,7 @@ class UserEmailServiceTestCase(TestCase):
     )
     @patch("apps.common.infrastructure.email_client.resend.Emails.send")
     def test_send_welcome_email_success(self, mock_send):
-        """Test sending welcome email"""
+        """【Service】ウェルカムメール送信の実行確認"""
         mock_send.return_value = {"id": "email_123"}
         
         message_id = UserEmailService.send_welcome_email(
@@ -563,7 +557,7 @@ class UserEmailServiceTestCase(TestCase):
         self.assertEqual(message_id, "email_123")
         mock_send.assert_called_once()
         
-        # Verify email content
+        # 本文中に名前やURLが含まれていることを確認
         call_args = mock_send.call_args[0][0]
         self.assertIn("John", call_args["subject"])
         self.assertIn("John", call_args["html"])
@@ -576,7 +570,7 @@ class UserEmailServiceTestCase(TestCase):
     )
     @patch("apps.common.infrastructure.email_client.resend.Emails.send")
     def test_send_password_reset_email(self, mock_send):
-        """Test sending password reset email"""
+        """【Service】パスワードリセットメール送信の実行確認"""
         mock_send.return_value = {"id": "email_456"}
         
         message_id = UserEmailService.send_password_reset_email(
@@ -586,7 +580,7 @@ class UserEmailServiceTestCase(TestCase):
         
         self.assertEqual(message_id, "email_456")
         
-        # Verify reset URL in email
+        # 本文中にトークンやリセット用パスが含まれていることを確認
         call_args = mock_send.call_args[0][0]
         self.assertIn("reset_token_123", call_args["html"])
         self.assertIn("/auth/reset-password", call_args["html"])
@@ -597,7 +591,7 @@ class UserEmailServiceTestCase(TestCase):
 # ================================
 
 class UserQStashServiceTestCase(TestCase):
-    """Tests for UserQStashService"""
+    """QStash（非同期ジョブキュー）連携のテスト"""
 
     @override_settings(
         QSTASH_TOKEN="test_token",
@@ -605,7 +599,7 @@ class UserQStashServiceTestCase(TestCase):
     )
     @patch("apps.common.infrastructure.qstash_client.requests.post")
     def test_send_welcome_email_async_success(self, mock_post):
-        """Test queueing welcome email"""
+        """【Service】ウェルカムメールの非同期キュー登録テスト"""
         mock_response = MagicMock()
         mock_response.json.return_value = {"messageId": "msg_123"}
         mock_response.raise_for_status = MagicMock()
@@ -619,7 +613,7 @@ class UserQStashServiceTestCase(TestCase):
         self.assertEqual(message_id, "msg_123")
         mock_post.assert_called_once()
         
-        # Verify payload
+        # 送信先ペイロードが正しいことを確認
         call_args = mock_post.call_args
         payload = call_args[1]["json"]
         self.assertEqual(payload["email"], "user@example.com")
@@ -631,7 +625,7 @@ class UserQStashServiceTestCase(TestCase):
 # ================================
 
 class AuthenticationViewsTestCase(APITestCase):
-    """Tests for authentication views"""
+    """認証系APIビューのテスト"""
 
     def setUp(self):
         self.user = User.objects.create_user(
@@ -643,7 +637,7 @@ class AuthenticationViewsTestCase(APITestCase):
     @override_settings(TESTING=True)
     @patch("apps.users.views.UserAuthService.handle_login_success")
     def test_login_success(self, mock_handle_login):
-        """Test successful login"""
+        """【View】正常なログインとJWTトークンの返却テスト"""
         response = self.client.post(
             "/api/v1/auth/login/",
             {
@@ -656,11 +650,11 @@ class AuthenticationViewsTestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("access", response.data)
         
-        # Verify analytics was called
+        # ログイン成功時の分析処理が呼ばれたことを確認
         mock_handle_login.assert_called_once()
 
     def test_login_invalid_credentials(self):
-        """Test login with invalid credentials"""
+        """【View】誤った認証情報でのログイン失敗テスト"""
         response = self.client.post(
             "/api/v1/auth/login/",
             {
@@ -674,7 +668,7 @@ class AuthenticationViewsTestCase(APITestCase):
 
     @override_settings(TESTING=True)
     def test_register_success(self):
-        """Test successful registration"""
+        """【View】新規会員登録APIの正常系テスト"""
         response = self.client.post(
             "/api/v1/auth/registration/",
             {
@@ -693,11 +687,11 @@ class AuthenticationViewsTestCase(APITestCase):
 
     @override_settings(TESTING=True)
     def test_register_duplicate_email(self):
-        """Test registration with duplicate email"""
+        """【View】既存メールアドレスによる登録時の 409 Conflict 返却テスト"""
         response = self.client.post(
             "/api/v1/auth/registration/",
             {
-                "email": "test@example.com",  # Already exists
+                "email": "test@example.com",  # 既にsetUpで作成済み
                 "password1": "newpass123",
                 "password2": "newpass123"
             },
@@ -708,12 +702,12 @@ class AuthenticationViewsTestCase(APITestCase):
 
 
 class WelcomeEmailWebhookViewTestCase(APITestCase):
-    """Tests for send_welcome_email_webhook view"""
+    """ウェルカムメール送信Webhookのセキュリティテスト"""
 
     @patch("apps.users.views.UserEmailService.send_welcome_email")
     @patch("apps.common.permissions.verify_qstash_signature")
     def test_webhook_success(self, mock_verify_signature, mock_send_email):
-        """Test successful webhook call"""
+        """【View】正しい署名を持つWebhookによるメール送信テスト"""
         mock_verify_signature.return_value = True
         mock_send_email.return_value = "email_123"
         
@@ -733,7 +727,7 @@ class WelcomeEmailWebhookViewTestCase(APITestCase):
 
     @patch("apps.common.permissions.verify_qstash_signature")
     def test_webhook_invalid_signature(self, mock_verify_signature):
-        """Test webhook with invalid signature"""
+        """【View】署名が不正な場合に 403 Forbidden が返るかテスト"""
         mock_verify_signature.return_value = False
         
         response = self.client.post(
@@ -746,16 +740,16 @@ class WelcomeEmailWebhookViewTestCase(APITestCase):
             HTTP_UPSTASH_SIGNATURE="v1=invalid"
         )
         
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     @patch("apps.common.permissions.verify_qstash_signature")
     def test_webhook_missing_fields(self, mock_verify_signature):
-        """Test webhook with missing required fields"""
+        """【View】バリデーションエラー時に 400 Bad Request が返るかテスト"""
         mock_verify_signature.return_value = True
         
         response = self.client.post(
             "/api/v1/webhooks/send-welcome-email",
-            {"email": "user@example.com"},  # Missing first_name
+            {"email": "user@example.com"},  # first_nameが不足
             format="json",
             HTTP_UPSTASH_SIGNATURE="v1=valid"
         )
