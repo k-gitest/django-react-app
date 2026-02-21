@@ -41,7 +41,10 @@ class AnalyticsWebhookService(BaseAnalyticsService):
         else:
             # この分岐は実際には来ない（Serializerでバリデーション済み）
             # 将来的に新しいイベントタイプが追加された場合のフォールバック
+            logger.error(
+                f"Unsupported event_type: {event_type}",
+                extra={'event_type': event_type, 'event_data': event_data}
+            )
             raise AnalyticsError(
-                message=f"Unsupported event_type: {event_type}",
-                context={"event_type": event_type}
+                internal_details=f"Unsupported event_type: {event_type}"
             )

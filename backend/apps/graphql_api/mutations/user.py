@@ -108,7 +108,7 @@ class UserMutation:
         )
         
         # JWT Cookie設定
-        self._set_jwt_cookies(info.context.response, user)
+        UserMutation._set_jwt_cookies(info.context.response, user)
         
         return AuthPayload(user=user, message="登録が完了しました")
     
@@ -168,7 +168,7 @@ class UserMutation:
             )
         
         # JWT Cookie設定
-        self._set_jwt_cookies(info.context.response, user)
+        UserMutation._set_jwt_cookies(info.context.response, user)
         
         # 分析ログ記録（非同期、失敗してもエラーを投げない）
         from apps.users.user_service import UserAuthService

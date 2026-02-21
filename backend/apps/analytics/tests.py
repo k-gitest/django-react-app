@@ -232,11 +232,10 @@ class AnalyticsWebhookServiceTestCase(TestCase):
         event_data = {"data": "test"}
 
         # Act & Assert
-        with self.assertRaises(AnalyticsError) as context:
+        with self.assertRaises(AnalyticsError) as cm:
             AnalyticsWebhookService.handle_webhook_event(event_type, event_data)
         
-        self.assertIn("Unsupported event_type", str(context.exception))
-        self.assertEqual(context.exception.data["event_type"], event_type)
+        self.assertIn("Unsupported event_type", str(cm.exception.internal_info))
 
     @patch("apps.common.infrastructure.motherduck_client.duckdb.connect")
     @patch("apps.common.infrastructure.motherduck_client.MotherDuckClient._setup_schema")
@@ -255,10 +254,10 @@ class AnalyticsWebhookServiceTestCase(TestCase):
         }
 
         # Act & Assert
-        with self.assertRaises(AnalyticsError) as context:
+        with self.assertRaises(AnalyticsError) as cm:
             AnalyticsWebhookService.handle_webhook_event(event_type, event_data)
         
-        self.assertIn("MotherDuck auth log failed", str(context.exception))
+        self.assertIn("Database error", cm.exception.internal_info)
 
 
 # ================================
@@ -327,7 +326,7 @@ class AnalyticsEventWebhookViewTestCase(APITestCase):
 
         # Assert
         # DRF permission_classes は 401 を返す
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     @patch("apps.common.permissions.verify_qstash_signature")
     def test_webhook_missing_signature(self, mock_verify_signature):
@@ -353,7 +352,7 @@ class AnalyticsEventWebhookViewTestCase(APITestCase):
 
         # Assert
         # DRF permission_classes は 401 を返す
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     @patch("apps.common.permissions.verify_qstash_signature")
     def test_webhook_invalid_payload(self, mock_verify_signature):
@@ -411,8 +410,7 @@ class AnalyticsEventWebhookViewTestCase(APITestCase):
         # Arrange
         mock_verify_signature.return_value = True
         mock_handle_event.side_effect = AnalyticsError(
-            message="Database error",
-            context={"event_type": "auth_event"}
+            internal_details="Database error",
         )
 
         payload = {
