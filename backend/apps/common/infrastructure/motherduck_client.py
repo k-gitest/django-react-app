@@ -7,6 +7,9 @@ logger = logging.getLogger(__name__)
 class MotherDuckClient:
     """
     MotherDuck接続クライアント（シングルトン）
+
+    シングルトンパターンで接続を再利用しますが、
+    テスト時には reset_for_testing() で完全にリセット可能です。
     
     使用例:
         client = MotherDuckClient()
@@ -40,6 +43,24 @@ class MotherDuckClient:
             except Exception as e:
                 # logger.error(f"Failed to connect to MotherDuck: {e}")
                 raise
+
+    @classmethod
+    def reset_for_testing(cls):
+        """
+        テスト用のリセットメソッド
+        
+        Warning:
+            本番環境では絶対に呼ばないこと！
+            テスト環境でのみ使用してください。
+        """
+        if cls._conn:
+            try:
+                cls._conn.close()
+            except Exception:
+                pass
+        cls._instance = None
+        cls._conn = None
+        logger.debug("MotherDuckClient reset for testing")
     
     def _setup_schema(self):
         """

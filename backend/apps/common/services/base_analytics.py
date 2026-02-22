@@ -12,14 +12,31 @@ class BaseAnalyticsService:
     分析ログ記録の共通基盤
     MotherDuckClient の例外を AnalyticsError に翻訳する
     """
-    _client = None
+    # _client = None
 
     @classmethod
     def get_client(cls):
-        """シングルトンパターンでクライアントを取得"""
-        if cls._client is None:
-            cls._client = MotherDuckClient()
-        return cls._client
+        """
+        クライアントを取得
+        
+        MotherDuckClient 自体がシングルトンなので、
+        毎回呼んでも同一のインスタンスが返されます。
+        
+        サービス層で固定化しないことで、
+        テスト時のクリーンアップが容易になります。
+        """
+        #if cls._client is None:
+        #    cls._client = MotherDuckClient()
+        #return cls._client
+        return MotherDuckClient()
+    
+    @classmethod
+    def reset_for_testing(cls):
+        """
+        テスト用のリセットメソッド
+
+        """
+        MotherDuckClient.reset_for_testing()
 
     @classmethod
     def _safe_insert(

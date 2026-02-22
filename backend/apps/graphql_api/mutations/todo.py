@@ -1,6 +1,7 @@
 import strawberry
 from strawberry import relay
 from typing import Union
+from typing import Union, Annotated
 
 from apps.todos.service import TodoCommandService
 from apps.common.exceptions import BaseAppError
@@ -35,45 +36,44 @@ from apps.graphql_api.errors.handlers import graphql_error_handler
 # ============================================================================
 # Create専用
 # ============================================================================
-TodoCreateResult = strawberry.union(
-    "TodoCreateResult",
-    types=(
+TodoCreateResult = Annotated[
+    Union[
         CreateTodoPayload,      # 成功時: Edgeを返す
         ValidationError,        # 入力不備
         AuthenticationError,    # 未ログイン
         InternalError,          # サーバーエラー
-    )
-)
+    ],
+    strawberry.union("TodoCreateResult")
+]
 
 # ============================================================================
 # Update専用
 # ============================================================================
-TodoUpdateResult = strawberry.union(
-    "TodoUpdateResult",
-    types=(
+TodoUpdateResult = Annotated[
+    Union[
         UpdateTodoPayload,      # 成功時: Nodeを返す
         ValidationError,        # 入力不備
         NotFoundError,          # 指定IDが存在しない
         AuthenticationError,    # 未ログイン
         AuthorizationError,     # 他人のTodoを編集しようとした
         InternalError,
-    )
-)
+    ],
+    strawberry.union("TodoUpdateResult")
+]
 
 # ============================================================================
 # Delete専用
 # ============================================================================
-TodoDeleteResult = strawberry.union(
-    "TodoDeleteResult",
-    types=(
+TodoDeleteResult = Annotated[
+    Union[
         DeleteTodoPayload,      # 成功時: 削除されたIDを返す
         NotFoundError,          # 指定IDが存在しない
         AuthenticationError,
         AuthorizationError,
         InternalError,
-    )
-)
-
+    ],
+    strawberry.union("TodoDeleteResult")
+]
 
 # ============================================================================
 # Mutation定義

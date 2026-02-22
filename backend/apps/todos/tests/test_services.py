@@ -245,19 +245,7 @@ class TodoCommandServiceTestCase(TestCase):
 class TodoAnalyticsServiceTestCase(TestCase):
     """TodoAnalyticsService のテスト"""
 
-    @classmethod
-    def setUpClass(cls):
-        """テストクラス全体の開始時に一度だけ実行"""
-        super().setUpClass()
-        # 他のテストケース（別アプリなど）が残したシングルトンの残骸を徹底的に掃除
-        from apps.common.infrastructure.motherduck_client import MotherDuckClient
-        from apps.common.services.base_analytics import BaseAnalyticsService
-        
-        # クラスレベルの変数をすべてリセット
-        TodoAnalyticsService._client = None
-        BaseAnalyticsService._client = None
-        MotherDuckClient._instance = None
-        MotherDuckClient._conn = None
+    
     
     def setUp(self):
         """各テストの前に実行"""
@@ -274,6 +262,9 @@ class TodoAnalyticsServiceTestCase(TestCase):
             priority=Todo.Priority.HIGH,
             progress=50
         )
+        # クライアントのリセット
+        from apps.common.infrastructure.motherduck_client import MotherDuckClient
+        MotherDuckClient.reset_for_testing()
     
     def tearDown(self):
         """各テストの後に実行"""
