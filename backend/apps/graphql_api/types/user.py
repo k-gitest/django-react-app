@@ -5,6 +5,7 @@ import strawberry
 import strawberry.django
 from datetime import datetime
 from typing import Optional
+from typing import Union, Annotated
 
 from apps.users.models import CustomUser
 from apps.graphql_api.types.common import (
@@ -130,30 +131,30 @@ class ChangePasswordInput:
 # ============================================================================
 
 # 認証結果（ログイン・登録）
-AuthResult = strawberry.union(
-    "AuthResult",
-    types=(
+AuthResult = Annotated[
+    Union[
         AuthPayload,
         ValidationError,
         ConflictError,
         RateLimitError,
         ExternalServiceError,
         InternalError,
-    )
-)
+    ],
+    strawberry.union("AuthResult")
+]
 
 # ログアウト結果
-LogoutResult = strawberry.union(
-    "LogoutResult",
-    types=(
+LogoutResult = Annotated[
+    Union[
         Success, AuthenticationError, InternalError,
-    )
-)
+    ],
+    strawberry.union("LogoutResult")
+]
 
 # パスワード変更結果
-ChangePasswordResult = strawberry.union(
-    "ChangePasswordResult",
-    types=(
+ChangePasswordResult = Annotated[
+    Union[
         Success, ValidationError, AuthenticationError, InternalError,
-    )
-)
+    ],
+    strawberry.union("ChangePasswordResult")
+]

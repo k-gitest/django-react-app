@@ -12,14 +12,15 @@ class BaseVectorService:
     ベクトル操作の共通基盤
     VectorClient の例外を VectorError に翻訳する
     """
-    _client = None
+    # _client = None
 
     @classmethod
     def get_client(cls):
         """シングルトンパターンでクライアントを取得"""
-        if cls._client is None:
-            cls._client = VectorClient()
-        return cls._client
+        #if cls._client is None:
+        #    cls._client = VectorClient()
+        #return cls._client
+        return VectorClient()
 
     @classmethod
     def _safe_upsert(cls, vectors: list, operation: str = "upsert"):

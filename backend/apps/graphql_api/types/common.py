@@ -5,6 +5,7 @@ GraphQLエラー型定義
 import strawberry
 from typing import Optional, List
 from enum import Enum
+from typing import Union, Annotated
 
 
 # ============================================================================
@@ -176,9 +177,8 @@ class Success:
 # ============================================================================
 
 # すべてのエラー型をまとめたUnion
-BaseError = strawberry.union(
-    "BaseError",
-    types=(
+BaseError = Annotated[
+    Union[
         ValidationError,
         AuthenticationError,
         AuthorizationError,
@@ -187,8 +187,9 @@ BaseError = strawberry.union(
         RateLimitError,
         ExternalServiceError,
         InternalError,
-    )
-)
+    ],
+    strawberry.union("BaseError")
+]
 
 # Mutation結果の標準パターン
 def create_result_union(success_type, name: Optional[str] = None):
@@ -200,9 +201,8 @@ def create_result_union(success_type, name: Optional[str] = None):
     """
     union_name = name or f"{success_type.__name__}Result"
     
-    return strawberry.union(
-        union_name,
-        types=(
+    return Annotated[
+        Union[
             success_type,
             ValidationError,
             AuthenticationError,
@@ -212,5 +212,6 @@ def create_result_union(success_type, name: Optional[str] = None):
             RateLimitError,
             ExternalServiceError,
             InternalError,
-        )
-    )
+        ],
+        strawberry.union(union_name)
+    ]

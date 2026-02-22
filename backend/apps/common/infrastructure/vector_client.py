@@ -28,6 +28,16 @@ class VectorClient:
                 token=settings.UPSTASH_VECTOR_REST_TOKEN
             )
 
+    @classmethod
+    def reset_for_testing(cls):
+        """
+        テスト用のリセットメソッド
+        
+        """
+        cls._instance = None
+        cls._index = None
+        logger.debug("VectorClient reset for testing")
+
     def upsert(self, vectors: list) -> None:
         """
         ベクトルを挿入/更新
