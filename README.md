@@ -575,7 +575,30 @@ try {
 
 ## 認証システム
 
-### 概要
+本プロジェクトは**2つの認証方式**をサポートしています。
+```
+【認証方式の選択肢】
+✅ JWT Cookie認証（dj-rest-auth + simplejwt）- デフォルト
+✅ Auth0 OIDC認証 - オプション
+```
+
+---
+
+### 認証方式の比較
+
+| 項目 | JWT Cookie認証（デフォルト）| Auth0 OIDC（オプション）|
+|---|---|---|
+| **実装の複雑さ** | 中程度 | シンプル |
+| **初期コスト** | 低い | 中程度（Auth0設定） |
+| **セキュリティ更新** | 自己責任 | Auth0が担当 |
+| **ソーシャルログイン** | 自前実装が必要 | 標準で対応 |
+| **MFA対応** | 自前実装が必要 | 標準で対応 |
+| **ランニングコスト** | $0（Render + Neon無料枠） | $0（Auth0無料枠: 7,000 MAU） |
+| **適用ケース** | 小規模、学習、プロトタイピング | 本格運用、エンタープライズ |
+
+---
+
+### デフォルト：JWT Cookie認証（dj-rest-auth）
 
 **dj-rest-auth + djangorestframework-simplejwt**によるJWT Cookie認証を採用しています。
 
@@ -589,7 +612,7 @@ try {
 
 ---
 
-### 認証方式の選定理由
+#### dj-rest-auth認証方式の選定理由
 
 | 項目 | djoser（旧）| dj-rest-auth（採用）|
 |---|---|---|
@@ -602,7 +625,7 @@ try {
 
 ---
 
-### 認証フロー
+#### 認証フロー
 
 ```
 1. 新規登録  → POST /api/v1/auth/registration/
@@ -625,7 +648,7 @@ try {
 
 ---
 
-### 主要APIエンドポイント
+#### 主要APIエンドポイント
 
 | 機能 | Method | エンドポイント | 認証 |
 |---|---|---|---|
@@ -638,7 +661,7 @@ try {
 
 ---
 
-### フロントエンド実装の簡素化
+#### フロントエンド実装の簡素化
 
 Cookie認証により、フロントエンド側のトークン管理が大幅に簡素化されました：
 
@@ -653,7 +676,7 @@ Cookie認証により、フロントエンド側のトークン管理が大幅�
 
 ---
 
-### セキュリティ設定
+#### セキュリティ設定
 
 #### JWT設定
 
@@ -681,7 +704,7 @@ REST_AUTH = {
 
 ---
 
-### TanStack Query による認証状態の同期
+#### TanStack Query による認証状態の同期
 
 認証状態の管理を従来のuseEffectからTanStack Query (useQuery)へ移行し、Zustandと組み合わせることで以下の課題を解決しました。
 
@@ -712,7 +735,7 @@ const loginMutation = useMutation({
 
 ---
 
-### 詳細ドキュメント
+#### 詳細ドキュメント
 
 認証システムの詳細については、以下のドキュメントを参照してください。
 
@@ -724,6 +747,117 @@ const loginMutation = useMutation({
   - 本番環境での設定変更
   - TanStack Query統合の詳細
   - トラブルシューティング
+
+### オプション：Auth0 OIDC認証
+
+**Auth0 OIDC**による外部認証サービスへの移行が可能です。
+```
+【主な特徴】
+✅ Auth0による集中認証管理
+✅ ソーシャルログイン対応（Google, GitHub等）
+✅ MFA（多要素認証）対応
+✅ JWT トークン自動管理
+✅ セキュリティ更新を Auth0 が担当
+```
+
+**採用メリット**:
+- ✅ 認証という重要な機能を実績のある外部サービスに委譲
+- ✅ セキュリティ更新やMFA等の機能追加が容易
+- ✅ バックエンドは本来のビジネスロジックに集中可能
+- ✅ ソーシャルログインの実装コストを大幅削減
+
+**技術スタック**:
+- **JWT検証**: joserfc 1.0.0
+- **認証バックエンド**: OIDCAuthentication（カスタム実装）
+- **キャッシュ**: Django Cache（Redis）でJWKSをキャッシュ（24時間）
+- **ユーザー識別**: oidc_sub フィールド（Auth0 User ID）
+
+**アーキテクチャ**:
+```
+フロントエンド（React + Auth0 SDK）
+  ↓ Authorization: Bearer <token>
+  
+バックエンド（Django）
+  ↓
+OIDCAuthentication
+  ├─ JWKS取得（キャッシュ済みなら使用）
+  ├─ JWT検証（joserfc）
+  │   ├─ 署名検証（RS256）
+  │   ├─ クレーム検証（iss, aud, exp）
+  │   └─ 時刻ズレ許容（leeway=60秒）
+  │
+  └─ ユーザー取得/作成（トランザクション保護）
+      ├─ oidc_sub で検索 → 既存Auth0ユーザー
+      ├─ email で検索 → 既存Djangoユーザー（OIDC連携追加）
+      └─ 新規作成 → 新規Auth0ユーザー
+```
+
+**エラーハンドリング**:
+```python
+JoseError → InvalidTokenError / TokenExpiredError
+IntegrityError → IntegrityConstraintError
+```
+
+**移行手順（クイックスタート）**:
+```bash
+# 1. Auth0設定
+https://auth0.com/ でアカウント作成
+→ API作成（Audience取得）
+→ Application作成（Client ID取得）
+→ Callback URLを設定
+
+# 2. 環境変数設定
+# バックエンド（.env）
+AUTH0_DOMAIN=your-tenant.auth0.com
+AUTH0_AUDIENCE=https://your-api-identifier
+
+# フロントエンド（.env）
+VITE_AUTH0_DOMAIN=your-tenant.auth0.com
+VITE_AUTH0_CLIENT_ID=your_client_id
+VITE_AUTH0_AUDIENCE=https://your-api-identifier
+
+# 3. settings.py で認証バックエンドを切り替え
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'apps.common.auth.oidc.OIDCAuthentication',
+    ],
+}
+
+# 4. フロントエンドにAuth0 SDKをインストール
+npm install @auth0/auth0-react
+
+# 5. デプロイ
+git push origin main
+```
+
+**詳細ドキュメント**: 
+- **[docs/auth0-migration.md](docs/auth0-migration.md)** - Auth0移行ガイド
+- **[docs/auth0-integration.md](docs/auth0-integration.md)** - Auth0統合詳細ガイド
+
+---
+
+### 認証方式の切り替え
+
+両方の認証方式を実装しているため、環境変数で簡単に切り替え可能です：
+
+**JWT Cookie認証（デフォルト）**:
+```bash
+# フロントエンド .env
+# Auth0関連の変数をコメントアウト
+# VITE_AUTH0_DOMAIN=
+# VITE_AUTH0_CLIENT_ID=
+# VITE_AUTH0_AUDIENCE=
+```
+
+**Auth0 OIDC認証**:
+```bash
+# フロントエンド .env
+VITE_AUTH0_DOMAIN=your-tenant.auth0.com
+VITE_AUTH0_CLIENT_ID=your_client_id
+VITE_AUTH0_AUDIENCE=https://your-api-identifier
+```
+
+**注意**: 本番環境では、一度に1つの認証方式のみを有効化してください。
 
 ---
 
