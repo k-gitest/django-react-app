@@ -10,7 +10,7 @@ Django/React モノレポベースのSPAアプリケーション
 
 - 🏗️ **スケール可能なモノレポ構成**: フロントエンドとバックエンドを一元管理し、チーム全体での仕様変更への迅速な対応を可能にします。
 - 🎯 **チーム開発に適したレイヤードアーキテクチャ**: 複数人での並行開発を想定し、View/Service/Modelの責務を分離。コードの衝突（コンフリクト）を最小限に抑え、テスタビリティを向上させています。
-- 🔐 **JWT認証**: dj-rest-auth + simplejwtによる堅牢な認証システム
+- 🔐 **柔軟な認証システム**: JWT Cookie認証（dj-rest-auth）とAuth0 OIDC認証の2つの方式をサポート。小規模プロジェクトから本格運用まで対応
 - 🎯 **ハイブリッドAPIアーキテクチャ**: drf-spectacular による厳格なREST API管理と、strawberry-graphql-django による柔軟なGraphQLクエリを両立。フロントエンドのユースケースに応じて最適なデータ取得手法を選択可能です。
 - 🔍 **AIセマンティック検索**: Google Gemini API + Upstash Vectorによる自然言語検索。「明日の会議関連」などの曖昧な検索が可能
 - 📊 **データ分析基盤（MotherDuck Analytics）**: イベントログのリアルタイム記録とDB状態の定期同期により、ユーザー行動とデータ状態を包括的に分析可能
@@ -25,7 +25,8 @@ Django/React モノレポベースのSPAアプリケーション
 - **フレームワーク**: Django 4.2.7
 - **API (REST)**: Django REST Framework 3.14.0, drf-spectacular 0.29.0
 - **API (GraphQL)**: strawberry-graphql-django 0.74.1
-- **認証**: dj-rest-auth 7.0.1, djangorestframework-simplejwt 5.5.1
+- **認証 (デフォルト)**: dj-rest-auth 7.0.1, djangorestframework-simplejwt 5.5.1
+- **認証 (オプション)**: joserfc 1.0.0 (Auth0 OIDC統合)
 - **データベース**: PostgreSQL 17 (psycopg2-binary 2.9.9)
 - **データウェアハウス**: MotherDuck (DuckDB), dlt 1.20.0
 - **キャッシュ/セッション**: Redis (Upstash), django-redis 5.4.0
@@ -41,7 +42,7 @@ Django/React モノレポベースのSPAアプリケーション
 - **フレームワーク**: React 19.2.0, TypeScript 5.9.3
 - **ビルドツール**: Vite 7.2.4
 - **ルーティング**: React Router DOM 7.10.1
-- **認証**: auth0/auth0-react 2.15.0
+- **認証 (オプション)**: @auth0/auth0-react 2.15.0
 - **状態管理**: Zustand 5.0.9, TanStack Query 5.90.12, Relay 20.1.1
 - **フォーム**: React Hook Form 7.68.0, Zod 4.1.13
 - **UI**: Tailwind CSS 4.1.17, shadcn/ui
