@@ -662,27 +662,367 @@ git push origin main
 
 ## 既存ユーザーのマイグレーション
 
-### 戦略1: 自動連携（推奨）
+本プロジェクトでは、3つの移行戦略を提供しています。
 
-**実装済みの`_get_or_create_user()`が自動的に処理**:
+---
+
+### 戦略の比較
+
+| 戦略 | パスワード | 実装難易度 | ユーザー体験 | 推奨度 |
+|------|-----------|----------|------------|--------|
+| **Lazy Migration** | 保持 | 中 | ✅ シームレス | ⭐⭐⭐⭐⭐ |
+| **自動連携** | 新規作成 | 低 | ⚠️ Auth0で新規登録 | ⭐⭐⭐⭐ |
+| **Bulk Import** | 保持（bcrypt） | 高 | ⚠️ パスワードリセット | ⭐⭐ |
+
+---
+
+### 戦略1: Lazy Migration（最も推奨）
+
+**Custom Database Connection**を使用して、既存のDjangoユーザーデータベースに接続し、段階的にAuth0へ移行します。
+
+#### 概要
 ```
-1. 既存ユーザーがAuth0でログイン
-   ↓
-2. emailで既存ユーザーを検索
-   ↓
-3. oidc_sub を追加
-   ↓
-4. 以降はAuth0で認証
+初回ログイン:
+  ユーザーがAuth0でログイン
+    ↓
+  Auth0 → Django API（Login Script）
+    ↓
+  パスワード検証（Django側）
+    ↓ 成功
+  Auth0にユーザー情報を保存
+    ↓
+  以降のログインはAuth0で処理（Django不要）
 ```
 
-**メリット**:
-- ✅ ユーザーの操作不要
-- ✅ シームレスな移行
+#### メリット
+- ✅ ユーザーはパスワードを変更する必要なし
+- ✅ 既存のパスワードがそのまま使える
+- ✅ 段階的に移行（バックエンドの負荷分散）
+- ✅ 移行完了後はDjangoのユーザーDBへのアクセス不要
+
+#### デメリット
+- ⚠️ Login/Get User Scriptの実装が必要
+- ⚠️ 移行期間中はDjango APIへのアクセスが必要
+- ⚠️ Auth0 Custom Database機能は有料プラン（Essentials以上）
+
+---
+
+#### 実装手順
+
+##### Step 1: Custom Database Connection作成
+```
+1. Auth0 Dashboard → Authentication → Database
+2. "Create DB Connection" をクリック
+3. Name: Django Users
+4. "Custom Database" を有効化
+5. "Use my own database" を選択
+```
+
+##### Step 2: Login Script実装
+
+**Auth0 Dashboard → Database → Custom Database → Login**:
+```javascript
+function login(email, password, callback) {
+  const axios = require('axios');
+  
+  // Django APIにリクエスト
+  axios.post('https://your-backend.onrender.com/api/v1/auth/verify-credentials/', {
+    email: email,
+    password: password
+  }, {
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Auth0-Secret': configuration.DJANGO_API_SECRET  // 環境変数
+    }
+  })
+  .then(response => {
+    const user = response.data;
+    
+    // Auth0にユーザー情報を返す
+    callback(null, {
+      user_id: user.id.toString(),
+      email: user.email,
+      nickname: user.first_name,
+      given_name: user.first_name,
+      family_name: user.last_name,
+      email_verified: true
+    });
+  })
+  .catch(error => {
+    // 認証失敗
+    if (error.response && error.response.status === 401) {
+      return callback(new WrongUsernameOrPasswordError(email));
+    }
+    
+    // その他のエラー
+    return callback(error);
+  });
+}
+```
+
+##### Step 3: Get User Script実装
+
+**Auth0 Dashboard → Database → Custom Database → Get User**:
+```javascript
+function getByEmail(email, callback) {
+  const axios = require('axios');
+  
+  axios.get('https://your-backend.onrender.com/api/v1/auth/get-user/', {
+    params: { email: email },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Auth0-Secret': configuration.DJANGO_API_SECRET
+    }
+  })
+  .then(response => {
+    const user = response.data;
+    
+    callback(null, {
+      user_id: user.id.toString(),
+      email: user.email,
+      nickname: user.first_name,
+      given_name: user.first_name,
+      family_name: user.last_name,
+      email_verified: true
+    });
+  })
+  .catch(error => {
+    if (error.response && error.response.status === 404) {
+      return callback(null);  // ユーザーが存在しない
+    }
+    
+    return callback(error);
+  });
+}
+```
+
+##### Step 4: Django API実装
+
+**apps/users/views.py**:
+```python
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework import status
+from django.contrib.auth import authenticate
+from django.conf import settings
+from apps.users.models import CustomUser
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def verify_credentials(request):
+    """
+    Auth0 Custom Database用の認証エンドポイント
+    
+    セキュリティ:
+    - X-Auth0-Secret ヘッダーで認証
+    - IPホワイトリスト（オプション）
+    """
+    # Auth0からのリクエストか検証
+    auth0_secret = request.headers.get('X-Auth0-Secret')
+    if auth0_secret != settings.AUTH0_API_SECRET:
+        return Response(
+            {'error': 'Unauthorized'},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+    
+    email = request.data.get('email')
+    password = request.data.get('password')
+    
+    if not email or not password:
+        return Response(
+            {'error': 'Email and password required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # パスワード検証
+    user = authenticate(username=email, password=password)
+    
+    if user is None:
+        return Response(
+            {'error': 'Invalid credentials'},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+    
+    # ユーザー情報を返す
+    return Response({
+        'id': user.id,
+        'email': user.email,
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_user_by_email(request):
+    """
+    Auth0 Custom Database用のユーザー取得エンドポイント
+    """
+    # Auth0からのリクエストか検証
+    auth0_secret = request.headers.get('X-Auth0-Secret')
+    if auth0_secret != settings.AUTH0_API_SECRET:
+        return Response(
+            {'error': 'Unauthorized'},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+    
+    email = request.query_params.get('email')
+    
+    if not email:
+        return Response(
+            {'error': 'Email required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        user = CustomUser.objects.get(email=email)
+        return Response({
+            'id': user.id,
+            'email': user.email,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+        })
+    except CustomUser.DoesNotExist:
+        return Response(
+            {'error': 'User not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+```
+
+**urls.py**:
+```python
+urlpatterns = [
+    # Auth0 Custom Database用
+    path('auth/verify-credentials/', verify_credentials, name='verify_credentials'),
+    path('auth/get-user/', get_user_by_email, name='get_user_by_email'),
+]
+```
+
+##### Step 5: 環境変数設定
+```bash
+# backend/.env
+AUTH0_API_SECRET=your_random_secret_key_here
+
+# Auth0 Dashboard → Database → Settings → Custom Database
+# Environment Variables:
+DJANGO_API_SECRET=your_random_secret_key_here
+```
+
+**セキュリティ強化（オプション）**:
+```python
+# settings.py
+AUTH0_API_SECRET = config('AUTH0_API_SECRET')
+AUTH0_ALLOWED_IPS = [
+    # Auth0のIPレンジ（公式ドキュメント参照）
+    # https://auth0.com/docs/get-started/tenant-settings/allowlist-auth0-ip-addresses
+    '35.167.74.121',
+    '35.160.3.103',
+    # ...
+]
+
+# views.py
+def verify_credentials(request):
+    # IP制限
+    client_ip = request.META.get('REMOTE_ADDR')
+    if client_ip not in settings.AUTH0_ALLOWED_IPS:
+        return Response({'error': 'Forbidden'}, status=403)
+    
+    # ...
+```
+
+##### Step 6: Automatic Migration有効化
+```
+Auth0 Dashboard → Database → Settings
+
+"Import Users to Auth0" を有効化
+
+これにより、ログイン成功時にAuth0にユーザーが自動的に保存されます。
+```
+
+##### Step 7: 動作確認
+```bash
+# 1. ログインテスト
+# Auth0 Universal Loginで既存ユーザーのメール/パスワードを入力
+
+# 2. Django ログ確認
+docker compose logs -f backend
+# "verify_credentials" エンドポイントが呼ばれていることを確認
+
+# 3. Auth0 Dashboard → Users
+# ユーザーが自動的に作成されていることを確認
+
+# 4. 2回目のログイン
+# Django APIへのアクセスなしで認証されることを確認（Lazy Migration完了）
+```
+
+---
+
+### 戦略2: 自動連携（実装済み・推奨）
+
+**実装済みの`_get_or_create_user()`が自動的に処理**します。
+
+#### フロー
+```
+1. 既存ユーザーがAuth0で新規登録
+   ↓ Auth0で新しいアカウント作成
+   ↓ 新しいパスワードを設定
+   
+2. 初回ログイン
+   ↓ Auth0がAccess Tokenを発行
+   ↓ バックエンドがJWT検証
+   ↓ emailで既存ユーザーを検索
+   ↓ oidc_sub を追加（Auth0連携）
+   
+3. 以降のログイン
+   ↓ Auth0で認証
+   ↓ oidc_sub で既存データにアクセス
+```
+
+#### メリット
+- ✅ 実装がシンプル（既に完了）
 - ✅ パスワードリセット不要
+- ✅ バックエンドAPIへのアクセス不要（Custom Database不要）
+- ✅ Auth0の無料プランで利用可能
 
-### 戦略2: Auth0へのユーザーインポート
+#### デメリット
+- ⚠️ 既存ユーザーは新しいAuth0アカウントを作成する必要がある
+- ⚠️ 既存のパスワードは使えない（Auth0で新規作成）
 
-**手順**:
+#### ユーザーへの案内
+
+**メール送信**:
+```
+件名: 【重要】認証方式の変更について
+
+本文:
+いつもご利用いただきありがとうございます。
+
+認証システムをAuth0に移行しました。
+今後のログインは以下の手順で行ってください：
+
+1. ログイン画面で「Sign Up」をクリック
+2. メールアドレスと新しいパスワードを入力
+3. Auth0アカウントが作成されます
+4. 既存データは自動的に引き継がれます
+
+ご不便をおかけしますが、よろしくお願いいたします。
+```
+
+---
+
+### 戦略3: Bulk Import（非推奨）
+
+**Auth0のUser Import機能**を使用してユーザーを一括インポート。
+
+#### 制約
+- ❌ Djangoのデフォルトパスワードハッシュ（PBKDF2）は非対応
+- ❌ bcryptへの変換が必要
+- ❌ ユーザーに初回パスワードリセットを依頼
+- ❌ 実装が複雑
+
+#### 手順（参考）
 ```bash
 # 1. ユーザーデータをエクスポート
 python manage.py dumpdata users.CustomUser --output=users.json
@@ -692,9 +1032,6 @@ python scripts/convert_to_auth0_format.py users.json > auth0_users.json
 
 # 3. Auth0 Dashboardからインポート
 # Users → Import Users → JSONファイルをアップロード
-
-# 注意: パスワードはハッシュ化されているため、
-# 初回ログイン時にパスワードリセットが必要
 ```
 
 **Auth0インポート形式**:
@@ -710,25 +1047,43 @@ python scripts/convert_to_auth0_format.py users.json > auth0_users.json
 ]
 ```
 
-### 戦略3: パスワードリセットの案内
-
-**メール送信**:
+**パスワードリセット案内**:
 ```
-件名: 【重要】認証方式の変更について
+件名: 【重要】パスワードのリセットをお願いします
 
 本文:
-いつもご利用いただきありがとうございます。
-
 認証システムをAuth0に移行しました。
-今後のログインは以下の手順で行ってください：
+セキュリティ上、パスワードのリセットをお願いいたします。
 
 1. ログイン画面で「Forgot Password?」をクリック
 2. メールアドレスを入力
-3. Auth0からパスワードリセットメールが送信されます
+3. パスワードリセットメールが送信されます
 4. 新しいパスワードを設定してください
-
-ご不便をおかけしますが、よろしくお願いいたします。
 ```
+
+---
+
+### 推奨戦略
+
+#### 本番運用の場合
+
+**「Lazy Migration」を強く推奨**
+
+理由:
+- ✅ ユーザー体験が最も優れている
+- ✅ 既存のパスワードがそのまま使える
+- ✅ 段階的な移行でリスクを分散
+
+**ただし、Auth0の有料プラン（Essentials以上）が必要です。**
+
+#### 小規模プロジェクト・無料プランの場合
+
+**「自動連携」で十分**
+
+理由:
+- ✅ 実装が既に完了している
+- ✅ Auth0の無料プラン（7,000 MAU）で利用可能
+- ✅ ユーザーは新規登録するだけ（パスワードリセット不要）
 
 ---
 
