@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw'
-import type { TokenResponse, UserInfo } from '@/features/auth/types/auth'
+import type { UserInfo } from '@/features/auth/types/auth'
 
 export const mockUser: UserInfo = {
   id: 1,
@@ -9,9 +9,10 @@ export const mockUser: UserInfo = {
   is_staff: false,
 }
 
-export const mockToken: TokenResponse = {
+export const mockAuthResponse = {
   access: 'access-token',
   refresh: 'refresh-token',
+  user: mockUser,
 }
 
 export const authHandlers = [
@@ -20,11 +21,11 @@ export const authHandlers = [
   ),
 
   http.post(`**/auth/login/`, () =>
-    HttpResponse.json(mockToken, { status: 200 })
+    HttpResponse.json(mockAuthResponse, { status: 200 })
   ),
 
   http.post(`**/auth/registration/`, () =>
-    HttpResponse.json(mockToken, { status: 201 })
+    HttpResponse.json(mockAuthResponse, { status: 201 })
   ),
 
   http.post(`**/auth/token/refresh/`, () =>
@@ -32,6 +33,6 @@ export const authHandlers = [
   ),
 
   http.post(`**/auth/logout/`, () =>
-    HttpResponse.json(null, { status: 204 })
+    new HttpResponse(null, { status: 204 })
   ),
 ]
