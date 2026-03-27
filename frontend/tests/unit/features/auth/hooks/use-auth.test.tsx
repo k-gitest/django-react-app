@@ -12,27 +12,21 @@ import { useAuth } from '@/features/auth/hooks/use-auth';
    モック対象
 ========================= */
 
-// Zustand store
 import { useAuthStore } from '@/hooks/use-session-store';
-
-// API mutation wrapper
 import { useApiMutation } from '@/hooks/use-tanstack-query';
 
-// auth services
+// use-auth.ts は index からimportしているので合わせる
 import {
   signupService,
   loginService,
   logoutService,
-} from '@/features/auth/services/auth-service';
+} from '@/features/auth/services/index';
 
-// router
 import { useNavigate } from 'react-router-dom';
-
-// queryClient
 import { queryClient } from '@/lib/queryClient';
 
 /* =========================
-   vi.mock（※すべてトップレベル）
+   vi.mock（すべてトップレベル）
 ========================= */
 
 vi.mock('@/hooks/use-session-store', () => {
@@ -65,7 +59,8 @@ vi.mock('@/hooks/use-tanstack-query', () => ({
   useApiMutation: vi.fn(),
 }));
 
-vi.mock('@/features/auth/services/auth-service', () => ({
+// use-auth.ts のimportパスに合わせて index をモック
+vi.mock('@/features/auth/services/index', () => ({
   signupService: vi.fn(),
   loginService: vi.fn(),
   logoutService: vi.fn(),
@@ -94,11 +89,9 @@ vi.mock('@/lib/queryClient', () => ({
 ========================= */
 
 const useApiMutationMock = useApiMutation as unknown as Mock;
-
 const mockSignupService = signupService as Mock;
 const mockLoginService = loginService as Mock;
 const mockLogoutService = logoutService as Mock;
-
 const mockNavigate = vi.fn();
 
 /* =========================
@@ -110,18 +103,14 @@ const mockAccount = {
   password: 'password',
 };
 
+// auth-service.tsはdata.userを返すので、
+// signupService/loginServiceのモック戻り値はUserInfo型にする
 const mockUser = {
   id: 1,
   email: 'test@example.com',
   first_name: 'Test',
   last_name: 'User',
   is_staff: false,
-};
-
-const mockTokenResponse = {
-  access: 'access-token',
-  refresh: 'refresh-token',
-  user: mockUser,
 };
 
 /* =========================
@@ -135,182 +124,231 @@ const createWrapper = () => {
 };
 
 /* =========================
+   共通のuseApiMutationセットアップ
+========================= */
+
+const setupApiMutation = () => {
+  useApiMutationMock.mockImplementation(({ mutationFn, onSuccess, onError }) => {
+    type GenericMutationFn = (variables: unknown) => Promise<unknown>;
+    return {
+      mutateAsync: async (variables: unknown) => {
+        try {
+          const result = await (mutationFn as GenericMutationFn)(variables);
+          await onSuccess?.(result, variables, undefined);
+          return result;
+        } catch (e) {
+          await onError?.(e);
+          throw e;
+        }
+      },
+    };
+  });
+};
+
+/* =========================
    テスト本体
 ========================= */
 
 describe('useAuth', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
-    // router
     (useNavigate as Mock).mockReturnValue(mockNavigate);
+    setupApiMutation();
+  });
 
-    // useApiMutation（デフォルト：成功系）
-    useApiMutationMock.mockImplementation(({ mutationFn, onSuccess, onError }) => {
-      type GenericMutationFn = (variables: unknown) => Promise<unknown>;
-      return {
-        mutateAsync: async (variables: unknown) => {
-          try {
-            const result = await (mutationFn as GenericMutationFn)(variables);
-            await onSuccess?.(result, variables, undefined);
-            return result;
-          } catch (e) {
-            await onError?.(e);
-            throw e;
-          }
-        },
-      };
+  /* --------------------
+     signUp
+  -------------------- */
+
+  describe('signUp', () => {
+    it('成功時: setUser・setQueryData・setInitialized・invalidateQueries・navigate が呼ばれる', async () => {
+      // auth-service.tsがdata.userを返すのでUserInfoをそのまま返す
+      mockSignupService.mockResolvedValue(mockUser);
+
+      const mockSetUser = vi.fn();
+      const mockSetInitialized = vi.fn();
+      (useAuthStore.getState as Mock).mockReturnValue({
+        user: null,
+        isInitialized: false,
+        setUser: mockSetUser,
+        logout: vi.fn(),
+        setInitialized: mockSetInitialized,
+      });
+
+      const { result } = renderHook(() => useAuth(), {
+        wrapper: createWrapper(),
+      });
+
+      await act(async () => {
+        await result.current.signUp(mockAccount);
+      });
+
+      expect(mockSignupService).toHaveBeenCalledWith(mockAccount);
+
+      // onSuccess内: userが存在するのでsetUser・setQueryDataが呼ばれる
+      expect(mockSetUser).toHaveBeenCalledWith(mockUser);
+      expect(queryClient.setQueryData).toHaveBeenCalledWith(['auth', 'me'], mockUser);
+
+      // 初期化フラグ
+      expect(mockSetInitialized).toHaveBeenCalledWith(true);
+
+      // 念のためのinvalidate
+      expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ['auth', 'me'],
+      });
+
+      expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
+    });
+
+    it('失敗時: setUser・navigate が呼ばれない', async () => {
+      mockSignupService.mockRejectedValue(new Error('Registration failed'));
+
+      const mockSetUser = vi.fn();
+      (useAuthStore.getState as Mock).mockReturnValue({
+        user: null,
+        isInitialized: false,
+        setUser: mockSetUser,
+        logout: vi.fn(),
+        setInitialized: vi.fn(),
+      });
+
+      const { result } = renderHook(() => useAuth(), {
+        wrapper: createWrapper(),
+      });
+
+      await expect(
+        act(async () => {
+          await result.current.signUp(mockAccount);
+        })
+      ).rejects.toThrow('Registration failed');
+
+      expect(mockSetUser).not.toHaveBeenCalled();
+      expect(mockNavigate).not.toHaveBeenCalled();
     });
   });
 
-  /* =========================
-     signUp 成功
-  ========================= */
+  /* --------------------
+     signIn
+  -------------------- */
 
-  it('signUp が成功したとき invalidateQueries → navigate(/dashboard)', async () => {
-    mockSignupService.mockResolvedValue(mockTokenResponse);
+  describe('signIn', () => {
+    it('成功時: setUser・setQueryData・setInitialized・invalidateQueries・navigate が呼ばれる', async () => {
+      mockLoginService.mockResolvedValue(mockUser);
 
-    const { result } = renderHook(() => useAuth(), {
-      wrapper: createWrapper(),
-    });
+      const mockSetUser = vi.fn();
+      const mockSetInitialized = vi.fn();
+      (useAuthStore.getState as Mock).mockReturnValue({
+        user: null,
+        isInitialized: false,
+        setUser: mockSetUser,
+        logout: vi.fn(),
+        setInitialized: mockSetInitialized,
+      });
 
-    await act(async () => {
-      await result.current.signUp(mockAccount);
-    });
+      const { result } = renderHook(() => useAuth(), {
+        wrapper: createWrapper(),
+      });
 
-    expect(mockSignupService).toHaveBeenCalledWith(mockAccount);
-    // 楽観的更新: invalidateQueriesで再フェッチ
-    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['auth', 'me'],
-    });
-    expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
-  });
-
-  /* =========================
-     signIn 成功
-  ========================= */
-
-  it('signIn が成功したとき レスポンスから直接setUser → navigate(/dashboard)', async () => {
-    mockLoginService.mockResolvedValue(mockTokenResponse);
-
-    const mockSetUser = vi.fn();
-    const mockSetInitialized = vi.fn();
-
-    // useAuthStore.getState()の返り値を更新
-    (useAuthStore.getState as Mock).mockReturnValue({
-      user: null,
-      isInitialized: false,
-      setUser: mockSetUser,
-      logout: vi.fn(),
-      setInitialized: mockSetInitialized,
-    });
-
-    const { result } = renderHook(() => useAuth(), {
-      wrapper: createWrapper(),
-    });
-
-    await act(async () => {
-      await result.current.signIn(mockAccount);
-    });
-
-    expect(mockLoginService).toHaveBeenCalledWith(mockAccount);
-    
-    // 楽観的更新: レスポンスから直接setUser
-    expect(mockSetUser).toHaveBeenCalledWith(mockUser);
-    
-    // キャッシュも手動で更新
-    expect(queryClient.setQueryData).toHaveBeenCalledWith(['auth', 'me'], mockUser);
-    
-    // 初期化フラグを立てる
-    expect(mockSetInitialized).toHaveBeenCalledWith(true);
-    
-    // 裏側でinvalidateQueries
-    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['auth', 'me'],
-    });
-    
-    expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
-  });
-
-  /* =========================
-     signUp 成功後にinvalidateQueriesで遷移
-  ========================= */
-
-  it('signUp 成功後 invalidateQueries が呼ばれて navigate(/dashboard)', async () => {
-    mockSignupService.mockResolvedValue(mockTokenResponse);
-
-    const { result } = renderHook(() => useAuth(), {
-      wrapper: createWrapper(),
-    });
-
-    await act(async () => {
-      await result.current.signUp(mockAccount);
-    });
-
-    expect(mockSignupService).toHaveBeenCalledTimes(1);
-    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['auth', 'me'],
-    });
-    expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
-  });
-
-  /* =========================
-     signOut
-  ========================= */
-
-  it('signOut が成功したとき queryClient.clear → logout → navigate(/login)', async () => {
-    mockLogoutService.mockResolvedValue(undefined);
-
-    const mockLogout = vi.fn();
-
-    // useAuthStoreの返り値をモック（型エラー回避）
-    (useAuthStore as unknown as Mock).mockReturnValue({
-      logout: mockLogout,
-    });
-
-    const { result } = renderHook(() => useAuth(), {
-      wrapper: createWrapper(),
-    });
-
-    await act(async () => {
-      await result.current.signOut();
-    });
-
-    expect(mockLogoutService).toHaveBeenCalledTimes(1);
-    expect(queryClient.clear).toHaveBeenCalledTimes(1);
-    expect(mockLogout).toHaveBeenCalledTimes(1);
-    expect(mockNavigate).toHaveBeenCalledWith('/login');
-  });
-
-  /* =========================
-     API エラー
-  ========================= */
-
-  it('signIn が API エラーで失敗した場合、状態変更も遷移も発生しない', async () => {
-    mockLoginService.mockRejectedValue(new Error('Invalid credentials'));
-
-    const mockSetUser = vi.fn();
-    
-    // useAuthStore.getState()の返り値を更新
-    (useAuthStore.getState as Mock).mockReturnValue({
-      user: null,
-      isInitialized: false,
-      setUser: mockSetUser,
-      logout: vi.fn(),
-      setInitialized: vi.fn(),
-    });
-
-    const { result } = renderHook(() => useAuth(), {
-      wrapper: createWrapper(),
-    });
-
-    await expect(
-      act(async () => {
+      await act(async () => {
         await result.current.signIn(mockAccount);
-      })
-    ).rejects.toThrow('Invalid credentials');
+      });
 
-    expect(mockSetUser).not.toHaveBeenCalled();
-    expect(mockNavigate).not.toHaveBeenCalled();
+      expect(mockLoginService).toHaveBeenCalledWith(mockAccount);
+
+      // 楽観的更新
+      expect(mockSetUser).toHaveBeenCalledWith(mockUser);
+      expect(queryClient.setQueryData).toHaveBeenCalledWith(['auth', 'me'], mockUser);
+
+      // 初期化フラグ
+      expect(mockSetInitialized).toHaveBeenCalledWith(true);
+
+      // 裏側でのinvalidate
+      expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+        queryKey: ['auth', 'me'],
+      });
+
+      expect(mockNavigate).toHaveBeenCalledWith('/dashboard');
+    });
+
+    it('失敗時: setUser・navigate が呼ばれない', async () => {
+      mockLoginService.mockRejectedValue(new Error('Invalid credentials'));
+
+      const mockSetUser = vi.fn();
+      (useAuthStore.getState as Mock).mockReturnValue({
+        user: null,
+        isInitialized: false,
+        setUser: mockSetUser,
+        logout: vi.fn(),
+        setInitialized: vi.fn(),
+      });
+
+      const { result } = renderHook(() => useAuth(), {
+        wrapper: createWrapper(),
+      });
+
+      await expect(
+        act(async () => {
+          await result.current.signIn(mockAccount);
+        })
+      ).rejects.toThrow('Invalid credentials');
+
+      expect(mockSetUser).not.toHaveBeenCalled();
+      expect(mockNavigate).not.toHaveBeenCalled();
+    });
+  });
+
+  /* --------------------
+     signOut
+  -------------------- */
+
+  describe('signOut', () => {
+    it('成功時: queryClient.clear・logout・navigate(/login) が呼ばれる', async () => {
+      mockLogoutService.mockResolvedValue(undefined);
+
+      const mockLogout = vi.fn();
+      (useAuthStore as unknown as Mock).mockReturnValue({
+        logout: mockLogout,
+      });
+
+      const { result } = renderHook(() => useAuth(), {
+        wrapper: createWrapper(),
+      });
+
+      await act(async () => {
+        await result.current.signOut();
+      });
+
+      expect(mockLogoutService).toHaveBeenCalledTimes(1);
+      expect(queryClient.clear).toHaveBeenCalledTimes(1);
+      expect(mockLogout).toHaveBeenCalledTimes(1);
+      expect(mockNavigate).toHaveBeenCalledWith('/login');
+    });
+
+    it('失敗時: APIエラーでも logout・navigate(/login) が呼ばれる（クライアント状態を優先）', async () => {
+      mockLogoutService.mockRejectedValue(new Error('Logout API failed'));
+
+      const mockLogout = vi.fn();
+      (useAuthStore as unknown as Mock).mockReturnValue({
+        logout: mockLogout,
+      });
+
+      const { result } = renderHook(() => useAuth(), {
+        wrapper: createWrapper(),
+      });
+
+      // onErrorでlogout+navigateを呼んだ後にthrowするのでrejectsになる
+      await expect(
+        act(async () => {
+          await result.current.signOut();
+        })
+      ).rejects.toThrow('Logout API failed');
+
+      // APIが失敗してもクライアント側はクリアする
+      expect(mockLogout).toHaveBeenCalledTimes(1);
+      expect(mockNavigate).toHaveBeenCalledWith('/login');
+
+      // queryClient.clearはonErrorでは呼ばれない（onSuccessのみ）
+      expect(queryClient.clear).not.toHaveBeenCalled();
+    });
   });
 });
