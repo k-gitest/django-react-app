@@ -1,283 +1,250 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useTodoStats } from '@/features/todos/hooks/useTodoStats';
-import { todoService } from '@/features/todos/services/todo-service';
-import type { ReactNode } from 'react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { renderHook } from '@testing-library/react';
+import type { Mock } from 'vitest';
 
-// モック
+/* =========================
+   テスト対象
+========================= */
+import { useTodoStats } from '@/features/todos/hooks/useTodoStats';
+
+/* =========================
+   モック対象
+========================= */
+import { todoService } from '@/features/todos/services/todo-service';
+import { useApiSuspenseQuery } from '@/hooks/use-suspense-query';
+
+/* =========================
+   vi.mock（すべてトップレベル）
+========================= */
+
+// useApiSuspenseQueryをモックしてSuspenseを回避
+vi.mock('@/hooks/use-suspense-query', () => ({
+  useApiSuspenseQuery: vi.fn(),
+}));
+
+// todoServiceはmoックするが、queryFn内で実際に呼ばれるかを検証するため
+// useApiSuspenseQueryのqueryFnを手動実行する
 vi.mock('@/features/todos/services/todo-service', () => ({
   todoService: {
     getTodoStats: vi.fn(),
   },
 }));
 
-// コンソールログを抑制
-vi.spyOn(console, 'error').mockImplementation(() => {});
-vi.spyOn(console, 'warn').mockImplementation(() => {});
-vi.spyOn(console, 'log').mockImplementation(() => {});
+/* =========================
+   モック参照
+========================= */
 
-describe('useTodoStats', () => {
-  let queryClient: QueryClient;
+const useApiSuspenseQueryMock = useApiSuspenseQuery as unknown as Mock;
+const mockGetTodoStats = todoService.getTodoStats as Mock;
 
-  // モックデータ（サービスからのレスポンス）
-  const mockStatsResponse = [
+/* =========================
+   ダミーデータ
+========================= */
+
+// openapi-fetch形式のレスポンス（{ data, error }）
+const mockStatsApiResponse = {
+  data: [
     { priority: 'HIGH', count: 5 },
     { priority: 'MEDIUM', count: 3 },
     { priority: 'LOW', count: 2 },
-  ];
+  ],
+  error: undefined,
+};
 
-  // 期待される変換後のデータ
-  const expectedStatsData = [
-    { priority: 'HIGH', count: 5, fill: 'var(--color-high)' },
-    { priority: 'MEDIUM', count: 3, fill: 'var(--color-medium)' },
-    { priority: 'LOW', count: 2, fill: 'var(--color-low)' },
-  ];
+// 変換後の期待値（fillが追加される）
+const expectedStatsData = [
+  { priority: 'HIGH', count: 5, fill: 'var(--color-high)' },
+  { priority: 'MEDIUM', count: 3, fill: 'var(--color-medium)' },
+  { priority: 'LOW', count: 2, fill: 'var(--color-low)' },
+];
 
+/* =========================
+   ヘルパー：queryFnを手動実行して変換ロジックを検証
+========================= */
+
+// useApiSuspenseQueryに渡されたqueryFnを取り出して実行する
+const runQueryFn = async () => {
+  const callArg = useApiSuspenseQueryMock.mock.calls[0][0];
+  return await callArg.queryFn();
+};
+
+/* =========================
+   テスト本体
+========================= */
+
+describe('useTodoStats', () => {
   beforeEach(() => {
-    // 各テストで新しいQueryClientを作成
-    queryClient = new QueryClient({
-      defaultOptions: {
-        queries: {
-          retry: false,
-        },
-      },
-    });
-
-    // モックをクリア
     vi.clearAllMocks();
+
+    // デフォルト: 変換済みデータをそのまま返す
+    useApiSuspenseQueryMock.mockReturnValue({
+      data: expectedStatsData,
+    });
   });
 
-  afterEach(() => {
-    queryClient.clear();
-    vi.restoreAllMocks();
-  });
+  /* --------------------
+     queryKeyとqueryFnの設定
+  -------------------- */
 
-  // Wrapper コンポーネント
-  const createWrapper = () => {
-    return ({ children }: { children: ReactNode }) => (
-      <QueryClientProvider client={queryClient}>
-        {children}
-      </QueryClientProvider>
-    );
-  };
+  describe('useApiSuspenseQueryへの設定', () => {
+    it('正しいqueryKeyとqueryFnでuseApiSuspenseQueryを呼ぶ', () => {
+      renderHook(() => useTodoStats());
 
-  describe('統計データ取得と変換', () => {
-    it('統計データを正常に取得し、変換する', async () => {
-      vi.mocked(todoService.getTodoStats).mockResolvedValue(mockStatsResponse);
-
-      const { result } = renderHook(() => useTodoStats(), {
-        wrapper: createWrapper(),
-      });
-
-      // 初期状態: ローディング中
-      expect(result.current.isLoading).toBe(true);
-
-      // データ取得完了を待つ
-      await waitFor(() => {
-        expect(result.current.isLoading).toBe(false);
-      });
-
-      // サービスが正しく呼ばれたことを確認
-      expect(todoService.getTodoStats).toHaveBeenCalledTimes(1);
-
-      // データが正しく変換されていることを確認
-      expect(result.current.data).toEqual(expectedStatsData);
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    it('優先度の大文字小文字が正しく変換される', async () => {
-      // 大文字の優先度データ
-      const upperCaseResponse = [
-        { priority: 'HIGH', count: 1 },
-        { priority: 'MEDIUM', count: 2 },
-      ];
-
-      vi.mocked(todoService.getTodoStats).mockResolvedValue(upperCaseResponse);
-
-      const { result } = renderHook(() => useTodoStats(), {
-        wrapper: createWrapper(),
-      });
-
-      await waitFor(() => {
-        expect(result.current.isSuccess).toBe(true);
-      });
-
-      // fillプロパティが小文字に変換されていることを確認
-      expect(result.current.data).toEqual([
-        { priority: 'HIGH', count: 1, fill: 'var(--color-high)' },
-        { priority: 'MEDIUM', count: 2, fill: 'var(--color-medium)' },
-      ]);
-    });
-
-    it('空の配列が返された場合も正しく処理される', async () => {
-      vi.mocked(todoService.getTodoStats).mockResolvedValue([]);
-
-      const { result } = renderHook(() => useTodoStats(), {
-        wrapper: createWrapper(),
-      });
-
-      await waitFor(() => {
-        expect(result.current.isSuccess).toBe(true);
-      });
-
-      // 空配列が返されることを確認
-      expect(result.current.data).toEqual([]);
-    });
-
-    it('エラー時にisErrorがtrueになる', async () => {
-      vi.mocked(todoService.getTodoStats).mockRejectedValue(
-        new Error('Service Error')
+      expect(useApiSuspenseQueryMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          queryKey: ['todos', 'stats'],
+          queryFn: expect.any(Function),
+        })
       );
+    });
 
-      const { result } = renderHook(() => useTodoStats(), {
-        wrapper: createWrapper(),
-      });
+    it('dataをそのまま返す', () => {
+      const { result } = renderHook(() => useTodoStats());
 
-      await waitFor(() => {
-        expect(result.current.isError).toBe(true);
-      });
+      expect(result.current.data).toEqual(expectedStatsData);
+    });
 
-      // エラー状態を確認
+    it('dataがundefinedのとき undefinedをそのまま返す', () => {
+      useApiSuspenseQueryMock.mockReturnValue({ data: undefined });
+
+      const { result } = renderHook(() => useTodoStats());
+
       expect(result.current.data).toBeUndefined();
-      expect(result.current.error).toBeDefined();
-    });
-
-    it('ネットワークエラーが発生した場合', async () => {
-      const networkError = new Error('Network Error');
-      vi.mocked(todoService.getTodoStats).mockRejectedValue(networkError);
-
-      const { result } = renderHook(() => useTodoStats(), {
-        wrapper: createWrapper(),
-      });
-
-      await waitFor(() => {
-        expect(result.current.isError).toBe(true);
-      });
-
-      expect(result.current.error).toBe(networkError);
     });
   });
 
-  describe('queryKeyとキャッシュ', () => {
-    it('正しいqueryKeyが使用されている', async () => {
-      vi.mocked(todoService.getTodoStats).mockResolvedValue(mockStatsResponse);
+  /* --------------------
+     queryFn内の変換ロジック
+     （useApiSuspenseQueryに渡すqueryFnを手動実行して検証）
+  -------------------- */
 
-      const { result } = renderHook(() => useTodoStats(), {
-        wrapper: createWrapper(),
-      });
+  describe('queryFn内のデータ変換', () => {
+    it('todoService.getTodoStatsを呼び、fillを付与して返す', async () => {
+      mockGetTodoStats.mockResolvedValue(mockStatsApiResponse);
 
-      await waitFor(() => {
-        expect(result.current.isSuccess).toBe(true);
-      });
+      renderHook(() => useTodoStats());
 
-      // キャッシュが正しいキーで保存されているか確認
-      const cachedData = queryClient.getQueryData(['todos', 'stats']);
-      expect(cachedData).toEqual(expectedStatsData);
+      const result = await runQueryFn();
+
+      expect(mockGetTodoStats).toHaveBeenCalledTimes(1);
+      expect(result).toEqual(expectedStatsData);
     });
 
-    it('キャッシュが機能することを確認', async () => {
-      vi.mocked(todoService.getTodoStats).mockResolvedValue(mockStatsResponse);
+    it('priorityが小文字に変換されてfillのCSS変数が生成される', async () => {
+      mockGetTodoStats.mockResolvedValue(mockStatsApiResponse);
 
-      // 1回目のレンダリング
-      const { result: result1 } = renderHook(() => useTodoStats(), {
-        wrapper: createWrapper(),
-      });
+      renderHook(() => useTodoStats());
 
-      await waitFor(() => {
-        expect(result1.current.isSuccess).toBe(true);
-      });
+      const result = await runQueryFn();
 
-      // サービスが1回呼ばれたことを確認
-      expect(todoService.getTodoStats).toHaveBeenCalledTimes(1);
-
-      // データが正しいことを確認
-      expect(result1.current.data).toEqual(expectedStatsData);
-
-      // キャッシュに保存されていることを確認
-      const cachedData = queryClient.getQueryData(['todos', 'stats']);
-      expect(cachedData).toEqual(expectedStatsData);
-    });
-  });
-
-  describe('データ変換', () => {
-    it('fillプロパティが正しいCSS変数フォーマットになっている', async () => {
-      vi.mocked(todoService.getTodoStats).mockResolvedValue(mockStatsResponse);
-
-      const { result } = renderHook(() => useTodoStats(), {
-        wrapper: createWrapper(),
-      });
-
-      await waitFor(() => {
-        expect(result.current.isSuccess).toBe(true);
-      });
-
-      // 各アイテムのfillが正しいフォーマットか確認
-      result.current.data?.forEach((item) => {
+      result.forEach((item: { fill: string }) => {
+        // var(--color-xxx) 形式で小文字
         expect(item.fill).toMatch(/^var\(--color-[a-z]+\)$/);
       });
     });
 
-    it('元のpriorityとcountが保持されている', async () => {
-      vi.mocked(todoService.getTodoStats).mockResolvedValue(mockStatsResponse);
-
-      const { result } = renderHook(() => useTodoStats(), {
-        wrapper: createWrapper(),
+    it('混合ケースのpriorityも小文字に変換される', async () => {
+      mockGetTodoStats.mockResolvedValue({
+        data: [
+          { priority: 'High', count: 1 },
+          { priority: 'MeDiUm', count: 2 },
+          { priority: 'LoW', count: 3 },
+        ],
+        error: undefined,
       });
 
-      await waitFor(() => {
-        expect(result.current.isSuccess).toBe(true);
-      });
+      renderHook(() => useTodoStats());
 
-      // 元のデータが保持されているか確認
-      result.current.data?.forEach((item, index) => {
-        expect(item.priority).toBe(mockStatsResponse[index].priority);
-        expect(item.count).toBe(mockStatsResponse[index].count);
-      });
-    });
+      const result = await runQueryFn();
 
-    it('混合ケースの優先度も正しく変換される', async () => {
-      const mixedCaseResponse = [
-        { priority: 'High', count: 1 },
-        { priority: 'MeDiUm', count: 2 },
-        { priority: 'LoW', count: 3 },
-      ];
-
-      vi.mocked(todoService.getTodoStats).mockResolvedValue(mixedCaseResponse);
-
-      const { result } = renderHook(() => useTodoStats(), {
-        wrapper: createWrapper(),
-      });
-
-      await waitFor(() => {
-        expect(result.current.isSuccess).toBe(true);
-      });
-
-      // すべてのfillが小文字に変換されていることを確認
-      expect(result.current.data).toEqual([
+      expect(result).toEqual([
         { priority: 'High', count: 1, fill: 'var(--color-high)' },
         { priority: 'MeDiUm', count: 2, fill: 'var(--color-medium)' },
         { priority: 'LoW', count: 3, fill: 'var(--color-low)' },
       ]);
     });
 
-    it('すべての必須プロパティが含まれている', async () => {
-      vi.mocked(todoService.getTodoStats).mockResolvedValue(mockStatsResponse);
+    it('元のpriorityとcountは変換後も保持される', async () => {
+      mockGetTodoStats.mockResolvedValue(mockStatsApiResponse);
 
-      const { result } = renderHook(() => useTodoStats(), {
-        wrapper: createWrapper(),
+      renderHook(() => useTodoStats());
+
+      const result = await runQueryFn();
+
+      result.forEach((item: { priority: string; count: number }, index: number) => {
+        expect(item.priority).toBe(mockStatsApiResponse.data[index].priority);
+        expect(item.count).toBe(mockStatsApiResponse.data[index].count);
       });
+    });
 
-      await waitFor(() => {
-        expect(result.current.isSuccess).toBe(true);
-      });
+    it('各アイテムにpriority・count・fillが含まれる', async () => {
+      mockGetTodoStats.mockResolvedValue(mockStatsApiResponse);
 
-      // 各アイテムが必須プロパティを持つことを確認
-      result.current.data?.forEach((item) => {
+      renderHook(() => useTodoStats());
+
+      const result = await runQueryFn();
+
+      result.forEach((item: object) => {
         expect(item).toHaveProperty('priority');
         expect(item).toHaveProperty('count');
         expect(item).toHaveProperty('fill');
       });
+    });
+
+    it('data.dataがnullのとき 空配列として処理される', async () => {
+      // openapi-fetchでdataがnullの場合
+      mockGetTodoStats.mockResolvedValue({ data: null, error: undefined });
+
+      renderHook(() => useTodoStats());
+
+      const result = await runQueryFn();
+
+      expect(result).toEqual([]);
+    });
+
+    it('priorityがnullのとき UNKNOWNにフォールバックされる', async () => {
+      mockGetTodoStats.mockResolvedValue({
+        data: [{ priority: null, count: 1 }],
+        error: undefined,
+      });
+
+      renderHook(() => useTodoStats());
+
+      const result = await runQueryFn();
+
+      expect(result[0].priority).toBe('UNKNOWN');
+      expect(result[0].fill).toBe('var(--color-unknown)');
+    });
+
+    it('countがnullのとき 0にフォールバックされる', async () => {
+      mockGetTodoStats.mockResolvedValue({
+        data: [{ priority: 'HIGH', count: null }],
+        error: undefined,
+      });
+
+      renderHook(() => useTodoStats());
+
+      const result = await runQueryFn();
+
+      expect(result[0].count).toBe(0);
+    });
+
+    it('空配列のとき 空配列を返す', async () => {
+      mockGetTodoStats.mockResolvedValue({ data: [], error: undefined });
+
+      renderHook(() => useTodoStats());
+
+      const result = await runQueryFn();
+
+      expect(result).toEqual([]);
+    });
+
+    it('todoService.getTodoStatsがエラーをスローしたとき queryFnもスローする', async () => {
+      mockGetTodoStats.mockRejectedValue(new Error('Stats API Error'));
+
+      renderHook(() => useTodoStats());
+
+      await expect(runQueryFn()).rejects.toThrow('Stats API Error');
     });
   });
 });
