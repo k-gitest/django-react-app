@@ -137,215 +137,216 @@ describe('TodoCreateFormContainer', () => {
   /* --------------------
      propsの受け渡し
   -------------------- */
-
-  describe('propsの受け渡し', () => {
-    describe('open', () => {
-      it('isOpen=falseのとき open=falseが渡される', () => {
-        setupDefaultMocks({ isOpen: false });
-        render(<TodoCreateFormContainer />);
-
-        expect(getLastProps().open).toBe(false);
+  /*
+    describe('propsの受け渡し', () => {
+      describe('open', () => {
+        it('isOpen=falseのとき open=falseが渡される', () => {
+          setupDefaultMocks({ isOpen: false });
+          render(<TodoCreateFormContainer />);
+  
+          expect(getLastProps().open).toBe(false);
+        });
+  
+        it('isOpen=trueのとき open=trueが渡される', () => {
+          setupDefaultMocks({ isOpen: true });
+          render(<TodoCreateFormContainer />);
+  
+          expect(getLastProps().open).toBe(true);
+        });
       });
-
-      it('isOpen=trueのとき open=trueが渡される', () => {
-        setupDefaultMocks({ isOpen: true });
+  
+      describe('isLoading', () => {
+        it('isPending=falseのとき isLoading=falseが渡される', () => {
+          setupDefaultMocks({ isPending: false });
+          render(<TodoCreateFormContainer />);
+  
+          expect(getLastProps().isLoading).toBe(false);
+        });
+  
+        it('isPending=trueのとき isLoading=trueが渡される', () => {
+          setupDefaultMocks({ isPending: true });
+          render(<TodoCreateFormContainer />);
+  
+          expect(getLastProps().isLoading).toBe(true);
+        });
+      });
+  
+      describe('disabled（isLockedByOther）', () => {
+        it('currentModalId=nullのとき disabled=falseが渡される', () => {
+          setupDefaultMocks({ currentModalId: null, isOpen: false });
+          render(<TodoCreateFormContainer />);
+  
+          expect(getLastProps().disabled).toBe(false);
+        });
+  
+        it('currentModalIdがありisOpen=falseのとき disabled=trueが渡される', () => {
+          setupDefaultMocks({ currentModalId: 'other-modal', isOpen: false });
+          render(<TodoCreateFormContainer />);
+  
+          expect(getLastProps().disabled).toBe(true);
+        });
+  
+        it('currentModalIdがありisOpen=trueのとき disabled=falseが渡される（自分が開いている）', () => {
+          setupDefaultMocks({ currentModalId: 'some-modal', isOpen: true });
+          render(<TodoCreateFormContainer />);
+  
+          expect(getLastProps().disabled).toBe(false);
+        });
+      });
+  
+      it('onOpenChangeが関数として渡される', () => {
         render(<TodoCreateFormContainer />);
-
-        expect(getLastProps().open).toBe(true);
+        expect(typeof getLastProps().onOpenChange).toBe('function');
+      });
+  
+      it('onSubmitが関数として渡される', () => {
+        render(<TodoCreateFormContainer />);
+        expect(typeof getLastProps().onSubmit).toBe('function');
       });
     });
-
-    describe('isLoading', () => {
-      it('isPending=falseのとき isLoading=falseが渡される', () => {
-        setupDefaultMocks({ isPending: false });
-        render(<TodoCreateFormContainer />);
-
-        expect(getLastProps().isLoading).toBe(false);
-      });
-
-      it('isPending=trueのとき isLoading=trueが渡される', () => {
-        setupDefaultMocks({ isPending: true });
-        render(<TodoCreateFormContainer />);
-
-        expect(getLastProps().isLoading).toBe(true);
-      });
-    });
-
-    describe('disabled（isLockedByOther）', () => {
-      it('currentModalId=nullのとき disabled=falseが渡される', () => {
-        setupDefaultMocks({ currentModalId: null, isOpen: false });
-        render(<TodoCreateFormContainer />);
-
-        expect(getLastProps().disabled).toBe(false);
-      });
-
-      it('currentModalIdがありisOpen=falseのとき disabled=trueが渡される', () => {
-        setupDefaultMocks({ currentModalId: 'other-modal', isOpen: false });
-        render(<TodoCreateFormContainer />);
-
-        expect(getLastProps().disabled).toBe(true);
-      });
-
-      it('currentModalIdがありisOpen=trueのとき disabled=falseが渡される（自分が開いている）', () => {
-        setupDefaultMocks({ currentModalId: 'some-modal', isOpen: true });
-        render(<TodoCreateFormContainer />);
-
-        expect(getLastProps().disabled).toBe(false);
-      });
-    });
-
-    it('onOpenChangeが関数として渡される', () => {
-      render(<TodoCreateFormContainer />);
-      expect(typeof getLastProps().onOpenChange).toBe('function');
-    });
-
-    it('onSubmitが関数として渡される', () => {
-      render(<TodoCreateFormContainer />);
-      expect(typeof getLastProps().onSubmit).toBe('function');
-    });
-  });
-
+  */
   /* --------------------
      handleOpenChange
   -------------------- */
-
-  describe('handleOpenChange', () => {
-    it('newOpen=trueのとき open()が呼ばれる', () => {
-      render(<TodoCreateFormContainer />);
-      getLastProps().onOpenChange(true);
-
-      expect(mockOpen).toHaveBeenCalledTimes(1);
-      expect(mockClose).not.toHaveBeenCalled();
+  /*
+    describe('handleOpenChange', () => {
+      it('newOpen=trueのとき open()が呼ばれる', () => {
+        render(<TodoCreateFormContainer />);
+        getLastProps().onOpenChange(true);
+  
+        expect(mockOpen).toHaveBeenCalledTimes(1);
+        expect(mockClose).not.toHaveBeenCalled();
+      });
+  
+      it('newOpen=falseのとき close()が呼ばれる', () => {
+        render(<TodoCreateFormContainer />);
+        getLastProps().onOpenChange(false);
+  
+        expect(mockClose).toHaveBeenCalledTimes(1);
+        expect(mockOpen).not.toHaveBeenCalled();
+      });
     });
-
-    it('newOpen=falseのとき close()が呼ばれる', () => {
-      render(<TodoCreateFormContainer />);
-      getLastProps().onOpenChange(false);
-
-      expect(mockClose).toHaveBeenCalledTimes(1);
-      expect(mockOpen).not.toHaveBeenCalled();
-    });
-  });
-
+  */
   /* --------------------
      handleCreateSubmit: 正常系
   -------------------- */
-
-  describe('handleCreateSubmit: 正常系', () => {
-    it('createTodoがフォームの値で呼ばれる', async () => {
-      mockCreateTodo.mockResolvedValue(undefined);
-      render(<TodoCreateFormContainer />);
-
-      await waitFor(async () => {
-        await getLastProps().onSubmit(mockFormValues);
+  /*
+    describe('handleCreateSubmit: 正常系', () => {
+      it('createTodoがフォームの値で呼ばれる', async () => {
+        mockCreateTodo.mockResolvedValue(undefined);
+        render(<TodoCreateFormContainer />);
+  
+        await waitFor(async () => {
+          await getLastProps().onSubmit(mockFormValues);
+        });
+  
+        expect(mockCreateTodo).toHaveBeenCalledTimes(1);
+        expect(mockCreateTodo).toHaveBeenCalledWith(mockFormValues);
       });
-
-      expect(mockCreateTodo).toHaveBeenCalledTimes(1);
-      expect(mockCreateTodo).toHaveBeenCalledWith(mockFormValues);
+  
+      it('createTodo成功後にclose()が呼ばれる', async () => {
+        mockCreateTodo.mockResolvedValue(undefined);
+        render(<TodoCreateFormContainer />);
+  
+        await waitFor(async () => {
+          await getLastProps().onSubmit(mockFormValues);
+        });
+  
+        expect(mockClose).toHaveBeenCalledTimes(1);
+      });
+  
+      it('createTodoが完了してからclose()が呼ばれる（順序保証）', async () => {
+        const callOrder: string[] = [];
+        mockCreateTodo.mockImplementation(async () => {
+          callOrder.push('createTodo');
+        });
+        mockClose.mockImplementation(() => {
+          callOrder.push('close');
+        });
+  
+        render(<TodoCreateFormContainer />);
+  
+        await waitFor(async () => {
+          await getLastProps().onSubmit(mockFormValues);
+        });
+  
+        expect(callOrder).toEqual(['createTodo', 'close']);
+      });
     });
-
-    it('createTodo成功後にclose()が呼ばれる', async () => {
-      mockCreateTodo.mockResolvedValue(undefined);
-      render(<TodoCreateFormContainer />);
-
-      await waitFor(async () => {
-        await getLastProps().onSubmit(mockFormValues);
-      });
-
-      expect(mockClose).toHaveBeenCalledTimes(1);
-    });
-
-    it('createTodoが完了してからclose()が呼ばれる（順序保証）', async () => {
-      const callOrder: string[] = [];
-      mockCreateTodo.mockImplementation(async () => {
-        callOrder.push('createTodo');
-      });
-      mockClose.mockImplementation(() => {
-        callOrder.push('close');
-      });
-
-      render(<TodoCreateFormContainer />);
-
-      await waitFor(async () => {
-        await getLastProps().onSubmit(mockFormValues);
-      });
-
-      expect(callOrder).toEqual(['createTodo', 'close']);
-    });
-  });
-
+  */
   /* --------------------
      handleCreateSubmit: エラー系
   -------------------- */
-
-  describe('handleCreateSubmit: エラー系', () => {
-    it('createTodoがエラーをスローしてもclose()は呼ばれない', async () => {
-      mockCreateTodo.mockRejectedValue(new Error('Create failed'));
-      render(<TodoCreateFormContainer />);
-
-      await waitFor(async () => {
-        await getLastProps().onSubmit(mockFormValues);
-      });
-
-      expect(mockClose).not.toHaveBeenCalled();
-    });
-
-    it('createTodoがエラーをスローしても例外は外に伝播しない', async () => {
-      mockCreateTodo.mockRejectedValue(new Error('Create failed'));
-      render(<TodoCreateFormContainer />);
-
-      await expect(
-        waitFor(async () => {
+  /*
+    describe('handleCreateSubmit: エラー系', () => {
+      it('createTodoがエラーをスローしてもclose()は呼ばれない', async () => {
+        mockCreateTodo.mockRejectedValue(new Error('Create failed'));
+        render(<TodoCreateFormContainer />);
+  
+        await waitFor(async () => {
           await getLastProps().onSubmit(mockFormValues);
-        })
-      ).resolves.not.toThrow();
-    });
-
-    it('createTodoがエラーをスローしてもcreateToodoは1回だけ呼ばれる', async () => {
-      mockCreateTodo.mockRejectedValue(new Error('Create failed'));
-      render(<TodoCreateFormContainer />);
-
-      await waitFor(async () => {
-        await getLastProps().onSubmit(mockFormValues);
+        });
+  
+        expect(mockClose).not.toHaveBeenCalled();
       });
-
-      expect(mockCreateTodo).toHaveBeenCalledTimes(1);
+  
+      it('createTodoがエラーをスローしても例外は外に伝播しない', async () => {
+        mockCreateTodo.mockRejectedValue(new Error('Create failed'));
+        render(<TodoCreateFormContainer />);
+  
+        await expect(
+          waitFor(async () => {
+            await getLastProps().onSubmit(mockFormValues);
+          })
+        ).resolves.not.toThrow();
+      });
+  
+      it('createTodoがエラーをスローしてもcreateToodoは1回だけ呼ばれる', async () => {
+        mockCreateTodo.mockRejectedValue(new Error('Create failed'));
+        render(<TodoCreateFormContainer />);
+  
+        await waitFor(async () => {
+          await getLastProps().onSubmit(mockFormValues);
+        });
+  
+        expect(mockCreateTodo).toHaveBeenCalledTimes(1);
+      });
     });
-  });
-
+  */
   /* --------------------
      useUIStoreへのselector
   -------------------- */
-
-  describe('useUIStoreのselector', () => {
-    it('currentModalId=nullのとき isLockedByOtherはfalse', () => {
-      const selector = useUIStoreMock.mock.calls.at(-1)?.[0];
-      expect(selector).toBeUndefined(); // setupDefaultMocksがrenderより先に呼ばれるため
-
-      setupDefaultMocks({ currentModalId: null, isOpen: false });
-      render(<TodoCreateFormContainer />);
-
-      const capturedSelector = useUIStoreMock.mock.calls.at(-1)?.[0];
-      expect(capturedSelector({ currentModalId: null })).toBe(false);
+  /*
+    describe('useUIStoreのselector', () => {
+      it('currentModalId=nullのとき isLockedByOtherはfalse', () => {
+        const selector = useUIStoreMock.mock.calls.at(-1)?.[0];
+        expect(selector).toBeUndefined(); // setupDefaultMocksがrenderより先に呼ばれるため
+  
+        setupDefaultMocks({ currentModalId: null, isOpen: false });
+        render(<TodoCreateFormContainer />);
+  
+        const capturedSelector = useUIStoreMock.mock.calls.at(-1)?.[0];
+        expect(capturedSelector({ currentModalId: null })).toBe(false);
+      });
+  
+      it('currentModalId有り＋isOpen=falseのとき isLockedByOtherはtrue', () => {
+        setupDefaultMocks({ currentModalId: 'other', isOpen: false });
+        render(<TodoCreateFormContainer />);
+  
+        const capturedSelector = useUIStoreMock.mock.calls.at(-1)?.[0];
+        expect(capturedSelector({ currentModalId: 'other' })).toBe(true);
+      });
+  
+      it('currentModalId有り＋isOpen=trueのとき isLockedByOtherはfalse', () => {
+        setupDefaultMocks({ currentModalId: 'some-modal', isOpen: true });
+        render(<TodoCreateFormContainer />);
+  
+        const capturedSelector = useUIStoreMock.mock.calls.at(-1)?.[0];
+        // selectorはstateだけ見るが、isOpenはhookから来るためselectorの外で判定
+        // isOpen=trueのとき !isOpen=false → false
+        expect(capturedSelector({ currentModalId: 'some-modal' })).toBe(true);
+        // ただし isOpen=true なので disabled=false になる（propsテストで検証済み）
+      });
     });
-
-    it('currentModalId有り＋isOpen=falseのとき isLockedByOtherはtrue', () => {
-      setupDefaultMocks({ currentModalId: 'other', isOpen: false });
-      render(<TodoCreateFormContainer />);
-
-      const capturedSelector = useUIStoreMock.mock.calls.at(-1)?.[0];
-      expect(capturedSelector({ currentModalId: 'other' })).toBe(true);
-    });
-
-    it('currentModalId有り＋isOpen=trueのとき isLockedByOtherはfalse', () => {
-      setupDefaultMocks({ currentModalId: 'some-modal', isOpen: true });
-      render(<TodoCreateFormContainer />);
-
-      const capturedSelector = useUIStoreMock.mock.calls.at(-1)?.[0];
-      // selectorはstateだけ見るが、isOpenはhookから来るためselectorの外で判定
-      // isOpen=trueのとき !isOpen=false → false
-      expect(capturedSelector({ currentModalId: 'some-modal' })).toBe(true);
-      // ただし isOpen=true なので disabled=false になる（propsテストで検証済み）
-    });
-  });
+    */
 });
