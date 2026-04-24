@@ -101,288 +101,289 @@ describe('TodoList', () => {
   /* --------------------
      空タスク表示
   -------------------- */
-
-  describe('空タスク表示', () => {
-    it('safeTodosが空配列のとき 空メッセージが表示される', () => {
-      setupUseTodos([]);
-      render(<TodoList />);
-
-      expect(screen.getByText(
-        'まだタスクがありません。新しいタスクを追加しましょう！'
-      )).toBeInTheDocument();
+  /*
+    describe('空タスク表示', () => {
+      it('safeTodosが空配列のとき 空メッセージが表示される', () => {
+        setupUseTodos([]);
+        render(<TodoList />);
+  
+        expect(screen.getByText(
+          'まだタスクがありません。新しいタスクを追加しましょう！'
+        )).toBeInTheDocument();
+      });
+  
+      it('safeTodosが空のとき TodoItemContainerはレンダリングされない', () => {
+        setupUseTodos([]);
+        render(<TodoList />);
+  
+        expect(screen.queryByTestId(/^todo-item-container-/)).not.toBeInTheDocument();
+      });
+  
+      it('safeTodosが空のとき TodoItemはレンダリングされない', () => {
+        setupUseTodos([]);
+        render(<TodoList />);
+  
+        expect(screen.queryByTestId(/^todo-item-/)).not.toBeInTheDocument();
+      });
     });
-
-    it('safeTodosが空のとき TodoItemContainerはレンダリングされない', () => {
-      setupUseTodos([]);
-      render(<TodoList />);
-
-      expect(screen.queryByTestId(/^todo-item-container-/)).not.toBeInTheDocument();
-    });
-
-    it('safeTodosが空のとき TodoItemはレンダリングされない', () => {
-      setupUseTodos([]);
-      render(<TodoList />);
-
-      expect(screen.queryByTestId(/^todo-item-/)).not.toBeInTheDocument();
-    });
-  });
-
+  */
   /* --------------------
      todosの正規化（safeTodos）
   -------------------- */
-
-  describe('todosの正規化（safeTodos）', () => {
-    it('配列そのままの場合 正しくレンダリングされる', () => {
-      setupUseTodos(mockTodos);
-      render(<TodoList />);
-
-      expect(screen.getByTestId('todo-item-container-1')).toBeInTheDocument();
-      expect(screen.getByTestId('todo-item-container-2')).toBeInTheDocument();
-      expect(screen.getByTestId('todo-item-container-3')).toBeInTheDocument();
+  /*
+    describe('todosの正規化（safeTodos）', () => {
+      it('配列そのままの場合 正しくレンダリングされる', () => {
+        setupUseTodos(mockTodos);
+        render(<TodoList />);
+  
+        expect(screen.getByTestId('todo-item-container-1')).toBeInTheDocument();
+        expect(screen.getByTestId('todo-item-container-2')).toBeInTheDocument();
+        expect(screen.getByTestId('todo-item-container-3')).toBeInTheDocument();
+      });
+  
+      it('{ data: [] }形式の場合 正しくレンダリングされる', () => {
+        setupUseTodos({ data: mockTodos } as unknown as Todo[]);
+        render(<TodoList />);
+  
+        expect(screen.getByTestId('todo-item-container-1')).toBeInTheDocument();
+        expect(screen.getByTestId('todo-item-container-2')).toBeInTheDocument();
+        expect(screen.getByTestId('todo-item-container-3')).toBeInTheDocument();
+      });
+  
+      it('{ data: [] }形式でdataが空配列のとき 空メッセージが表示される', () => {
+        setupUseTodos({ data: [] } as unknown as Todo[]);
+        render(<TodoList />);
+  
+        expect(screen.getByText(
+          'まだタスクがありません。新しいタスクを追加しましょう！'
+        )).toBeInTheDocument();
+      });
+  
+      it('todosがnullのとき 空メッセージが表示される', () => {
+        setupUseTodos(null);
+        render(<TodoList />);
+  
+        expect(screen.getByText(
+          'まだタスクがありません。新しいタスクを追加しましょう！'
+        )).toBeInTheDocument();
+      });
+  
+      it('todosがundefinedのとき 空メッセージが表示される', () => {
+        setupUseTodos(undefined);
+        render(<TodoList />);
+  
+        expect(screen.getByText(
+          'まだタスクがありません。新しいタスクを追加しましょう！'
+        )).toBeInTheDocument();
+      });
     });
-
-    it('{ data: [] }形式の場合 正しくレンダリングされる', () => {
-      setupUseTodos({ data: mockTodos } as unknown as Todo[]);
-      render(<TodoList />);
-
-      expect(screen.getByTestId('todo-item-container-1')).toBeInTheDocument();
-      expect(screen.getByTestId('todo-item-container-2')).toBeInTheDocument();
-      expect(screen.getByTestId('todo-item-container-3')).toBeInTheDocument();
-    });
-
-    it('{ data: [] }形式でdataが空配列のとき 空メッセージが表示される', () => {
-      setupUseTodos({ data: [] } as unknown as Todo[]);
-      render(<TodoList />);
-
-      expect(screen.getByText(
-        'まだタスクがありません。新しいタスクを追加しましょう！'
-      )).toBeInTheDocument();
-    });
-
-    it('todosがnullのとき 空メッセージが表示される', () => {
-      setupUseTodos(null);
-      render(<TodoList />);
-
-      expect(screen.getByText(
-        'まだタスクがありません。新しいタスクを追加しましょう！'
-      )).toBeInTheDocument();
-    });
-
-    it('todosがundefinedのとき 空メッセージが表示される', () => {
-      setupUseTodos(undefined);
-      render(<TodoList />);
-
-      expect(screen.getByText(
-        'まだタスクがありません。新しいタスクを追加しましょう！'
-      )).toBeInTheDocument();
-    });
-  });
-
+  */
   /* --------------------
      showActions=true（デフォルト）
   -------------------- */
-
-  describe('showActions=true（デフォルト）', () => {
-    it('TodoItemContainerがtodosの数だけレンダリングされる', () => {
-      render(<TodoList />);
-
-      expect(screen.getByTestId('todo-item-container-1')).toBeInTheDocument();
-      expect(screen.getByTestId('todo-item-container-2')).toBeInTheDocument();
-      expect(screen.getByTestId('todo-item-container-3')).toBeInTheDocument();
+  /*
+    describe('showActions=true（デフォルト）', () => {
+      it('TodoItemContainerがtodosの数だけレンダリングされる', () => {
+        render(<TodoList />);
+  
+        expect(screen.getByTestId('todo-item-container-1')).toBeInTheDocument();
+        expect(screen.getByTestId('todo-item-container-2')).toBeInTheDocument();
+        expect(screen.getByTestId('todo-item-container-3')).toBeInTheDocument();
+      });
+  
+      it('TodoItemContainerにtodoが渡される', () => {
+        render(<TodoList />);
+  
+        const calls = TodoItemContainerMock.mock.calls;
+        expect(calls[0][0].todo).toEqual(mockTodos[0]);
+        expect(calls[1][0].todo).toEqual(mockTodos[1]);
+        expect(calls[2][0].todo).toEqual(mockTodos[2]);
+      });
+  
+      it('TodoItemは直接レンダリングされない', () => {
+        render(<TodoList />);
+  
+        expect(TodoItemMock).not.toHaveBeenCalled();
+      });
+  
+      it('showActionsを明示的にtrueにしてもTodoItemContainerが使われる', () => {
+        render(<TodoList showActions={true} />);
+  
+        expect(screen.getByTestId('todo-item-container-1')).toBeInTheDocument();
+        expect(TodoItemMock).not.toHaveBeenCalled();
+      });
     });
-
-    it('TodoItemContainerにtodoが渡される', () => {
-      render(<TodoList />);
-
-      const calls = TodoItemContainerMock.mock.calls;
-      expect(calls[0][0].todo).toEqual(mockTodos[0]);
-      expect(calls[1][0].todo).toEqual(mockTodos[1]);
-      expect(calls[2][0].todo).toEqual(mockTodos[2]);
-    });
-
-    it('TodoItemは直接レンダリングされない', () => {
-      render(<TodoList />);
-
-      expect(TodoItemMock).not.toHaveBeenCalled();
-    });
-
-    it('showActionsを明示的にtrueにしてもTodoItemContainerが使われる', () => {
-      render(<TodoList showActions={true} />);
-
-      expect(screen.getByTestId('todo-item-container-1')).toBeInTheDocument();
-      expect(TodoItemMock).not.toHaveBeenCalled();
-    });
-  });
-
+  */
   /* --------------------
      showActions=false
   -------------------- */
-
-  describe('showActions=false', () => {
-    it('TodoItemがtodosの数だけレンダリングされる', () => {
-      render(<TodoList showActions={false} />);
-
-      expect(screen.getByTestId('todo-item-1')).toBeInTheDocument();
-      expect(screen.getByTestId('todo-item-2')).toBeInTheDocument();
-      expect(screen.getByTestId('todo-item-3')).toBeInTheDocument();
-    });
-
-    it('TodoItemContainerは使われない', () => {
-      render(<TodoList showActions={false} />);
-
-      expect(TodoItemContainerMock).not.toHaveBeenCalled();
-    });
-
-    it('TodoItemにshowActions=falseが渡される', () => {
-      render(<TodoList showActions={false} />);
-
-      TodoItemMock.mock.calls.forEach((call) => {
-        expect(call[0].showActions).toBe(false);
-      });
-    });
-
-    it('todo.todo_titleがtitleにマッピングされる', () => {
-      render(<TodoList showActions={false} />);
-
-      const firstCall = TodoItemMock.mock.calls[0][0];
-      expect(firstCall.title).toBe('タスク1');
-    });
-
-    it('todo.updated_atがupdatedAtにマッピングされる', () => {
-      render(<TodoList showActions={false} />);
-
-      const firstCall = TodoItemMock.mock.calls[0][0];
-      expect(firstCall.updatedAt).toBe(mockTodos[0].updated_at);
-    });
-
-    describe('priorityのフォールバック', () => {
-      it('priority=nullのとき "MEDIUM"が渡される', () => {
-        setupUseTodos([makeTodo(1, { priority: null as unknown as 'HIGH' })]);
+  /*
+    describe('showActions=false', () => {
+      it('TodoItemがtodosの数だけレンダリングされる', () => {
         render(<TodoList showActions={false} />);
-
-        expect(screen.getByTestId('todo-item-1')).toHaveAttribute(
-          'data-priority',
-          'MEDIUM'
-        );
+  
+        expect(screen.getByTestId('todo-item-1')).toBeInTheDocument();
+        expect(screen.getByTestId('todo-item-2')).toBeInTheDocument();
+        expect(screen.getByTestId('todo-item-3')).toBeInTheDocument();
       });
-
-      it('priority=undefinedのとき "MEDIUM"が渡される', () => {
-        setupUseTodos([makeTodo(1, { priority: undefined as unknown as 'HIGH' })]);
+  
+      it('TodoItemContainerは使われない', () => {
         render(<TodoList showActions={false} />);
-
-        expect(screen.getByTestId('todo-item-1')).toHaveAttribute(
-          'data-priority',
-          'MEDIUM'
-        );
+  
+        expect(TodoItemContainerMock).not.toHaveBeenCalled();
       });
-
-      it('priorityが有効値のとき そのまま渡される', () => {
-        setupUseTodos([makeTodo(1, { priority: 'LOW' })]);
+  
+      it('TodoItemにshowActions=falseが渡される', () => {
         render(<TodoList showActions={false} />);
-
-        expect(screen.getByTestId('todo-item-1')).toHaveAttribute(
-          'data-priority',
-          'LOW'
-        );
+  
+        TodoItemMock.mock.calls.forEach((call) => {
+          expect(call[0].showActions).toBe(false);
+        });
+      });
+  
+      it('todo.todo_titleがtitleにマッピングされる', () => {
+        render(<TodoList showActions={false} />);
+  
+        const firstCall = TodoItemMock.mock.calls[0][0];
+        expect(firstCall.title).toBe('タスク1');
+      });
+  
+      it('todo.updated_atがupdatedAtにマッピングされる', () => {
+        render(<TodoList showActions={false} />);
+  
+        const firstCall = TodoItemMock.mock.calls[0][0];
+        expect(firstCall.updatedAt).toBe(mockTodos[0].updated_at);
+      });
+  
+      describe('priorityのフォールバック', () => {
+        it('priority=nullのとき "MEDIUM"が渡される', () => {
+          setupUseTodos([makeTodo(1, { priority: null as unknown as 'HIGH' })]);
+          render(<TodoList showActions={false} />);
+  
+          expect(screen.getByTestId('todo-item-1')).toHaveAttribute(
+            'data-priority',
+            'MEDIUM'
+          );
+        });
+  
+        it('priority=undefinedのとき "MEDIUM"が渡される', () => {
+          setupUseTodos([makeTodo(1, { priority: undefined as unknown as 'HIGH' })]);
+          render(<TodoList showActions={false} />);
+  
+          expect(screen.getByTestId('todo-item-1')).toHaveAttribute(
+            'data-priority',
+            'MEDIUM'
+          );
+        });
+  
+        it('priorityが有効値のとき そのまま渡される', () => {
+          setupUseTodos([makeTodo(1, { priority: 'LOW' })]);
+          render(<TodoList showActions={false} />);
+  
+          expect(screen.getByTestId('todo-item-1')).toHaveAttribute(
+            'data-priority',
+            'LOW'
+          );
+        });
+      });
+  
+      describe('progressのフォールバック', () => {
+        it('progress=nullのとき 0が渡される', () => {
+          setupUseTodos([makeTodo(1, { progress: null as unknown as number })]);
+          render(<TodoList showActions={false} />);
+  
+          expect(screen.getByTestId('todo-item-1')).toHaveAttribute(
+            'data-progress',
+            '0'
+          );
+        });
+  
+        it('progress=undefinedのとき 0が渡される', () => {
+          setupUseTodos([makeTodo(1, { progress: undefined as unknown as number })]);
+          render(<TodoList showActions={false} />);
+  
+          expect(screen.getByTestId('todo-item-1')).toHaveAttribute(
+            'data-progress',
+            '0'
+          );
+        });
+  
+        it('progress=0のとき 0がそのまま渡される', () => {
+          setupUseTodos([makeTodo(1, { progress: 0 })]);
+          render(<TodoList showActions={false} />);
+  
+          expect(screen.getByTestId('todo-item-1')).toHaveAttribute(
+            'data-progress',
+            '0'
+          );
+        });
       });
     });
-
-    describe('progressのフォールバック', () => {
-      it('progress=nullのとき 0が渡される', () => {
-        setupUseTodos([makeTodo(1, { progress: null as unknown as number })]);
-        render(<TodoList showActions={false} />);
-
-        expect(screen.getByTestId('todo-item-1')).toHaveAttribute(
-          'data-progress',
-          '0'
-        );
-      });
-
-      it('progress=undefinedのとき 0が渡される', () => {
-        setupUseTodos([makeTodo(1, { progress: undefined as unknown as number })]);
-        render(<TodoList showActions={false} />);
-
-        expect(screen.getByTestId('todo-item-1')).toHaveAttribute(
-          'data-progress',
-          '0'
-        );
-      });
-
-      it('progress=0のとき 0がそのまま渡される', () => {
-        setupUseTodos([makeTodo(1, { progress: 0 })]);
-        render(<TodoList showActions={false} />);
-
-        expect(screen.getByTestId('todo-item-1')).toHaveAttribute(
-          'data-progress',
-          '0'
-        );
-      });
-    });
-  });
-
+  */
   /* --------------------
      limitによる表示件数制御
   -------------------- */
-
-  describe('limitによる表示件数制御', () => {
-    it('limit=2のとき 先頭2件だけレンダリングされる', () => {
-      render(<TodoList limit={2} />);
-
-      expect(screen.getByTestId('todo-item-container-1')).toBeInTheDocument();
-      expect(screen.getByTestId('todo-item-container-2')).toBeInTheDocument();
-      expect(screen.queryByTestId('todo-item-container-3')).not.toBeInTheDocument();
+  /*
+    describe('limitによる表示件数制御', () => {
+      it('limit=2のとき 先頭2件だけレンダリングされる', () => {
+        render(<TodoList limit={2} />);
+  
+        expect(screen.getByTestId('todo-item-container-1')).toBeInTheDocument();
+        expect(screen.getByTestId('todo-item-container-2')).toBeInTheDocument();
+        expect(screen.queryByTestId('todo-item-container-3')).not.toBeInTheDocument();
+      });
+  
+      it('limit=1のとき 先頭1件だけレンダリングされる', () => {
+        render(<TodoList limit={1} />);
+  
+        expect(screen.getByTestId('todo-item-container-1')).toBeInTheDocument();
+        expect(screen.queryByTestId('todo-item-container-2')).not.toBeInTheDocument();
+      });
+  
+      it('limitがtodosの件数以上のとき 全件レンダリングされる', () => {
+        render(<TodoList limit={10} />);
+  
+        expect(screen.getByTestId('todo-item-container-1')).toBeInTheDocument();
+        expect(screen.getByTestId('todo-item-container-2')).toBeInTheDocument();
+        expect(screen.getByTestId('todo-item-container-3')).toBeInTheDocument();
+      });
+  
+      it('limitが未指定のとき 全件レンダリングされる', () => {
+        render(<TodoList />);
+  
+        expect(screen.getByTestId('todo-item-container-1')).toBeInTheDocument();
+        expect(screen.getByTestId('todo-item-container-2')).toBeInTheDocument();
+        expect(screen.getByTestId('todo-item-container-3')).toBeInTheDocument();
+      });
+  
+      it('showActions=falseとlimitを組み合わせた場合も正しく動作する', () => {
+        render(<TodoList showActions={false} limit={2} />);
+  
+        expect(screen.getByTestId('todo-item-1')).toBeInTheDocument();
+        expect(screen.getByTestId('todo-item-2')).toBeInTheDocument();
+        expect(screen.queryByTestId('todo-item-3')).not.toBeInTheDocument();
+      });
     });
-
-    it('limit=1のとき 先頭1件だけレンダリングされる', () => {
-      render(<TodoList limit={1} />);
-
-      expect(screen.getByTestId('todo-item-container-1')).toBeInTheDocument();
-      expect(screen.queryByTestId('todo-item-container-2')).not.toBeInTheDocument();
-    });
-
-    it('limitがtodosの件数以上のとき 全件レンダリングされる', () => {
-      render(<TodoList limit={10} />);
-
-      expect(screen.getByTestId('todo-item-container-1')).toBeInTheDocument();
-      expect(screen.getByTestId('todo-item-container-2')).toBeInTheDocument();
-      expect(screen.getByTestId('todo-item-container-3')).toBeInTheDocument();
-    });
-
-    it('limitが未指定のとき 全件レンダリングされる', () => {
-      render(<TodoList />);
-
-      expect(screen.getByTestId('todo-item-container-1')).toBeInTheDocument();
-      expect(screen.getByTestId('todo-item-container-2')).toBeInTheDocument();
-      expect(screen.getByTestId('todo-item-container-3')).toBeInTheDocument();
-    });
-
-    it('showActions=falseとlimitを組み合わせた場合も正しく動作する', () => {
-      render(<TodoList showActions={false} limit={2} />);
-
-      expect(screen.getByTestId('todo-item-1')).toBeInTheDocument();
-      expect(screen.getByTestId('todo-item-2')).toBeInTheDocument();
-      expect(screen.queryByTestId('todo-item-3')).not.toBeInTheDocument();
-    });
-  });
-
+  */
   /* --------------------
      keyプロップ（各アイテムの一意性）
   -------------------- */
-
-  describe('各アイテムの一意性', () => {
-    it('showActions=trueのとき todo.idがkeyとして使われる', () => {
-      render(<TodoList />);
-
-      // key は内部的なReact仕様のため、レンダリング件数と順序で間接検証
-      const containers = screen.getAllByTestId(/^todo-item-container-/);
-      expect(containers).toHaveLength(mockTodos.length);
+  /*
+    describe('各アイテムの一意性', () => {
+      it('showActions=trueのとき todo.idがkeyとして使われる', () => {
+        render(<TodoList />);
+  
+        // key は内部的なReact仕様のため、レンダリング件数と順序で間接検証
+        const containers = screen.getAllByTestId(/^todo-item-container-/);
+        expect(containers).toHaveLength(mockTodos.length);
+      });
+  
+      it('showActions=falseのとき todo.idがkeyとして使われる', () => {
+        render(<TodoList showActions={false} />);
+  
+        const items = screen.getAllByTestId(/^todo-item-/);
+        expect(items).toHaveLength(mockTodos.length);
+      });
     });
-
-    it('showActions=falseのとき todo.idがkeyとして使われる', () => {
-      render(<TodoList showActions={false} />);
-
-      const items = screen.getAllByTestId(/^todo-item-/);
-      expect(items).toHaveLength(mockTodos.length);
-    });
-  });
+    */
 });

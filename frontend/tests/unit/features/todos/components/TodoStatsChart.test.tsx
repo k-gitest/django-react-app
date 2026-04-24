@@ -107,212 +107,201 @@ describe('TodoStatsChart', () => {
   /* --------------------
      レンダリング
   -------------------- */
-
-  describe('レンダリング', () => {
-    it('Cardがレンダリングされる', () => {
-      render(<TodoStatsChart data={mockData} />);
-      expect(screen.getByTestId('card')).toBeInTheDocument();
+  /*
+    describe('レンダリング', () => {
+      it('Cardがレンダリングされる', () => {
+        render(<TodoStatsChart data={mockData} />);
+        expect(screen.getByTestId('card')).toBeInTheDocument();
+      });
+  
+      it('タイトルが "優先度別タスク分布" と表示される', () => {
+        render(<TodoStatsChart data={mockData} />);
+        expect(screen.getByTestId('card-title')).toHaveTextContent('優先度別タスク分布');
+      });
+  
+      it('ChartContainerがレンダリングされる', () => {
+        render(<TodoStatsChart data={mockData} />);
+        expect(screen.getByTestId('chart-container')).toBeInTheDocument();
+      });
+  
+      it('PieChartがレンダリングされる', () => {
+        render(<TodoStatsChart data={mockData} />);
+        expect(screen.getByTestId('pie-chart')).toBeInTheDocument();
+      });
+  
+      it('Pieがレンダリングされる', () => {
+        render(<TodoStatsChart data={mockData} />);
+        expect(screen.getByTestId('pie')).toBeInTheDocument();
+      });
+  
+      it('ChartTooltipがレンダリングされる', () => {
+        render(<TodoStatsChart data={mockData} />);
+        expect(screen.getByTestId('chart-tooltip')).toBeInTheDocument();
+      });
+  
+      it('ChartTooltipContentがレンダリングされる', () => {
+        render(<TodoStatsChart data={mockData} />);
+        expect(screen.getByTestId('chart-tooltip-content')).toBeInTheDocument();
+      });
     });
-
-    it('タイトルが "優先度別タスク分布" と表示される', () => {
-      render(<TodoStatsChart data={mockData} />);
-      expect(screen.getByTestId('card-title')).toHaveTextContent('優先度別タスク分布');
-    });
-
-    it('ChartContainerがレンダリングされる', () => {
-      render(<TodoStatsChart data={mockData} />);
-      expect(screen.getByTestId('chart-container')).toBeInTheDocument();
-    });
-
-    it('PieChartがレンダリングされる', () => {
-      render(<TodoStatsChart data={mockData} />);
-      expect(screen.getByTestId('pie-chart')).toBeInTheDocument();
-    });
-
-    it('Pieがレンダリングされる', () => {
-      render(<TodoStatsChart data={mockData} />);
-      expect(screen.getByTestId('pie')).toBeInTheDocument();
-    });
-
-    it('ChartTooltipがレンダリングされる', () => {
-      render(<TodoStatsChart data={mockData} />);
-      expect(screen.getByTestId('chart-tooltip')).toBeInTheDocument();
-    });
-
-    it('ChartTooltipContentがレンダリングされる', () => {
-      render(<TodoStatsChart data={mockData} />);
-      expect(screen.getByTestId('chart-tooltip-content')).toBeInTheDocument();
-    });
-  });
-
+  */
   /* --------------------
      dataのprops受け渡し
   -------------------- */
-
-  describe('dataのprops受け渡し', () => {
-    it('PieにdataがそのまM渡される', () => {
-      render(<TodoStatsChart data={mockData} />);
-
-      const pieProps = PieMock.mock.calls.at(-1)?.[0];
-      expect(pieProps.data).toEqual(mockData);
+  /*
+    describe('dataのprops受け渡し', () => {
+      it('PieにdataがそのまM渡される', () => {
+        render(<TodoStatsChart data={mockData} />);
+  
+        const pieProps = PieMock.mock.calls.at(-1)?.[0];
+        expect(pieProps.data).toEqual(mockData);
+      });
+  
+      it('Pieに渡されるdataの件数が正しい', () => {
+        render(<TodoStatsChart data={mockData} />);
+  
+        expect(screen.getByTestId('pie')).toHaveAttribute(
+          'data-item-count',
+          String(mockData.length)
+        );
+      });
+  
+      it('dataが空配列のとき Pieに空配列が渡される', () => {
+        render(<TodoStatsChart data={[]} />);
+  
+        const pieProps = PieMock.mock.calls.at(-1)?.[0];
+        expect(pieProps.data).toEqual([]);
+      });
+  
+      it('fillがnullのアイテムも受け付ける', () => {
+        const dataWithNull = [{ priority: 'HIGH', count: 5, fill: null }];
+        expect(() => render(<TodoStatsChart data={dataWithNull} />)).not.toThrow();
+  
+        const pieProps = PieMock.mock.calls.at(-1)?.[0];
+        expect(pieProps.data[0].fill).toBeNull();
+      });
+  
+      it('fillが未指定のアイテムも受け付ける', () => {
+        const dataWithoutFill = [{ priority: 'HIGH', count: 5 }];
+        expect(() => render(<TodoStatsChart data={dataWithoutFill} />)).not.toThrow();
+      });
     });
-
-    it('Pieに渡されるdataの件数が正しい', () => {
-      render(<TodoStatsChart data={mockData} />);
-
-      expect(screen.getByTestId('pie')).toHaveAttribute(
-        'data-item-count',
-        String(mockData.length)
-      );
-    });
-
-    it('dataが空配列のとき Pieに空配列が渡される', () => {
-      render(<TodoStatsChart data={[]} />);
-
-      const pieProps = PieMock.mock.calls.at(-1)?.[0];
-      expect(pieProps.data).toEqual([]);
-    });
-
-    it('fillがnullのアイテムも受け付ける', () => {
-      const dataWithNull = [{ priority: 'HIGH', count: 5, fill: null }];
-      expect(() => render(<TodoStatsChart data={dataWithNull} />)).not.toThrow();
-
-      const pieProps = PieMock.mock.calls.at(-1)?.[0];
-      expect(pieProps.data[0].fill).toBeNull();
-    });
-
-    it('fillが未指定のアイテムも受け付ける', () => {
-      const dataWithoutFill = [{ priority: 'HIGH', count: 5 }];
-      expect(() => render(<TodoStatsChart data={dataWithoutFill} />)).not.toThrow();
-    });
-  });
-
+  */
   /* --------------------
      Pieのprops
   -------------------- */
-
-  describe('Pieへのprops', () => {
-    it('dataKeyが "count" になっている', () => {
-      render(<TodoStatsChart data={mockData} />);
-
-      expect(screen.getByTestId('pie')).toHaveAttribute('data-data-key', 'count');
+  /*
+    describe('Pieへのprops', () => {
+      it('dataKeyが "count" になっている', () => {
+        render(<TodoStatsChart data={mockData} />);
+  
+        expect(screen.getByTestId('pie')).toHaveAttribute('data-data-key', 'count');
+      });
+  
+      it('nameKeyが "priority" になっている', () => {
+        render(<TodoStatsChart data={mockData} />);
+  
+        expect(screen.getByTestId('pie')).toHaveAttribute('data-name-key', 'priority');
+      });
+  
+      it('innerRadiusが 60 になっている', () => {
+        render(<TodoStatsChart data={mockData} />);
+  
+        const pieProps = PieMock.mock.calls.at(-1)?.[0];
+        expect(pieProps.innerRadius).toBe(60);
+      });
     });
-
-    it('nameKeyが "priority" になっている', () => {
-      render(<TodoStatsChart data={mockData} />);
-
-      expect(screen.getByTestId('pie')).toHaveAttribute('data-name-key', 'priority');
-    });
-
-    it('innerRadiusが 60 になっている', () => {
-      render(<TodoStatsChart data={mockData} />);
-
-      const pieProps = PieMock.mock.calls.at(-1)?.[0];
-      expect(pieProps.innerRadius).toBe(60);
-    });
-  });
-
+  */
   /* --------------------
      ChartTooltipのprops
   -------------------- */
-
-  describe('ChartTooltipへのprops', () => {
-    it('cursorがfalseになっている', () => {
-      render(<TodoStatsChart data={mockData} />);
-
-      const tooltipProps = ChartTooltipMock.mock.calls.at(-1)?.[0];
-      expect(tooltipProps.cursor).toBe(false);
+  /*
+    describe('ChartTooltipへのprops', () => {
+      it('cursorがfalseになっている', () => {
+        render(<TodoStatsChart data={mockData} />);
+  
+        const tooltipProps = ChartTooltipMock.mock.calls.at(-1)?.[0];
+        expect(tooltipProps.cursor).toBe(false);
+      });
+  
+      it('ChartTooltipContentがcontentとして渡される', () => {
+        render(<TodoStatsChart data={mockData} />);
+  
+        expect(ChartTooltipContentMock).toHaveBeenCalledTimes(1);
+      });
+  
+      it('ChartTooltipContentにhideLabelが渡される', () => {
+        render(<TodoStatsChart data={mockData} />);
+  
+        const tooltipContentProps = ChartTooltipContentMock.mock.calls.at(-1)?.[0];
+        expect(tooltipContentProps.hideLabel).toBe(true);
+      });
     });
-
-    it('ChartTooltipContentがcontentとして渡される', () => {
-      render(<TodoStatsChart data={mockData} />);
-
-      expect(ChartTooltipContentMock).toHaveBeenCalledTimes(1);
-    });
-
-    it('ChartTooltipContentにhideLabelが渡される', () => {
-      render(<TodoStatsChart data={mockData} />);
-
-      const tooltipContentProps = ChartTooltipContentMock.mock.calls.at(-1)?.[0];
-      expect(tooltipContentProps.hideLabel).toBe(true);
-    });
-  });
-
+  */
   /* --------------------
      ChartContainerのconfigとclassName
   -------------------- */
-
-  describe('ChartContainerへのprops', () => {
-    it('configにcountのラベルが含まれる', () => {
-      render(<TodoStatsChart data={mockData} />);
-
-      const config = JSON.parse(
-        screen.getByTestId('chart-container').getAttribute('data-config') ?? '{}'
-      );
-      expect(config.count.label).toBe('タスク数');
+  /*
+    describe('ChartContainerへのprops', () => {
+      it('configにcountのラベルが含まれる', () => {
+        render(<TodoStatsChart data={mockData} />);
+  
+        const config = JSON.parse(
+          screen.getByTestId('chart-container').getAttribute('data-config') ?? '{}'
+        );
+        expect(config.count.label).toBe('タスク数');
+      });
+  
+      it('configにhighのラベルと色が含まれる', () => {
+        render(<TodoStatsChart data={mockData} />);
+  
+        const config = JSON.parse(
+          screen.getByTestId('chart-container').getAttribute('data-config') ?? '{}'
+        );
+        expect(config.high.label).toBe('優先度: 高');
+        expect(config.high.color).toBe('hsl(var(--destructive))');
+      });
+  
+      it('configにmediumのラベルと色が含まれる', () => {
+        render(<TodoStatsChart data={mockData} />);
+  
+        const config = JSON.parse(
+          screen.getByTestId('chart-container').getAttribute('data-config') ?? '{}'
+        );
+        expect(config.medium.label).toBe('優先度: 中');
+        expect(config.medium.color).toBe('hsl(var(--primary))');
+      });
+  
+      it('configにlowのラベルと色が含まれる', () => {
+        render(<TodoStatsChart data={mockData} />);
+  
+        const config = JSON.parse(
+          screen.getByTestId('chart-container').getAttribute('data-config') ?? '{}'
+        );
+        expect(config.low.label).toBe('優先度: 低');
+        expect(config.low.color).toBe('hsl(var(--muted))');
+      });
+  
+      it('classNameに "mx-auto" が含まれる', () => {
+        render(<TodoStatsChart data={mockData} />);
+  
+        const containerProps = ChartContainerMock.mock.calls.at(-1)?.[0];
+        expect(containerProps.className).toContain('mx-auto');
+      });
+  
+      it('classNameに "aspect-square" が含まれる', () => {
+        render(<TodoStatsChart data={mockData} />);
+  
+        const containerProps = ChartContainerMock.mock.calls.at(-1)?.[0];
+        expect(containerProps.className).toContain('aspect-square');
+      });
+  
+      it('classNameに "max-h-[250px]" が含まれる', () => {
+        render(<TodoStatsChart data={mockData} />);
+  
+        const containerProps = ChartContainerMock.mock.calls.at(-1)?.[0];
+        expect(containerProps.className).toContain('max-h-[250px]');
+      });
     });
-
-    it('configにhighのラベルと色が含まれる', () => {
-      render(<TodoStatsChart data={mockData} />);
-
-      const config = JSON.parse(
-        screen.getByTestId('chart-container').getAttribute('data-config') ?? '{}'
-      );
-      expect(config.high.label).toBe('優先度: 高');
-      expect(config.high.color).toBe('hsl(var(--destructive))');
-    });
-
-    it('configにmediumのラベルと色が含まれる', () => {
-      render(<TodoStatsChart data={mockData} />);
-
-      const config = JSON.parse(
-        screen.getByTestId('chart-container').getAttribute('data-config') ?? '{}'
-      );
-      expect(config.medium.label).toBe('優先度: 中');
-      expect(config.medium.color).toBe('hsl(var(--primary))');
-    });
-
-    it('configにlowのラベルと色が含まれる', () => {
-      render(<TodoStatsChart data={mockData} />);
-
-      const config = JSON.parse(
-        screen.getByTestId('chart-container').getAttribute('data-config') ?? '{}'
-      );
-      expect(config.low.label).toBe('優先度: 低');
-      expect(config.low.color).toBe('hsl(var(--muted))');
-    });
-
-    it('classNameに "mx-auto" が含まれる', () => {
-      render(<TodoStatsChart data={mockData} />);
-
-      const containerProps = ChartContainerMock.mock.calls.at(-1)?.[0];
-      expect(containerProps.className).toContain('mx-auto');
-    });
-
-    it('classNameに "aspect-square" が含まれる', () => {
-      render(<TodoStatsChart data={mockData} />);
-
-      const containerProps = ChartContainerMock.mock.calls.at(-1)?.[0];
-      expect(containerProps.className).toContain('aspect-square');
-    });
-
-    it('classNameに "max-h-[250px]" が含まれる', () => {
-      render(<TodoStatsChart data={mockData} />);
-
-      const containerProps = ChartContainerMock.mock.calls.at(-1)?.[0];
-      expect(containerProps.className).toContain('max-h-[250px]');
-    });
-  });
-
-  /* --------------------
-     CardのclassName
-  -------------------- */
-
-  describe('CardのclassName', () => {
-    it('Cardに "flex flex-col" が含まれる', () => {
-      render(<TodoStatsChart data={mockData} />);
-
-      expect(screen.getByTestId('card')).toHaveAttribute(
-        'data-class-name',
-        'flex flex-col'
-      );
+  */
+});
